@@ -38,7 +38,7 @@
 | [docs/testing/](docs/testing/README.md) | 当前可执行检查与验证边界 |
 | [工程交接](docs/engineering/bootstrap-handoff.md) | 固定工具链、现有模块、后续接入位置和验证结果 |
 | [tools/](tools/README.md) | 手机控制、日志证据辅助工具 |
-| [tools/UPSTREAM.md](tools/UPSTREAM.md) | 工具来源、复制清单及待适配事项 |
+| [tools/UPSTREAM.md](tools/UPSTREAM.md) | 工具来源、复制清单及使用配置约定 |
 
 ## 当前使用方式
 
@@ -58,4 +58,4 @@
 
 Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。模拟器安装与启动测试见[验证说明](docs/testing/README.md)，不会随构建自动操作设备。
 
-手机工具是从见域原样复制的参考版本，**默认包名与示例仍含见域标识，尚未完成 Life Archive 设备适配**。实际操作前必须核对目标设备和包名。
+手机工具从见域原样复制，通用能力可直接复用，无需先改代码。统一 CLI 启动 Life Archive 时显式传入 `--package com.elio.lifearchive`，或使用已核对的仓库外 Profile；默认包名与示例参数仍保留上游值，实际操作前须核对目标设备和包名。详见[工具说明](tools/README.md)。

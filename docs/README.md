@@ -31,6 +31,6 @@
 - [架构入口](architecture/README.md)、[ADR-001：模块化单体架构](architecture/adr-001-android-architecture.md)：已选技术、模块与依赖、数据归属、存储和目标机型基线、实施验收顺序。
 - [设计资料](design/README.md)：设计依据、样板及后续资料归档方式。
 - [验证说明](testing/README.md)：现阶段可执行的检查和未验证范围。
-- [工具说明](../tools/README.md)、[复制来源](../tools/UPSTREAM.md)：辅助脚本入口及适配状态。
+- [工具说明](../tools/README.md)、[复制来源](../tools/UPSTREAM.md)：辅助脚本入口、来源及使用配置约定。
 
 新增资料放入对应目录并更新本索引。记录验收时注明日期、代码版本、运行环境及实际结果；不把旧项目历史验收用作本项目证据。
