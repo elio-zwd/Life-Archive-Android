@@ -1,6 +1,6 @@
 # Life Archive
 
-面向个人使用的 Android 本地 Markdown 笔记项目，按 Obsidian 官方内置文档语法规划文件兼容能力。
+面向个人使用的 Android 应用，第一期以本地 Markdown 笔记起步，按 Obsidian 官方内置文档语法规划文件兼容能力。整体功能范围仍在确认，架构须能承接后续选中的任务、生活管理、AI 和出行等能力。
 
 **当前状态：仓库基础准备阶段。** 已有阶段计划、协作说明和从见域复制的辅助工具；尚未创建 Android 工程，没有可运行 App、APK 或已验收的笔记功能。
 
@@ -17,6 +17,8 @@
 | 开发环境 | Windows 10 x64，PowerShell 7（`pwsh.exe`） |
 
 ## 阶段计划
+
+整体产品范围还在梳理，参见[整体功能版图与旧版迁移评估](docs/plans/overall-feature-roadmap.md)。其中后期候选等待确认，不自动扩充以下阶段。
 
 1. [第一期：本地笔记](docs/plans/phase-1-local-notes.md)：编辑、组织、搜索、附件、导入导出和简单备份恢复。交互与视觉以[已确认的决策文档](docs/plans/phase-1-editor-visual-decisions.md)为准。
 2. [第二期：AI 与共享能力](docs/plans/phase-2-ai-and-shared-capabilities.md)：对接 AI 进行全搜索、自动调用资料，并与见域共用重叠能力。

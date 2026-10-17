@@ -4,6 +4,7 @@
 
 ## 计划与决策
 
+- [整体功能版图与旧版迁移评估](plans/overall-feature-roadmap.md)：功能分类、既有分期映射及待确认的后期候选，不等于全部获准实现。
 - [第一期：Android 本地 Markdown 笔记](plans/phase-1-local-notes.md)
 - [第一期：编辑器交互与视觉决策](plans/phase-1-editor-visual-decisions.md)
 - [第二期：AI 与共享能力](plans/phase-2-ai-and-shared-capabilities.md)
