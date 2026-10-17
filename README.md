@@ -2,17 +2,17 @@
 
 面向个人使用的 Android 应用，第一期以本地 Markdown 笔记起步，按 Obsidian 官方内置文档语法规划文件兼容能力。整体功能范围仍在确认，架构须能承接后续选中的任务、生活管理、AI 和出行等能力。
 
-**当前状态：仓库基础准备阶段。** 已有阶段计划、协作说明和从见域复制的辅助工具；尚未创建 Android 工程，没有可运行 App、APK 或已验收的笔记功能。
+**当前状态：Android 工程底座已建立，业务架构尚未实现。** 当前仅有可启动的 Compose 初始化页及基础主题模块，没有已验收的笔记功能。固定版本、接手边界和实际验证结果见[工程交接](docs/engineering/bootstrap-handoff.md)。
 
 ## 项目标识与方向
 
 | 项目 | 约定 |
 | --- | --- |
-| 项目名 / 未来显示名 | Life Archive |
-| 未来 namespace / applicationId | `com.elio.lifearchive` |
+| 项目名 / 显示名 | Life Archive |
+| namespace / applicationId | `com.elio.lifearchive` |
 | 个人域名 | `my-elio.online`；本阶段不建设网站或服务端 |
 | 平台 | 仅 Android |
-| 已选架构 | 模块化单体；Kotlin、Compose、ViewModel + UDF、Navigation 3、Hilt；具体兼容版本在建立工程时固定 |
+| 已选架构 | 模块化单体；当前接入 Kotlin、Compose；ViewModel + UDF、Navigation 3、Hilt 等留待架构实施 |
 | 数据方向 | UTF-8 Markdown 文件保存正文，Room 用于索引、缓存与应用状态 |
 | 开发环境 | Windows 10 x64，PowerShell 7（`pwsh.exe`） |
 | 使用基线 | 小米 14 Ultra，约 500 篇笔记；App 管理私有笔记库 |
@@ -36,12 +36,13 @@
 | [docs/architecture/](docs/architecture/README.md) | 数据约定与未来代码组织 |
 | [docs/design/](docs/design/README.md) | 设计依据和视觉资料归档 |
 | [docs/testing/](docs/testing/README.md) | 当前可执行检查与验证边界 |
+| [工程交接](docs/engineering/bootstrap-handoff.md) | 固定工具链、现有模块、后续接入位置和验证结果 |
 | [tools/](tools/README.md) | 手机控制、日志证据辅助工具 |
 | [tools/UPSTREAM.md](tools/UPSTREAM.md) | 工具来源、复制清单及待适配事项 |
 
 ## 当前使用方式
 
-架构已选定，实施入口为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)，包含模块依赖、数据归属、文件保存、编辑器门槛、性能基线与交接顺序；此前单 app 模块方案已被替代。当前仅文档决定，未创建或验收 Android 工程。
+架构已选定，实施入口为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)，包含模块依赖、数据归属、文件保存、编辑器门槛、性能基线与交接顺序；此前单 app 模块方案已被替代。当前只建立 `app → core:designsystem` 的工程底座，业务模块、依赖装配、导航与数据层留待后续实施。
 
 进行整体架构选型时，先读 [AGENTS.md](AGENTS.md)，再读[整体功能版图](docs/plans/overall-feature-roadmap.md)、[一期范围](docs/plans/phase-1-local-notes.md)、[编辑器决策](docs/plans/phase-1-editor-visual-decisions.md)、第二/三期方向，最后核对[架构约束与待决事项](docs/architecture/README.md)。这些本仓库文档已足够开展架构讨论，不需要先查看旧项目。
 
@@ -49,4 +50,12 @@
 
 先阅读任务对应的计划与说明。工具的帮助和无设备测试可按[验证说明](docs/testing/README.md)运行，无需安装 Android 应用。
 
-手机工具是从见域原样复制的参考版本，**默认包名与示例仍含见域标识，尚未完成 Life Archive 设备适配**。实际操作前必须核对目标设备和包名。本次不提供 Android 构建或启动命令；待工程建立后再补充经过验证的入口。
+本机需要 JDK 17 和 Android SDK 36，设置 `JAVA_HOME`，通过 `ANDROID_HOME` 或被忽略的 `local.properties` 指定 SDK。仓库根目录使用 PowerShell 7：
+
+```powershell
+.\gradlew.bat :app:assembleDebug :app:lintDebug :core:designsystem:lintDebug :app:assembleDebugAndroidTest --console=plain
+```
+
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。模拟器安装与启动测试见[验证说明](docs/testing/README.md)，不会随构建自动操作设备。
+
+手机工具是从见域原样复制的参考版本，**默认包名与示例仍含见域标识，尚未完成 Life Archive 设备适配**。实际操作前必须核对目标设备和包名。

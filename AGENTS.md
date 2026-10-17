@@ -6,8 +6,8 @@
 
 - 使用简体中文沟通、编写文档和必要注释；注释解释约束与原因。
 - 面向 Windows 10 x64，Windows 命令使用 `pwsh.exe`（PowerShell 7）。
-- 当前仅有文档和辅助工具，尚无 Android 工程；不能把计划写成已实现能力。
-- 产品只做 Android，技术方向为 Kotlin + Jetpack Compose。未来应用标识为 `com.elio.lifearchive`，显示名为 Life Archive。
+- 当前已有 Android 工程底座，仅含 `app` 与实际被调用的 `core:designsystem`，业务架构尚未实现；不能把计划写成已实现能力。工具链与接手入口见 [工程交接](docs/engineering/bootstrap-handoff.md)。
+- 产品只做 Android，技术方向为 Kotlin + Jetpack Compose。应用标识为 `com.elio.lifearchive`，显示名为 Life Archive。
 - 第一阶段聚焦本地笔记；第二阶段才讨论 AI 与见域共用能力，第三阶段讨论电脑协作。具体范围见 [文档索引](docs/README.md)。
 - 整体架构讨论必须读取[功能版图](docs/plans/overall-feature-roadmap.md)和[架构要求](docs/architecture/README.md)，再按需阅读对应阶段计划；新项目需求以本仓库记录为依据，不默认回查旧仓库或继承旧版功能。
 
@@ -25,7 +25,7 @@
 - Markdown 文件是正文事实来源，Room 不维护另一套独立正文；未知 YAML 属性及文档原文应保留。
 - 文件名、正文标题和 YAML `title` 独立，不隐式同步。文件命名与链接维护按已确认计划实施。
 - 已选模块化单体架构，工程任务必须阅读 [ADR-001](docs/architecture/adr-001-android-architecture.md)。一个 APK，按真实职责建立 Gradle 模块；feature 不依赖 data 实现或其他 feature，纯 Kotlin domain 不依赖 Android。此前单 app 模块参考已被本决策替代。
-- 采用 Compose、ViewModel + UDF、Navigation 3、Hilt、Room、DataStore；版本在工程建立时固定兼容稳定组合。具体编辑/渲染库遵循样板门槛，不把未验证方案写成已兼容。
+- 已接入 Compose + Material 3；ViewModel + UDF、Navigation 3、Hilt、Room、DataStore 仍为后续架构实施方向。本次仅搭建可启动底座，不提前接入这些框架或创建业务空模块。已使用版本集中固定到 `gradle/libs.versions.toml`；具体编辑/渲染库遵循样板门槛，不把未验证方案写成已兼容。
 - 用户选择 App 管理私有笔记库，外部通过导入导出和后期同步交换；目标仅小米 14 Ultra，约 500 篇笔记。索引可重建不等于应用状态可丢弃；文件可靠性和备份按 ADR-001 执行。
 - 业务域明确数据所有权和依赖方向，通过公开能力接口协作，避免循环依赖及跨域直接操作内部存储；系统能力和外部服务与业务规则分离，支持独立验证。
 - 待确定、不排期的功能用于检验架构扩展能力，不构成实现授权；不提前建立空模块、无调用方的抽象或庞大插件体系。具体候选及隐私范围以功能版图为准，不在本文件复制功能清单。
@@ -34,7 +34,7 @@
 
 ## 4. 工具与设备
 
-- 工具复制状态和适配清单以 [tools/UPSTREAM.md](tools/UPSTREAM.md) 为准。本仓库尚无 App，不直接套用见域默认包名或 Profile。
+- 工具复制状态和适配清单以 [tools/UPSTREAM.md](tools/UPSTREAM.md) 为准。本仓库已有最小 App，但复制工具仍未完成默认身份适配，不直接套用见域默认包名或 Profile。
 - 本次保留的目录级工具规则继续适用；其中上游 PR、CI 或见域标识不代表本项目已有对应设施。
 - 手机控制需在任务授权范围内，先核对唯一设备与目标包名；不因文档示例自动执行手机操作。
 - 清库、卸载、重装等可能影响数据的行为需要明确授权。截图、UI XML 和完整日志保存在仓库外。
@@ -44,5 +44,5 @@
 
 - 纯文档：核对路径、链接、UTF-8 编码和仓库事实，执行 `git diff --check`；有暂存改动时追加 `git diff --cached --check`。
 - 工具复制或变更：执行相关帮助命令和已有无设备测试，具体入口见 [验证说明](docs/testing/README.md)。不为检查自动安装环境或连接手机。
-- 尚无 Android 构建、业务测试和 CI；不运行或宣称不存在的入口。建立工程时再更新对应验证规则。
+- Android 构建入口为 `./gradlew.bat`，使用 JDK 17；具体构建、Lint 和启动冒烟测试命令见 [验证说明](docs/testing/README.md)。尚无业务测试或 CI；无源码的单测任务 `NO-SOURCE` 不算单测通过。
 - 完成前回读差异，报告实际通过、失败和未验证范围。编译、工具测试、设备行为和视觉验收分别报告，不相互替代。

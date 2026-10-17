@@ -10,7 +10,7 @@
 
 - 只做 Android，明确不开发 iOS、Web 或桌面客户端。
 - 面向个人使用，优先做到记录顺畅、资料易找、文件可用、保存可靠。
-- 采用 Kotlin + Jetpack Compose 原生 Android 路线；具体依赖版本在工程建立时确认。
+- 采用 Kotlin + Jetpack Compose 原生 Android 路线；已建立底座的固定版本见[工程交接](../engineering/bootstrap-handoff.md)，业务框架和编辑/渲染依赖仍在实际接入时验证。
 - 开发环境面向 Windows 10 x64，Windows 命令使用 PowerShell 7（pwsh.exe）。
 - 旧 App 数据库已经清空，本期不考虑旧数据库迁移；普通 Markdown 文件导入属于本期功能。
 - 旧 UI 设计稿不再作为本期验收依据，重新确定配色、视觉层级和页面交互。
