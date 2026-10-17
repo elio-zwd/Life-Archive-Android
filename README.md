@@ -12,9 +12,10 @@
 | 未来 namespace / applicationId | `com.elio.lifearchive` |
 | 个人域名 | `my-elio.online`；本阶段不建设网站或服务端 |
 | 平台 | 仅 Android |
-| 技术方向 | Kotlin、Jetpack Compose；具体版本在建立工程时确定 |
+| 已选架构 | 模块化单体；Kotlin、Compose、ViewModel + UDF、Navigation 3、Hilt；具体兼容版本在建立工程时固定 |
 | 数据方向 | UTF-8 Markdown 文件保存正文，Room 用于索引、缓存与应用状态 |
 | 开发环境 | Windows 10 x64，PowerShell 7（`pwsh.exe`） |
+| 使用基线 | 小米 14 Ultra，约 500 篇笔记；App 管理私有笔记库 |
 
 ## 阶段计划
 
@@ -39,6 +40,12 @@
 | [tools/UPSTREAM.md](tools/UPSTREAM.md) | 工具来源、复制清单及待适配事项 |
 
 ## 当前使用方式
+
+架构已选定，实施入口为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)，包含模块依赖、数据归属、文件保存、编辑器门槛、性能基线与交接顺序；此前单 app 模块方案已被替代。当前仅文档决定，未创建或验收 Android 工程。
+
+进行整体架构选型时，先读 [AGENTS.md](AGENTS.md)，再读[整体功能版图](docs/plans/overall-feature-roadmap.md)、[一期范围](docs/plans/phase-1-local-notes.md)、[编辑器决策](docs/plans/phase-1-editor-visual-decisions.md)、第二/三期方向，最后核对[架构约束与待决事项](docs/architecture/README.md)。这些本仓库文档已足够开展架构讨论，不需要先查看旧项目。
+
+强解耦、可扩展、可维护是选型要求；待确定功能不等于获准实施。旧项目链接只用于历史溯源，旧版功能状态不作为新项目的能力或验收证明。
 
 先阅读任务对应的计划与说明。工具的帮助和无设备测试可按[验证说明](docs/testing/README.md)运行，无需安装 Android 应用。
 
