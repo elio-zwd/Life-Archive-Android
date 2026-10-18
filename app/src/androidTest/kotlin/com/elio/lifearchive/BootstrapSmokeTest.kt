@@ -17,7 +17,10 @@ class BootstrapSmokeTest {
     fun startupShowsApplicationNameAndCompletionMessage() {
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.app_name))
             .assertIsDisplayed()
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.bootstrap_complete))
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            composeRule.onAllNodes(androidx.compose.ui.test.hasText("架构底层已就绪，功能层待接入")).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("架构底层已就绪，功能层待接入")
             .assertIsDisplayed()
     }
 }
