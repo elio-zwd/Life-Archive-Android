@@ -2,7 +2,7 @@
 
 面向个人使用的 Android 应用，第一期以本地 Markdown 笔记起步，按 Obsidian 官方内置文档语法规划文件兼容能力。整体功能范围仍在确认，架构须能承接后续选中的任务、生活管理、AI 和出行等能力。
 
-**当前状态：Android 工程底座已建立，业务架构尚未实现。** 当前仅有可启动的 Compose 初始化页及基础主题模块，没有已验收的笔记功能。固定版本、接手边界和实际验证结果见[工程交接](docs/engineering/bootstrap-handoff.md)。
+**当前状态：架构与核心数据底层已接入，功能层待接入。** 已有依赖装配、导航示例、可靠文档存储、草稿、独立索引、设置及完整备份底层；没有已验收的正式笔记编辑器或一期产品。接口、固定版本与实际验证结果见[架构交接](docs/engineering/foundation-handoff.md)，早期底座记录保留在[底座交接](docs/engineering/bootstrap-handoff.md)。
 
 ## 项目标识与方向
 
@@ -12,7 +12,7 @@
 | namespace / applicationId | `com.elio.lifearchive` |
 | 个人域名 | `my-elio.online`；本阶段不建设网站或服务端 |
 | 平台 | 仅 Android |
-| 已选架构 | 模块化单体；当前接入 Kotlin、Compose；ViewModel + UDF、Navigation 3、Hilt 等留待架构实施 |
+| 已选架构 | 模块化单体；Kotlin、Compose、ViewModel + UDF、Navigation 3、Hilt |
 | 数据方向 | UTF-8 Markdown 文件保存正文，Room 用于索引、缓存与应用状态 |
 | 开发环境 | Windows 10 x64，PowerShell 7（`pwsh.exe`） |
 | 使用基线 | 小米 14 Ultra，约 500 篇笔记；App 管理私有笔记库 |
@@ -36,13 +36,14 @@
 | [docs/architecture/](docs/architecture/README.md) | 数据约定与未来代码组织 |
 | [docs/design/](docs/design/README.md) | 设计依据和视觉资料归档 |
 | [docs/testing/](docs/testing/README.md) | 当前可执行检查与验证边界 |
-| [工程交接](docs/engineering/bootstrap-handoff.md) | 固定工具链、现有模块、后续接入位置和验证结果 |
+| [底座历史交接](docs/engineering/bootstrap-handoff.md) | 初始工具链、两个模块阶段的验证和接手边界 |
+| [架构交接](docs/engineering/foundation-handoff.md) | 核心接口、数据可靠性、模块规则、功能开发接入与验证结果 |
 | [tools/](tools/README.md) | 手机控制、日志证据辅助工具 |
 | [tools/UPSTREAM.md](tools/UPSTREAM.md) | 工具来源、复制清单及使用配置约定 |
 
 ## 当前使用方式
 
-架构已选定，实施入口为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)，包含模块依赖、数据归属、文件保存、编辑器门槛、性能基线与交接顺序；此前单 app 模块方案已被替代。当前只建立 `app → core:designsystem` 的工程底座，业务模块、依赖装配、导航与数据层留待后续实施。
+架构依据为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)。当前有七个实际模块：app、core:designsystem、core:document、core:backup、core:preferences、domain:notes、data:notes。Debug 接入示例使用独立资料库，正式 feature 按后续任务建立；编辑器交互与完整语法兼容仍须独立验收。
 
 进行整体架构选型时，先读 [AGENTS.md](AGENTS.md)，再读[整体功能版图](docs/plans/overall-feature-roadmap.md)、[一期范围](docs/plans/phase-1-local-notes.md)、[编辑器决策](docs/plans/phase-1-editor-visual-decisions.md)、第二/三期方向，最后核对[架构约束与待决事项](docs/architecture/README.md)。这些本仓库文档已足够开展架构讨论，不需要先查看旧项目。
 
@@ -53,7 +54,7 @@
 本机需要 JDK 17 和 Android SDK 36，设置 `JAVA_HOME`，通过 `ANDROID_HOME` 或被忽略的 `local.properties` 指定 SDK。仓库根目录使用 PowerShell 7：
 
 ```powershell
-.\gradlew.bat :app:assembleDebug :app:lintDebug :core:designsystem:lintDebug :app:assembleDebugAndroidTest --console=plain
+.\gradlew.bat verifyFoundation --console=plain
 ```
 
 Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。模拟器安装与启动测试见[验证说明](docs/testing/README.md)，不会随构建自动操作设备。

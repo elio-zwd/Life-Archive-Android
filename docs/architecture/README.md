@@ -1,10 +1,10 @@
 # 架构入口与实施边界
 
-状态：2026-10-18 已选择模块化单体架构，现已建立 `app → core:designsystem` 的工程底座，业务架构尚未实现。完整决策和交接标准见 [ADR-001](adr-001-android-architecture.md)，该文档替代此前单个 app 模块的初步参考；当前代码与验证结果见[工程交接](../engineering/bootstrap-handoff.md)。
+状态：2026-10-18 已选择模块化单体架构，并接入架构与核心数据底层，正式功能层待接入。完整决策见 [ADR-001](adr-001-android-architecture.md)，当前代码、接口和验证边界见[架构交接](../engineering/foundation-handoff.md)；原始底座交接保留为历史记录。
 
 ## 技术和数据约定
 
-- Kotlin + Jetpack Compose 原生 Android；当前已接入 Material 3，ViewModel 与页面导航留待后续架构实施。
+- Kotlin + Jetpack Compose 原生 Android；已接入 Material 3、ViewModel/UDF、Navigation 3 与 Hilt，Debug 提供最小接入示例。
 - 已选 Navigation 3 稳定版、Hilt、Coroutines/StateFlow、Room 和 Preferences DataStore；采用 ViewModel + UDF，Repository 隔离数据，复杂操作按需使用 Use Case。
 - 仅针对小米 14 Ultra，约 500 篇笔记；测试数据和性能基线见 ADR-001。
 - 当前 namespace / applicationId 为 `com.elio.lifearchive`；项目与显示名为 Life Archive。
@@ -24,7 +24,7 @@
 | `data:notes` | 文件、附件、草稿、Room、索引协调与笔记备份参与实现 |
 | `core` | 文档、设计系统、设置、备份等实际使用的基础能力；不依赖具体业务域 |
 
-上表是完整实施边界，目前仅存在 `app` 和 `core:designsystem`。后续模块按真实职责建立并拥有自己的源码和测试目录；不再把全部生产代码放入 app 的三套全局目录。包名以 `com.elio.lifearchive` 为根按模块职责区分。
+上表是完整实施边界，目前存在 app、core:designsystem、core:document、core:backup、core:preferences、domain:notes、data:notes。feature 模块随正式功能建立；包名以 `com.elio.lifearchive` 为根按模块职责区分。依赖规则由根工程 `checkArchitecture` 检查。
 
 ## 本阶段边界
 
@@ -34,7 +34,7 @@
 
 隐私功能范围仅保留应用锁/指纹，实施阶段未定；不纳入访客模式、伪装计算器、紧急清除/自毁等扩展，也不将应用锁等同于本地文件加密。中山公交出行规划的独立交付或集成形态仍未确定。
 
-本次工程底座只含初始化页与基础主题。用户明确将 Hilt/KSP、导航、业务模块和数据层交给后续架构实施者，本次不接入。编辑器和 Markdown 渲染的具体依赖仍须通过真实 Android 交互样板验证；共享能力和电脑协作分别留在第二、三期。
+用户本轮明确划分职责：架构实施者交付体系与核心数据底层，后续功能 AI 实现正式页面、编辑渲染和笔记业务扩展。核心底层通过独立测试先行，编辑器和 Markdown 渲染仍须通过真实 Android 交互样板验证；共享能力和电脑协作分别留在第二、三期。
 
 ## 已完成决定与剩余门槛
 
@@ -44,7 +44,7 @@
 
 | 待决事项 | 影响与处理时机 |
 | --- | --- |
-| 依赖版本 | 工程底座版本已固定并在工程交接中记录；Hilt/KSP、Navigation 3、Room 等在实际接入时验证兼容性，不把底座构建通过视为全部框架兼容 |
+| 依赖版本 | 已集中固定并按实际构建检查兼容性；Navigation 3 1.2.0 与底座冲突，实际锁定组合及验证结果见架构交接 |
 | 性能与系统环境 | 按小米 14 Ultra、500 篇及 ADR-001 默认样例实测；记录实际系统与输入法版本 |
 | 编辑与阅读实现 | 完整 Obsidian 语法、中文输入、光标/选区和往返保真共同约束依赖选择；依据交互样板确定，不只看库的功能宣传 |
 | 首页与导航 | 整体页面组织尚未冻结，需能逐步接入新业务；已有编辑器页面规则继续有效 |

@@ -1,6 +1,25 @@
 # 当前验证方法
 
-当前已有 Android 工程、完整 Gradle Wrapper 和初始化页启动冒烟测试；业务功能、业务测试和 CI 尚未建立。实际结果见[工程交接](../engineering/bootstrap-handoff.md)。构建、测试、设备启动和视觉检查分别记录，不代表笔记功能或小米真机验收通过。
+当前已有架构与核心数据底层、JVM 和 Robolectric 测试，以及更新后的启动冒烟测试源码；正式笔记功能与 CI 尚未建立。实际结果见[架构交接](../engineering/foundation-handoff.md)。本轮仅电脑验证，不连接设备；构建、测试、设备启动和视觉检查分别记录。
+
+## 核心底层一键验证（无设备）
+
+Windows 10 x64、PowerShell 7、JDK 17，在仓库根目录执行：
+
+```powershell
+.\gradlew.bat verifyFoundation --console=plain
+```
+
+包括：模块依赖检查、core:document/core:backup JVM 测试、data:notes/core:preferences/app 的 Robolectric 与本地状态测试、四个 Android 模块的 Debug Lint、Debug App/仪器测试 APK 构建和 Release Kotlin 编译。不会安装 APK 或调用 ADB。
+
+Robolectric 会下载自己的 Android 测试运行库，不需要模拟器；它的结果不能表述为真机通过。测试使用临时目录的合成文档及附件。`domain:notes` 主要为契约，不用无源码测试数量充当覆盖率。
+
+报告位于各模块 `build/test-results/`、`build/reports/tests/` 和 Android 模块 `build/reports/lint-results-debug.html`。单独运行存储测试：
+
+```powershell
+.\gradlew.bat :data:notes:testDebugUnitTest :core:preferences:testDebugUnitTest :app:testDebugUnitTest --console=plain
+.\gradlew.bat checkArchitecture --console=plain
+```
 
 ## Android 构建检查
 
@@ -18,7 +37,7 @@
 - 仪器测试：`app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk`。
 - Lint 报告：`app/build/reports/lint-results-debug.html`，主题模块另有 `core/designsystem/build/reports/lint-results-debug.html`。
 
-JUnit 已配置，尚无业务单测；`testDebugUnitTest` 显示 `NO-SOURCE` 不能报告为单测通过。
+核心存储及恢复已有真实测试；`testDebugUnitTest` 显示 `NO-SOURCE` 的模块仍不能报告为单测通过。
 
 ## 已授权模拟器上的启动检查
 
@@ -36,7 +55,7 @@ adb -s $deviceSerial shell am instrument -w com.elio.lifearchive.test/androidx.t
 
 `install -r` 用于保留数据的安装/覆盖更新，不为解决签名冲突而卸载或清数据。这里直接调用仪器测试，不使用会额外管理安装生命周期的设备测试任务。
 
-冒烟测试断言应用名称与“工程初始化完成”均可见。还需实际检查 Home 后返回、浅深主题和日志中的启动崩溃。主题切换前记录 `adb -s $deviceSerial shell cmd uimode night`，支持时使用 `night yes` / `night no`，结束后恢复原值。截图、UI XML 和日志保存在仓库外；不因命令返回成功就标记 UI 验收通过。
+冒烟测试断言应用名称与“架构底层已就绪，功能层待接入”均可见，并等待异步初始化。本轮只构建该测试 APK，未运行设备测试。后续需实际检查 Home 后返回、导航返回、浅深主题和启动日志。主题切换前记录原值，结束后恢复；截图、UI XML 和日志保存在仓库外，命令成功不能替代 UI 验收。
 
 ## 文档检查
 
@@ -64,4 +83,4 @@ Python 编译检查可能产生被忽略的缓存。PowerShell 测试使用系�
 
 手机工具无需先修改代码；按[使用配置约定](../../tools/UPSTREAM.md)指定启动包名，使用 Profile 时核对其中的设备参数，再在授权范围内验证预期状态。设备操作命令执行成功不能替代 UI 状态验证。
 
-后续业务单测随真实实现增加。编辑器和完整笔记功能按[一期验收要求](../plans/phase-1-local-notes.md)验证；当前初始化页与模拟器结果不替代编辑器交互、文件可靠性、性能或小米 14 Ultra 真机验收，也不沿用见域的历史通过记录。
+后续业务单测随真实功能增加。编辑器和完整笔记功能按[一期验收要求](../plans/phase-1-local-notes.md)验证；核心底层电脑检查不替代设备文件系统行为、编辑器交互、性能或小米 14 Ultra 真机验收，也不沿用历史底座及见域的设备通过记录。
