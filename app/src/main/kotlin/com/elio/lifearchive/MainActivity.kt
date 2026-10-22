@@ -5,24 +5,30 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.lifearchive.core.designsystem.LifeArchiveTheme
 import com.elio.lifearchive.core.preferences.ThemeMode
+import com.elio.lifearchive.core.preferences.PreferencesRepository
+import com.elio.lifearchive.domain.notes.NotesRepository
+import com.elio.lifearchive.domain.notes.LibraryRepository
+import com.elio.lifearchive.domain.notes.RemoteCacheRepository
+import com.elio.lifearchive.core.backup.BackupEngine
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject internal lateinit var variant: VariantRuntime
+    @Inject internal lateinit var notes: NotesRepository
+    @Inject internal lateinit var preferences: PreferencesRepository
+    @Inject internal lateinit var library: LibraryRepository
+    @Inject internal lateinit var remote: RemoteCacheRepository
+    @Inject internal lateinit var backup: BackupEngine
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,15 +42,10 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.LIGHT -> false
             }
             LifeArchiveTheme(darkTheme = dark) {
-                Scaffold { padding ->
-                    Column(Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
-                        Text("Life Archive")
-                        when {
-                            state.error != null -> Text("初始化失败：${state.error}")
-                            !state.ready -> Text("正在恢复本地状态…")
-                            else -> variant.Content()
-                        }
-                    }
+                when {
+                    state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
+                    !state.ready -> Scaffold { Text("正在恢复本地状态…", modifier = androidx.compose.ui.Modifier.padding(it)) }
+                    else -> ArchiveApp(notes, preferences, state.preferences, variant.debugControls, library, remote, backup)
                 }
             }
         }

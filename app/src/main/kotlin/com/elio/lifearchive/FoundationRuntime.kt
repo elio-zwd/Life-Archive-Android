@@ -7,6 +7,9 @@ import com.elio.lifearchive.core.preferences.PreferencesRepository
 import com.elio.lifearchive.core.preferences.PreferencesStore
 import com.elio.lifearchive.data.notes.NotesStorage
 import com.elio.lifearchive.domain.notes.NotesRepository
+import com.elio.lifearchive.domain.notes.LibraryRepository
+import com.elio.lifearchive.domain.notes.RemoteCacheRepository
+import com.elio.lifearchive.data.notes.RemoteCacheStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,6 +25,8 @@ internal class FoundationRuntime(context: Context, root: File) : AutoCloseable {
     private val preferencesStore = PreferencesStore(File(root, "settings.preferences_pb"), gate)
     val backup = BackupEngine(File(root, "backup-work"), gate, listOf(notesStore.backupParticipant, preferencesStore.backupParticipant))
     val notes: NotesRepository = notesStore.repository
+    val library: LibraryRepository = notesStore.library
+    val remote: RemoteCacheRepository = RemoteCacheStore(File(context.cacheDir, "remote-resources"))
     val preferences: PreferencesRepository = preferencesStore.repository
     override fun close() { notesStore.close(); preferencesStore.close() }
     suspend fun closeAndJoin() { notesStore.close(); preferencesStore.closeAndJoin() }
@@ -33,6 +38,8 @@ internal object FoundationModule {
     @Provides @Singleton
     fun runtime(@ApplicationContext context: Context): FoundationRuntime = FoundationRuntime(context, File(context.filesDir, "library"))
     @Provides fun notes(runtime: FoundationRuntime): NotesRepository = runtime.notes
+    @Provides fun library(runtime: FoundationRuntime): LibraryRepository = runtime.library
+    @Provides fun remote(runtime: FoundationRuntime): RemoteCacheRepository = runtime.remote
     @Provides fun preferences(runtime: FoundationRuntime): PreferencesRepository = runtime.preferences
     @Provides fun backup(runtime: FoundationRuntime): BackupEngine = runtime.backup
 }

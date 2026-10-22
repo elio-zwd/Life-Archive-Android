@@ -18,6 +18,9 @@ val allowedModules = mapOf(
     ":core:preferences" to setOf(":core:backup"),
     ":domain:notes" to setOf(":core:document"),
     ":data:notes" to setOf(":domain:notes", ":core:document", ":core:backup"),
+    ":feature:notes" to setOf(":domain:notes", ":core:designsystem"),
+    ":feature:editor" to setOf(":domain:notes", ":core:document", ":core:designsystem", ":core:preferences"),
+    ":feature:settings" to setOf(":domain:notes", ":core:preferences", ":core:backup", ":core:designsystem"),
 )
 tasks.register("checkArchitecture") {
     group = "verification"
@@ -54,11 +57,30 @@ tasks.register("checkArchitecture") {
 
 tasks.register("verifyFoundation") {
     group = "verification"
-    description = "仅电脑验证架构、核心底层、Lint 和 APK 构建，不连接设备"
+    description = "仅电脑验证架构、核心底层与编辑样板、Lint 和 APK 构建，不连接设备"
     dependsOn(
         "checkArchitecture", ":core:document:test", ":core:backup:test",
         ":data:notes:testDebugUnitTest", ":core:preferences:testDebugUnitTest", ":app:testDebugUnitTest",
         ":app:lintDebug", ":core:designsystem:lintDebug", ":data:notes:lintDebug", ":core:preferences:lintDebug",
         ":app:assembleDebug", ":app:assembleDebugAndroidTest", ":app:compileReleaseKotlin",
+        ":feature:notes:testDebugUnitTest", ":feature:editor:testDebugUnitTest",
+        ":feature:notes:lintDebug", ":feature:editor:lintDebug",
     )
+}
+
+tasks.register("verifyEditorPrototype") {
+    group = "verification"
+    description = "验证一期编辑器样板及底层回归，不安装 APK 或调用 ADB"
+    dependsOn("verifyFoundation")
+}
+tasks.register<Exec>("testReader") {
+    group = "verification"
+    dependsOn(":feature:editor:readerAssets", ":core:document:test")
+    workingDir(layout.projectDirectory.dir("reader"))
+    commandLine("node", "test/reader.test.mjs")
+}
+tasks.register("verifyPhaseOne") {
+    group = "verification"
+    description = "一期功能、迁移与本地阅读脚本验证；不连接设备"
+    dependsOn("verifyFoundation", "testReader", ":feature:settings:testDebugUnitTest", ":feature:settings:lintDebug")
 }

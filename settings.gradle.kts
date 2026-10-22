@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "LifeArchive"
 include(":app", ":core:designsystem", ":core:document", ":core:backup", ":core:preferences", ":domain:notes", ":data:notes")
+include(":feature:notes", ":feature:editor")
+include(":feature:settings")
