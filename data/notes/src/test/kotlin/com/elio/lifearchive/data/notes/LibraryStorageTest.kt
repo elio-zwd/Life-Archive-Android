@@ -23,6 +23,64 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class) @Config(sdk = [28])
 class LibraryStorageTest {
+    @Test fun relocationPreservesAbsolutePathsFragmentsAndUnchangedSourceRepresentation() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val target = storage.create("目标(1).md", "# 小节")
+            val raw = "[显示](</目标(1).md#小节> \"标题保留\")\n<a href=\"/目标(1).md#小节&amp;保留\">显示</a>\n[[目标(1)]]"
+            val referring = storage.create("本子/引用.md", raw)
+            assertTrue(storage.library.relocate(referring.summary.id, referring.summary.version, "另一本子/引用.md") is NoteResult.Success)
+            assertEquals(raw, storage.text(referring.summary.id))
+            assertTrue(storage.library.relocate(target.summary.id, target.summary.version, "新目标.md") is NoteResult.Success)
+            val changed = storage.text(referring.summary.id)
+            assertTrue(changed.contains("</%E6%96%B0%E7%9B%AE%E6%A0%87.md#小节> \"标题保留\""))
+            assertTrue(changed.contains("#小节&amp;保留\""))
+        }
+    }
+    @Test fun relativeLinksDoNotFollowTheVaultRootNamesakeAndExportsKeepTheActualTarget() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val root = storage.create("目标(1).md", "根目录目标")
+            val local = storage.create("本子/目标(1).md", "相对目标")
+            val from = storage.create("本子/引用.md", "[显示](目标(1).md \"原始标题\")")
+            val result = storage.library.resolve(from.summary.id, "目标(1).md", com.elio.lifearchive.core.document.LinkSyntax.MARKDOWN) as NoteResult.Success
+            assertEquals(local.summary.id, result.value.note)
+            assertTrue((storage.library.resolve(from.summary.id, "目标(1)") as NoteResult.Success).value.ambiguous.size == 2)
+            assertTrue(storage.library.relocate(root.summary.id, root.summary.version, "根目录新名.md") is NoteResult.Success)
+            assertEquals("[显示](目标(1).md \"原始标题\")", storage.text(from.summary.id))
+            assertTrue(storage.library.relocate(local.summary.id, local.summary.version, "本子/新名.md") is NoteResult.Success)
+            assertTrue(storage.text(from.summary.id).contains("%E6%96%B0%E5%90%8D.md \"原始标题\""))
+            val bytes = java.io.ByteArrayOutputStream(); storage.library.export(bytes, setOf(from.summary.id))
+            val names = mutableListOf<String>()
+            java.util.zip.ZipInputStream(bytes.toByteArray().inputStream()).use { zip -> while (true) { val item = zip.nextEntry ?: break; names += item.name; zip.closeEntry() } }
+            assertTrue("本子/新名.md" in names); assertFalse("根目录新名.md" in names)
+        }
+    }
+
+    @Test fun rollbackCleanupInterruptionDoesNotRequireTheDeletedSnapshotAgain() = runBlocking {
+        val directory = temp.newFolder()
+        val storage = open(directory)
+        val original = storage.create("原名.md", "不可丢失")
+        storage.fault = {
+            if (it == "batch-note") throw java.io.IOException("触发回滚")
+            if (it == "batch-cleanup") throw AssertionError("清理后进程退出")
+        }
+        try { storage.library.relocate(original.summary.id, original.summary.version, "新名.md"); fail("应中断") } catch (_: AssertionError) { }
+        storage.close()
+        open(directory).use { reopened ->
+            assertTrue(reopened.repository.initialize() is NoteResult.Success)
+            assertEquals("不可丢失", reopened.text(original.summary.id))
+            assertEquals("原名.md", (reopened.repository.read(original.summary.id) as NoteResult.Success).value.summary.path.value)
+        }
+    }
+    @Test fun rebuildingAFailedProjectionInvalidatesEmptyMetadata() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            storage.fault = { if (it == "index") throw java.io.IOException("索引失败") }
+            storage.create("失败.md", "---\ntags: [必须恢复]\n---\n正文关键词")
+            assertTrue((storage.library.query(NotesQuery(text = "关键词")) as NoteResult.Success).value.notes.isEmpty())
+            storage.fault = {}
+            assertTrue(storage.repository.rebuildIndex() is NoteResult.Success)
+            assertEquals(1, (storage.library.query(NotesQuery(text = "关键词", tag = "必须恢复")) as NoteResult.Success).value.notes.size)
+        }
+    }
     @get:Rule val temp = TemporaryFolder()
     private fun open(root: File) = NotesStorage.open(ApplicationProvider.getApplicationContext<Context>(), root, StorageGate())
     private fun committed(result: NoteResult<NoteSnapshot>) = (result as NoteResult.Committed).value

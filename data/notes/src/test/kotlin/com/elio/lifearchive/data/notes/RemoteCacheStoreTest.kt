@@ -10,6 +10,38 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class RemoteCacheStoreTest {
+    @Test fun duplicateLoadsShareOneDownloadAndAnOlderRefreshCannotReplaceTheNewerOne() = runBlocking {
+        val entered = CompletableDeferred<Unit>(); val release = CompletableDeferred<Unit>()
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val store = RemoteCacheStore(temp.newFolder()) { url ->
+            val revision = calls.incrementAndGet()
+            if (revision == 1) { entered.complete(Unit); release.await() }
+            RemoteCacheStore.Download("image/png", byteArrayOf(revision.toByte()).inputStream(), url)
+        }
+        val old = async { store.fetch("https://example.test/same", false) }; entered.await()
+        val joined = async(start = CoroutineStart.UNDISPATCHED) { store.fetch("https://example.test/same", false) }
+        val fresh = store.fetch("https://example.test/same", false, true) as NoteResult.Success
+        release.complete(Unit)
+        assertTrue(old.await() is NoteResult.StorageFailure); assertTrue(joined.await() is NoteResult.StorageFailure)
+        assertEquals(2, calls.get())
+        assertEquals(2, store.open(fresh.value.key)!!.stream.use { it.read() })
+    }
+    @Test fun clearInvalidatesRequestsAlreadyWaitingForADownloadSlot() = runBlocking {
+        val started = kotlinx.coroutines.channels.Channel<Unit>(2); val release = CompletableDeferred<Unit>()
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val store = RemoteCacheStore(temp.newFolder()) { url ->
+            if (calls.incrementAndGet() <= 2) { started.send(Unit); release.await() }
+            RemoteCacheStore.Download("image/png", byteArrayOf(1).inputStream(), url)
+        }
+        val first = async { store.fetch("https://example.test/a", false) }
+        val second = async { store.fetch("https://example.test/b", false) }
+        started.receive(); started.receive()
+        val queued = async(start = CoroutineStart.UNDISPATCHED) { store.fetch("https://example.test/c", false) }
+        store.clear(); release.complete(Unit)
+        assertTrue(first.await() is NoteResult.StorageFailure); assertTrue(second.await() is NoteResult.StorageFailure)
+        assertTrue(queued.await() is NoteResult.StorageFailure)
+        assertEquals(0L, store.size())
+    }
     @get:Rule val temp = TemporaryFolder()
     private val article = "<html><head><title>网页标题</title></head><body><nav>不应保留的导航</nav><article><h1>标题</h1><p>" + "中文正文与离线副本。".repeat(30) + "</p><img src='/image.png'><script>evil()</script></article></body></html>"
     @Test fun nonHtmlPageClosesItsNetworkStreamBeforeReportingFailure() = runBlocking {

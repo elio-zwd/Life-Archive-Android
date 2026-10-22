@@ -13,6 +13,15 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class BackupEngineTest {
+    @Test fun failureAfterCommitReportsTheCommittedStateInsteadOfOfferingADuplicateRestore() = runBlocking {
+        val participant = Participant("notes", "备份")
+        val engine = BackupEngine(temp.newFolder(), StorageGate(), listOf(participant))
+        val bytes = ByteArrayOutputStream().also { engine.export(it) }.toByteArray()
+        participant.value = "旧库"
+        engine.fault = { if (it == "committed") throw IOException("清理前失败") }
+        assertTrue(engine.commit(engine.prepare(bytes.inputStream())) is RestoreResult.Committed)
+        assertEquals("备份", participant.value)
+    }
     @get:Rule val temp = TemporaryFolder()
     private class Crash : Error()
     private class Participant(override val id: String, var value: String) : BackupParticipant {
@@ -43,7 +52,7 @@ class BackupEngineTest {
         a.value = "current-a"; b.value = "current-b"
         b.fail = { b.fail = null; throw IOException("模拟恢复失败") }
         val prepared = engine.prepare(ByteArrayInputStream(bytes))
-        try { engine.commit(prepared); fail("应失败") } catch (_: IOException) { }
+        assertTrue(engine.commit(prepared) is RestoreResult.RolledBack)
         assertEquals("current-a", a.value)
         assertEquals("current-b", b.value)
         engine.initialize()
@@ -102,7 +111,7 @@ class BackupEngineTest {
         val bytes = ByteArrayOutputStream().also { engine.export(it) }.toByteArray()
         a.value = "current"
         a.fail = { throw IOException("持续写入失败") }
-        try { engine.commit(engine.prepare(ByteArrayInputStream(bytes))); fail("应失败") } catch (_: IOException) { }
+        assertTrue(engine.commit(engine.prepare(ByteArrayInputStream(bytes))) is RestoreResult.RecoveryRequired)
         var accessed = false
         try { gate.access { accessed = true }; fail("恢复失败不应开放") } catch (_: IOException) { }
         assertFalse(accessed)

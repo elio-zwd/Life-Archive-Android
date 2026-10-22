@@ -48,8 +48,23 @@ class SettingsViewModelTest {
             assertNotNull(model.state.value.restore); assertEquals("当前内容", payload); assertEquals(0, initialized)
             model.cancelRestore(); model.done(); assertNull(model.state.value.restore); assertEquals("当前内容", payload)
             model.prepareRestore { zip.inputStream() }; model.done()
+            var blockedReset = false; model.restore(beforeRestore = { false }) { blockedReset = true }; model.done()
+            assertFalse(blockedReset); assertNotNull(model.state.value.restore); assertEquals("当前内容", payload); assertEquals(0, initialized)
             var reset = false; model.restore { reset = true }; model.done()
             assertEquals("备份内容", payload); assertTrue(reset); assertEquals(1, initialized)
+        } finally { model.viewModelScope.cancel(); preferences.closeAndJoin(); Dispatchers.resetMain() }
+    }
+    @Test fun committedRestoreResetsOldNavigationEvenWhenIndexInitializationFails() = runBlocking {
+        Dispatchers.setMain(Dispatchers.Unconfined)
+        val gate = StorageGate(); val preferences = PreferencesStore(File(temp.newFolder(), "settings.preferences_pb"), gate)
+        val engine = BackupEngine(temp.newFolder(), gate, listOf(preferences.backupParticipant))
+        val notes = fake<NotesRepository> { if (it == "initialize") NoteResult.StorageFailure("索引初始化失败") else error(it) }
+        val model = SettingsViewModel(preferences.repository, engine, notes, fake<LibraryRepository> { error(it) }, cache())
+        try {
+            val zip = ByteArrayOutputStream().also { engine.export(it) }.toByteArray()
+            model.prepareRestore { zip.inputStream() }; model.done()
+            var reset = false; model.restore { reset = true }; val result = model.done()
+            assertTrue(reset); assertNull(result.restore); assertTrue(result.message!!.contains("资料已替换"))
         } finally { model.viewModelScope.cancel(); preferences.closeAndJoin(); Dispatchers.resetMain() }
     }
     @Test fun stagedImportRequiresExplicitCommitAndCanBeDiscarded() = runBlocking {

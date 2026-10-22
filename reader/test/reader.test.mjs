@@ -27,11 +27,18 @@ const wav = Buffer.alloc(44 + 44100 * 2); wav.write('RIFF', 0); wav.writeUInt32L
 for (let i = 0; i < 44100; i++) wav.writeInt16LE(Math.round(Math.sin(i * Math.PI * 2 * 440 / 44100) * 4000), 44 + i * 2);
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.wasm': 'application/wasm', '.svg': 'image/svg+xml' };
 const failures = []; const actions = [];
+const served = []; const cachedUrls = new Set(); let rootReads = 0;
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, 'http://127.0.0.1');
+    served.push(url.pathname);
     const reply = (value) => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(value)); };
-    if (url.pathname === '/reader/document') return reply({ id: url.searchParams.get('note'), path: '验收.md', html: url.searchParams.get('note') === 'target' ? fixtures.nested : fixtures.root, blocks: [] });
+    if (url.pathname === '/reader/document') {
+      const revision = url.searchParams.get('revision'); const note = url.searchParams.get('note'); if (note === 'root') rootReads++;
+      const html = revision === 'slow' ? '<p data-source="0">旧响应</p>' : revision === 'fast' ? '<p data-source="0">新响应</p>' : revision === 'plain' ? '<p data-source="0">普通正文</p>' : note === 'target' ? fixtures.nested : fixtures.root;
+      if (revision === 'slow') await new Promise(resolve => setTimeout(resolve, 180));
+      return reply({ id: note, revision, path: '验收.md', html, blocks: [] });
+    }
     if (url.pathname === '/reader/resolve') {
       const target = url.searchParams.get('target');
       if (target.startsWith('目标')) return reply({ note: 'target', offset: target.includes('#') ? fixtures.nestedHeadingOffset : 0 });
@@ -42,7 +49,8 @@ const server = http.createServer(async (request, response) => {
       if (target.startsWith('视频.mp4')) return reply({ attachment: '视频.mp4' });
       return reply({ missing: true });
     }
-    if (url.pathname === '/reader/cache-info') return reply({ key: null });
+    if (url.pathname === '/reader/cache-info') return reply({ key: cachedUrls.has(url.searchParams.get('url')) ? 'a'.repeat(64) : null, fetched: Date.now() });
+    if (url.pathname.startsWith('/reader/cached/')) { response.setHeader('Content-Type', 'image/png'); return response.end(png); }
     if (url.pathname === '/reader/action') { actions.push(Object.fromEntries(url.searchParams)); response.writeHead(204); return response.end(); }
     if (url.pathname === '/reader/resource') {
       const resourcePath = url.searchParams.get('path');
@@ -63,6 +71,14 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browserPath = process.env.LIFE_ARCHIVE_BROWSER || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
 const browser = await chromium.launch({ executablePath: browserPath, headless: true });
 const page = await browser.newPage({ viewport: { width: 412, height: 892 } });
+await page.addInitScript(() => {
+  window.readerFrames = [];
+  const sample = () => {
+    if (document.body) window.readerFrames.push({ background: getComputedStyle(document.body).backgroundColor, visible: document.querySelector('#content') && getComputedStyle(document.querySelector('#content')).visibility === 'visible', ready: !!window.readerReady });
+    if (!window.readerReady) requestAnimationFrame(sample);
+  }; requestAnimationFrame(sample);
+});
+await page.route('**/mermaid/mermaid.esm.min.mjs', async route => { await new Promise(resolve => setTimeout(resolve, 250)); await route.continue(); });
 const errors = []; const remoteRequests = [];
 page.on('pageerror', error => errors.push(error.message));
 page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1:') && !request.url().startsWith('blob:') && !request.url().startsWith('data:')) remoteRequests.push(request.url()); });
@@ -71,8 +87,15 @@ try {
   for (const dark of [false, true]) {
     await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&dark=${dark}&offset=0&auto=false`);
     await page.waitForFunction(() => window.readerReady === true, { timeout: 45000 });
+    const frames = await page.evaluate(() => window.readerFrames);
+    assert.ok(frames.length > 0); assert.ok(frames.every(frame => frame.background === (dark ? 'rgb(32, 35, 39)' : 'rgb(247, 248, 250)')));
+    assert.ok(frames.every(frame => frame.ready || !frame.visible)); checks.push(`${dark ? '深色' : '浅色'}首帧与原子展示`);
     assert.equal(await page.locator('.math[data-rendered="true"] > mjx-container[jax="SVG"]').count(), 2); assert.equal(await page.locator('.math [data-mml-node="merror"]').count(), 0); checks.push(`${dark ? '深色' : '浅色'}公式渲染`);
-    assert.equal(await page.locator('.mermaid svg').count(), 1); checks.push(`${dark ? '深色' : '浅色'}Mermaid 渲染`);
+    assert.equal(await page.locator('.mermaid svg').count(), 2); checks.push(`${dark ? '深色' : '浅色'}Mermaid 渲染`);
+    await Promise.all([page.waitForResponse(response => response.url().includes('/reader/action?type=link')), page.locator('.embedded-note .mermaid .internal-link').first().evaluate(node => node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })))]);
+    assert.equal(actions.at(-1).from, 'target'); assert.equal(actions.at(-1).value, '嵌入目标');
+    await Promise.all([page.waitForResponse(response => response.url().includes('/reader/action?type=link')), page.locator('.embedded-note a[href="local.md#section"]').evaluate(node => node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })))]);
+    assert.equal(actions.at(-1).from, 'target'); assert.equal(actions.at(-1).syntax, 'MARKDOWN'); checks.push(`${dark ? '深色' : '浅色'}嵌入链接归属`);
     assert.equal(await page.locator('details.callout').count(), 1); await page.locator('details.callout>summary').click(); assert.equal(await page.locator('aside.callout').count(), 1);
     assert.ok(await page.locator('table strong').count() > 0); assert.equal(await page.locator('mark strong').count(), 1);
     assert.ok(await page.locator('.footnotes li').count() >= 2); assert.ok(await page.locator('.embedded-note').count() > 0); assert.ok((await page.locator('.embedded-note').innerText()).includes('循环'));
@@ -84,9 +107,31 @@ try {
     await page.waitForFunction(() => document.querySelector('audio')?.readyState >= 1 && document.querySelector('video')?.readyState >= 1);
     await page.locator('audio').evaluate(node => { node.currentTime = .25; }); await page.waitForFunction(() => document.querySelector('audio').currentTime >= .2);
     checks.push(`${dark ? '深色' : '浅色'}音视频元数据与音频定位`);
+    const reads = rootReads;
+    await page.evaluate(async () => { window.retainedAudio = document.querySelector('audio'); window.retainedCallout = document.querySelector('details.callout'); await window.readerUpdate({ revision: window.readerRevision, dark: document.documentElement.classList.contains('dark'), scale: 1, auto: false }); });
+    assert.equal(rootReads, reads); assert.ok(await page.evaluate(() => window.retainedAudio === document.querySelector('audio')));
+    const remoteUrl = await page.locator('[data-resource-url]').first().getAttribute('data-resource-url'); cachedUrls.add(remoteUrl);
+    await page.evaluate(url => window.readerResourceUpdated(url, false), remoteUrl);
+    assert.ok(await page.evaluate(() => window.retainedAudio === document.querySelector('audio') && window.retainedCallout === document.querySelector('details.callout')));
+    assert.equal(rootReads, reads); checks.push(`${dark ? '深色' : '浅色'}配置与资源更新保持会话`);
     const directory = process.env.LIFE_ARCHIVE_EVIDENCE || path.join(process.env.TEMP || 'D:/Temp', 'life-archive-phase1-browser'); await fs.mkdir(directory, { recursive: true });
     await page.screenshot({ path: path.join(directory, dark ? 'reader-dark.png' : 'reader-light.png'), fullPage: true });
   }
+  await page.evaluate(async () => {
+    window.refreshContents = [];
+    const observer = new MutationObserver(() => window.refreshContents.push(document.querySelector('#content').textContent.length)); observer.observe(document.querySelector('#content'), { childList: true });
+    const slow = window.readerUpdate({ revision: 'slow', dark: true, scale: 1, auto: false });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    const fast = window.readerUpdate({ revision: 'fast', dark: true, scale: 1, auto: false });
+    await Promise.allSettled([slow, fast]);
+    observer.disconnect();
+  });
+  assert.equal(await page.evaluate(() => window.readerRevision), 'fast'); assert.equal(await page.locator('#content').innerText(), '新响应'); assert.equal(await page.locator('.reader-staging').count(), 0); checks.push('旧渲染回执不覆盖新正文');
+  assert.ok(await page.evaluate(() => window.refreshContents.length > 0 && window.refreshContents.every(length => length > 0))); checks.push('刷新不清空整页正文');
+  const start = served.length;
+  await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=plain&dark=true&offset=0&auto=false`);
+  await page.waitForFunction(() => window.readerReady === true);
+  assert.ok(!served.slice(start).some(name => /\/reader\/(mermaid|mathjax|pdfjs)\//.test(name))); checks.push('普通笔记不加载复杂渲染库');
   assert.equal(errors.length, 0, errors.join('\n')); assert.equal(failures.length, 0, failures.join('\n'));
   console.log(`PASS ${checks.length} 浏览器检查：${checks.join('、')}`);
 } catch (error) {

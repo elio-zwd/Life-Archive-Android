@@ -23,7 +23,7 @@ internal open class MemoryNotes : NotesRepository {
     override fun observeNotes() = flowOf(listOf(note.summary))
     override suspend fun initialize() = NoteResult.Success(Unit)
     override suspend fun create(path: String, document: RawDocument): NoteResult<NoteSnapshot> = NoteResult.Committed(note.copy(document = document), false)
-    override suspend fun read(id: NoteId) = NoteResult.Success(note)
+    override suspend fun read(id: NoteId): NoteResult<NoteSnapshot> = NoteResult.Success(note)
     override suspend fun readDraft(id: NoteId) = NoteResult.Success(draft)
     override suspend fun writeDraft(draft: Draft): NoteResult<Unit> {
         draftWait?.await()

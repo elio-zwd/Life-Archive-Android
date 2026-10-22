@@ -22,6 +22,25 @@ import org.robolectric.annotation.Config
 class EditorInteractionTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun emptyLinesPreserveRenderedHighlightsWhileTheParserIsDelayedInBothModes() {
+        val raw = "# 标题\n\n**中文高亮**\n末尾"
+        var session by mutableStateOf(EditorSession(raw))
+        var mode by mutableStateOf(EditorMode.SOURCE)
+        val parsed = MarkdownParser().parse(raw)
+        compose.setContent { LifeArchiveTheme { Box(Modifier.requiredSize(412.dp, 650.dp)) { ComposeEditorEngine.Content(session, mode, parsed, 1f, false, true) } } }
+        for (nextMode in listOf(EditorMode.SOURCE, EditorMode.LIVE)) {
+            val current = EditorSession(raw)
+            compose.runOnIdle { session = current; mode = nextMode; current.text.edit { selection = TextRange(raw.length) } }
+            repeat(12) {
+                compose.onNodeWithTag("editor-body").performTextInput("\n")
+                val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                compose.onNodeWithTag("editor-body").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(results) }
+                assertTrue("解析落后时不能清空高亮", results.single().layoutInput.text.spanStyles.any { it.item.fontWeight == androidx.compose.ui.text.font.FontWeight.Bold })
+                assertEquals(raw + "\n".repeat(it + 1), current.text.text.toString())
+            }
+        }
+    }
+
     @Test fun longDocumentsAcceptInputAndSwitchModesWithoutChangingOtherBytes() {
         var session by mutableStateOf(EditorSession(""))
         var parsed by mutableStateOf<ParsedDocument?>(null)

@@ -6,6 +6,32 @@ import java.io.File
 import kotlinx.serialization.json.*
 
 class DocumentAnalysisTest {
+    @Test fun emptyFrontmatterIsUpdatedInPlaceAndSharedByEditorAndReader() {
+        val raw = "\uFEFF---\r\n---\r\n# 正文\r\n"
+        assertEquals("\uFEFF---\r\ntags: [\"新\"]\r\n---\r\n# 正文\r\n", DocumentAnalyzer.withTags(raw, listOf("新")))
+        assertEquals(BlockKind.PROPERTIES, MarkdownParser().parse(raw).blocks.first().kind)
+        assertTrue(HtmlProjection.render(raw).contains("class=\"properties\""))
+    }
+    @Test fun balancedMarkdownDestinationsAndEscapesUseTheActualTarget() {
+        val raw = "[括号](folder/file(1).md) ![图片](<folder/a b.png>) [转义](folder/file\\(2\\).md)\n[引用][ref]\n\n[ref]: folder/file(3).md \"保留标题\"\n"
+        assertEquals(listOf("folder/file(1).md", "folder/a b.png", "folder/file(2).md", "folder/file(3).md"), DocumentAnalyzer.analyze(raw).links.map { it.target })
+    }
+
+    @Test fun tagAnchorAndUnknownAliasSurvivePropertyEditing() {
+        val raw = "\uFEFF---\r\ntags: &shared [旧]\r\nunknown: *shared\r\n---\r\n正文\r\n"
+        val changed = DocumentAnalyzer.withTags(raw, listOf("新"))
+        assertTrue(changed.contains("tags: &shared [\"新\"]\r\nunknown: *shared"))
+        assertTrue(changed.startsWith("\uFEFF---\r\n")); assertTrue(changed.endsWith("正文\r\n"))
+        assertEquals(listOf("新"), DocumentAnalyzer.analyze(changed).propertyTags)
+    }
+    @Test fun unsafeOrAmbiguousTagStructuresAreRejectedWithoutRewritingUnknownYaml() {
+        listOf("tags:\n  keep: value", "tags: [旧]\ntags: [重复]", "'tags': [旧]", "tags: &list\n  - &item 旧\nunknown: *item").forEach { body ->
+            val source = "---\n$body\n---\n正文"
+            assertThrows(IllegalArgumentException::class.java) { DocumentAnalyzer.withTags(source, listOf("新")) }
+        }
+        val source = "---\ntags: &list # 保留\n  - 旧\n  - 另一个\nunknown: *list\n---\n正文"
+        assertEquals("---\ntags: &list [\"新\"] # 保留\nunknown: *list\n---\n正文", DocumentAnalyzer.withTags(source, listOf("新")))
+    }
     @Test fun metadataAndPatchesPreserveUnknownPropertiesAndCrLf() {
         val raw = "\uFEFF---\r\nunknown: &keep {custom: true}\r\ntags: [旧标签, 'a/b'] # 说明\r\naliases:\r\n  - 别名\r\ntitle: 独立标题\r\n---\r\n# 正文\r\n#正文标签 [[本子/记录#小节|别名]]\r\n"
         val analyzed = DocumentAnalyzer.analyze(raw)
@@ -107,7 +133,7 @@ class DocumentAnalysisTest {
 
             [^note]: 脚注内容 **可格式化**。
         """.trimIndent()
-        val nested = "# 目标\n\n## 章节\n\n嵌入段落。\n\n![[循环]]\n"
+        val nested = "# 目标\n\n## 章节\n\n嵌入段落。[同目录](local.md#section)\n\n```mermaid\ngraph TD\n C[嵌入目标] --> D\n class C internal-link;\n```\n\n![[循环]]\n"
         val data = buildJsonObject { put("root", HtmlProjection.render(source)); put("nested", HtmlProjection.render(nested)); put("nestedHeadingOffset", DocumentAnalyzer.heading(DocumentAnalyzer.analyze(nested), "章节")!!.start); put("source", source) }
         File("build/reader-fixtures.json").apply { parentFile.mkdirs(); writeText(data.toString()) }
     }

@@ -7,12 +7,56 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.*
 import org.junit.Assert.*
 import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class EditorViewModelTest {
+    @Test fun retiredSessionCannotWriteIntoARestoredLibraryOrAcceptLateAttachmentCallbacks() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val repo = MemoryNotes()
+        val model = EditorViewModel(repo, repo.note.summary.id, true)
+        try {
+            assertTrue(model.retire())
+            repo.note = repo.note.copy(document = RawDocument("已恢复的资料"))
+            val saves = repo.saves
+            model.insertAttachment("迟到.png"); assertFalse(model.applyTags(listOf("迟到")))
+            model.session!!.text.edit { append("过期输入") }
+            model.backgroundSave(); model.readingPosition(99); assertTrue(model.flush())
+            advanceUntilIdle()
+            assertEquals(saves, repo.saves); assertEquals("已恢复的资料", repo.note.document.text); assertEquals(0, repo.offset)
+        } finally { model.viewModelScope.coroutineContext[Job]!!.cancelAndJoin(); Dispatchers.resetMain() }
+    }
+
+    @Test fun slowHighlightDoesNotDelayDraftOrBodyAndCannotPublishAnOldProjection() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = MemoryNotes()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val model = EditorViewModel(repo, repo.note.summary.id, true, parse = { text -> if (text != "原文") release.await(); MarkdownParser().parse(text) })
+        try {
+            runCurrent()
+            model.session!!.text.edit { replace(0, length, "回车\n\n第一版") }
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications(); runCurrent()
+            advanceTimeBy(300); runCurrent()
+            assertEquals("回车\n\n第一版", repo.draft!!.document.text)
+            advanceTimeBy(500); runCurrent(); assertEquals("回车\n\n第一版", repo.note.document.text)
+            model.session!!.text.edit { append("\n第二版") }
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications(); runCurrent()
+            release.complete(Unit)
+            val latest = model.state.first { it.projection?.document?.source == "回车\n\n第一版\n第二版" }
+            assertEquals("回车\n\n第一版\n第二版", latest.projection!!.document.source)
+        } finally { model.viewModelScope.coroutineContext[Job]!!.cancelAndJoin(); Dispatchers.resetMain() }
+    }
+
+    @Test fun failedReadHasNoUnsavedInputAndCanReturn() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val repo = object : MemoryNotes() { override suspend fun read(id: NoteId): NoteResult<NoteSnapshot> = NoteResult.NotFound }
+        val model = EditorViewModel(repo, repo.note.summary.id, false)
+        try { var left = false; model.leave { left = true }; assertTrue(left); assertNotNull(model.state.value.error) }
+        finally { model.viewModelScope.coroutineContext[Job]!!.cancelAndJoin(); Dispatchers.resetMain() }
+    }
     @Test fun sameVersionDraftRequiresConfirmationAndRestoresAfterNewViewModel() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val repo = MemoryNotes().apply { draft = Draft(note.summary.id, note.summary.version, 12, RawDocument("待恢复的中文")) }
