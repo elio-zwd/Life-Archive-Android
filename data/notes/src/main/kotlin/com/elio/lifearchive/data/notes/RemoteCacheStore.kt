@@ -28,7 +28,13 @@ class RemoteCacheStore(private val root: File, private val capacity: Long = 512L
     @Serializable private data class Metadata(val key: String, val url: String, val page: Boolean, val fetched: Long, val partial: Boolean, val bytes: Long, val mime: String, val resources: Map<String, String> = emptyMap())
     private val mutex = Mutex()
     private val downloads = Semaphore(2)
-    private var generation = 0L
+    @Volatile private var generation = 0L
+    private var nextRequest = 0L
+    private data class Request(val generation: Long, val revision: Long, val result: CompletableDeferred<NoteResult<CachedRemote>>)
+    private val requests = mutableMapOf<String, Request>()
+    private val latest = mutableMapOf<String, Long>()
+    private val work = File(root.parentFile, "${root.name}-work")
+    init { work.listFiles().orEmpty().forEach { it.deleteRecursively() } }
     private fun key(url: String, page: Boolean) = MessageDigest.getInstance("SHA-256").digest(("$page:$url").toByteArray()).joinToString("") { "%02x".format(it) }
     private fun Metadata.public() = CachedRemote(key, url, page, fetched, partial, bytes)
     private fun metadata(directory: File): Metadata? = runCatching { Json.decodeFromString<Metadata>(File(directory, "metadata.json").readText()) }.getOrNull()
@@ -37,18 +43,34 @@ class RemoteCacheStore(private val root: File, private val capacity: Long = 512L
         if (value != null && File(directory, "content").isFile) { directory.setLastModified(System.currentTimeMillis()); value.public() } else null
     } }
     override suspend fun size(): Long = withContext(Dispatchers.IO) { mutex.withLock { root.walkTopDown().filter { it.isFile }.sumOf { it.length() } } }
-    override suspend fun clear() = withContext(Dispatchers.IO) { mutex.withLock { generation++; check(!root.exists() || root.deleteRecursively()); Unit } }
-    override suspend fun fetch(url: String, page: Boolean, refresh: Boolean): NoteResult<CachedRemote> = downloads.withPermit { withContext(Dispatchers.IO) {
+    override suspend fun clear() = withContext(Dispatchers.IO) { mutex.withLock { generation++; requests.clear(); latest.clear(); check(!root.exists() || root.deleteRecursively()); Unit } }
+    override suspend fun fetch(url: String, page: Boolean, refresh: Boolean): NoteResult<CachedRemote> {
+        val id = key(url, page)
+        val (request, owner) = mutex.withLock {
+            val existing = requests[id]
+            if (!refresh && existing != null) existing to false
+            else Request(generation, ++nextRequest, CompletableDeferred()).also { requests[id] = it; latest[id] = it.revision } to true
+        }
+        if (!owner) return request.result.await()
+        return try {
+            val result = fetchNow(url, page, refresh, request)
+            request.result.complete(result)
+            result
+        } catch (e: CancellationException) {
+            request.result.complete(NoteResult.StorageFailure("缓存请求已取消")); throw e
+        } finally { withContext(NonCancellable) { mutex.withLock { if (requests[id] === request) requests.remove(id) } } }
+    }
+    private suspend fun fetchNow(url: String, page: Boolean, refresh: Boolean, request: Request): NoteResult<CachedRemote> = downloads.withPermit { withContext(Dispatchers.IO) {
+        if (request.generation != generation) return@withContext NoteResult.StorageFailure("缓存已清理，本次下载已取消")
         if (!refresh) find(url, page)?.let { return@withContext NoteResult.Success(it) }
-        val epoch = mutex.withLock { generation }
-        val staging = File(root.parentFile, "remote-pending-${UUID.randomUUID()}")
+        val staging = File(work, "pending-${UUID.randomUUID()}")
         try {
             validateUrl(url); check(staging.mkdirs())
             var total = 0L
             suspend fun save(input: InputStream, file: File, limit: Long = capacity) {
                 input.use { source -> file.outputStream().use { output ->
                     val buffer = ByteArray(65536); var count = 0L
-                    while (true) { currentCoroutineContext().ensureActive(); val n = source.read(buffer); if (n < 0) break; count += n; total += n; require(count <= limit && total <= capacity) { "资源超过缓存容量" }; output.write(buffer, 0, n) }
+                    while (true) { currentCoroutineContext().ensureActive(); check(request.generation == generation) { "缓存已清理，本次下载已取消" }; val n = source.read(buffer); if (n < 0) break; count += n; total += n; require(count <= limit && total <= capacity) { "资源超过缓存容量" }; output.write(buffer, 0, n) }
                 } }
             }
             val response = download(url)
@@ -80,9 +102,9 @@ class RemoteCacheStore(private val root: File, private val capacity: Long = 512L
             atomicWrite(File(staging, "metadata.json"), Json.encodeToString(value).toByteArray())
             require(staging.walkTopDown().filter { it.isFile }.sumOf { it.length() } <= capacity) { "资源超过缓存总容量" }
             mutex.withLock {
-                check(epoch == generation) { "缓存已清理，本次下载已取消" }
+                check(request.generation == generation && latest[id] == request.revision) { "缓存请求已被清理或新的刷新替代" }
                 check(root.isDirectory || root.mkdirs())
-                val target = File(root, id); val previous = File(root.parentFile, "remote-old-${UUID.randomUUID()}")
+                val target = File(root, id); val previous = File(work, "old-${UUID.randomUUID()}")
                 if (target.exists()) check(target.renameTo(previous))
                 try { check(staging.renameTo(target)) } catch (e: Exception) { if (previous.exists()) previous.renameTo(target); throw e }
                 previous.deleteRecursively()
@@ -97,7 +119,7 @@ class RemoteCacheStore(private val root: File, private val capacity: Long = 512L
     override suspend fun open(key: String, path: String, offset: Long, length: Long?): CacheStream? = withContext(Dispatchers.IO) { mutex.withLock {
         if (!key.matches(Regex("[a-f0-9]{64}")) || !LibraryPath.isValid(path) || '/' in path) return@withLock null
         val directory = File(root, key); val value = metadata(directory) ?: return@withLock null
-        val file = File(directory, path); if (!file.isFile || offset < 0 || offset > file.length()) return@withLock null
+        val file = File(directory, path); if (!file.isFile || offset < 0 || offset > file.length() || length != null && length < 0) return@withLock null
         directory.setLastModified(System.currentTimeMillis())
         val input = file.inputStream(); var skip = offset
         while (skip > 0) { val count = input.skip(skip); if (count <= 0) { input.close(); return@withLock null }; skip -= count }

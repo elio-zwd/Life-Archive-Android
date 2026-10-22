@@ -7,7 +7,8 @@ import org.commonmark.node.*
 import org.commonmark.parser.Parser
 import org.commonmark.parser.IncludeSourceSpans
 
-data class SourceLink(val start: Int, val end: Int, val target: String, val wiki: Boolean, val embed: Boolean, val mermaidNode: String? = null, val implicitNode: Boolean = false)
+enum class LinkSyntax { WIKI, MARKDOWN, HTML }
+data class SourceLink(val start: Int, val end: Int, val target: String, val wiki: Boolean, val embed: Boolean, val mermaidNode: String? = null, val implicitNode: Boolean = false, val syntax: LinkSyntax = if (wiki) LinkSyntax.WIKI else LinkSyntax.MARKDOWN)
 data class SourceAnchor(val name: String, val start: Int, val end: Int, val level: Int = 0)
 data class DocumentAnalysis(val tags: List<String>, val aliases: List<String>, val title: String?, val headings: List<SourceAnchor>, val blocks: List<SourceAnchor>, val links: List<SourceLink>, val propertyTags: List<String> = emptyList())
 
@@ -24,7 +25,7 @@ object DocumentAnalyzer {
         }
         return value
     }
-    fun yaml(source: String): IntRange? = Regex("\\A\\uFEFF?---\\r?\\n[\\s\\S]*?\\r?\\n(?:---|\\.\\.\\.)(?:\\r?\\n|$)").find(source)?.range
+    fun yaml(source: String): IntRange? = Regex("\\A\\uFEFF?---\\r?\\n(?:[\\s\\S]*?\\r?\\n)?(?:---|\\.\\.\\.)(?:\\r?\\n|$)").find(source)?.range
     fun unquote(value: String): String = value.trim().let { text ->
         when {
             text.startsWith('"') && text.endsWith('"') -> runCatching { kotlinx.serialization.json.Json.decodeFromString<String>(text) }.getOrDefault(text.drop(1).dropLast(1))
@@ -41,7 +42,7 @@ object DocumentAnalyzer {
             return when (value) { is JsonArray -> value.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }; is JsonPrimitive -> listOfNotNull(value.contentOrNull); else -> emptyList() }
         }
         val match = Regex("(?m)^${Regex.escape(name)}:[ \\t]*(.*)$").find(yaml) ?: return emptyList()
-        val value = withoutComment(match.groupValues[1].trim().trimEnd('\r'))
+        val value = withoutComment(match.groupValues[1].trim().trimEnd('\r')).replaceFirst(Regex("^&[A-Za-z0-9_-]+(?:\\s+|$)"), "").trim()
         if (value.startsWith('[') && value.endsWith(']')) return Regex("\"(?:\\\\.|[^\"])*\"|'(?:''|[^'])*'|[^,]+").findAll(value.drop(1).dropLast(1)).map { unquote(it.value) }.filter { it.isNotBlank() }.toList()
         if (value.isNotBlank() && !value.startsWith('#')) return listOf(unquote(value))
         return yaml.substring(match.range.last + 1).lineSequence().drop(1).takeWhile { it.isBlank() || it.startsWith(' ') || it.startsWith('\t') || it.startsWith('-') }.mapNotNull { Regex("^\\s*-\\s+(.+)$").find(it)?.groupValues?.get(1)?.let(::unquote) }.toList()
@@ -69,20 +70,6 @@ object DocumentAnalyzer {
             val start = match.range.first + match.groupValues[1].length + 2
             links += SourceLink(start, start + target.length, target, true, match.groupValues[1].isNotEmpty())
         }
-        Regex("(!?)\\[[^]\\r\\n]*]\\((<[^>]+>|(?:\\\\.|[^\\s)])+)(?:\\s+\"[^\"]*\")?\\)").findAll(text).forEach { match ->
-            val group = match.groups[2]!!; val angle = group.value.startsWith('<')
-            val start = group.range.first + if (angle) 1 else 0
-            val target = if (angle) group.value.drop(1).dropLast(1) else group.value
-            links += SourceLink(start, start + target.length, target, false, match.groupValues[1].isNotEmpty())
-        }
-        Regex("(?m)^ {0,3}\\[(?!\\^)[^]\\n]+]:[ \\t]*(<[^>]+>|[^\\s]+)").findAll(text).forEach { match ->
-            val group = match.groups[1]!!; val angle = group.value.startsWith('<'); val value = group.value.removeSurrounding("<", ">")
-            links += SourceLink(group.range.first + if (angle) 1 else 0, group.range.first + (if (angle) 1 else 0) + value.length, value, false, false)
-        }
-        Regex("(?i)\\b(?:src|href)=[\"']([^\"']+)[\"']").findAll(text).forEach { match ->
-            val group = match.groups[1]!!
-            links += SourceLink(group.range.first, group.range.last + 1, group.value, false, !match.value.startsWith("href", true))
-        }
         val headings = mutableListOf<SourceAnchor>()
         val lineStarts = mutableListOf(0); source.forEachIndexed { i, c -> if (c == '\n') lineStarts += i + 1 }
         fun offset(node: Node): Pair<Int, Int>? {
@@ -90,6 +77,29 @@ object DocumentAnalyzer {
             return (lineStarts[first.lineIndex] + first.columnIndex) to (lineStarts[last.lineIndex] + last.columnIndex + last.length)
         }
         tree(source).accept(object : AbstractVisitor() {
+            private fun markdown(node: Node, destination: String, image: Boolean, definition: Boolean = false) {
+                val range = offset(node) ?: return
+                val raw = source.substring(range.first, range.second)
+                val at = if (definition) Regex("^ {0,3}\\[[^]]+]:[ \\t]*").find(raw)?.value?.length
+                    else inlineDestinationStart(raw)
+                if (at == null) return // 引用用法的目标由定义节点登记，不能把显示文字当作目标。
+                val span = destinationRange(raw, at) ?: return
+                val start = range.first + span.first; val end = range.first + span.last + 1
+                if (text.substring(start, end).isNotBlank()) links += SourceLink(start, end, destination, false, image)
+            }
+            override fun visit(node: Link) { markdown(node, node.destination, false); visitChildren(node) }
+            override fun visit(node: Image) { markdown(node, node.destination, true); visitChildren(node) }
+            override fun visit(node: LinkReferenceDefinition) { if (!node.label.startsWith('^')) markdown(node, node.destination, false, true) }
+            private fun html(node: Node) {
+                val range = offset(node) ?: return
+                val raw = text.substring(range.first, range.second)
+                Regex("(?i)\\b(src|href)\\s*=\\s*([\"'])(.*?)\\2").findAll(raw).forEach { match ->
+                    val group = match.groups[3]!!
+                    links += SourceLink(range.first + group.range.first, range.first + group.range.last + 1, htmlTarget(group.value), false, match.groupValues[1].equals("src", true), syntax = LinkSyntax.HTML)
+                }
+            }
+            override fun visit(node: HtmlInline) = html(node)
+            override fun visit(node: HtmlBlock) = html(node)
             override fun visit(node: Heading) {
                 val range = offset(node) ?: return
                 if (yaml(source)?.contains(range.first) == true) return
@@ -161,8 +171,24 @@ object DocumentAnalyzer {
             }
             return source.substring(0, bodyStart) + changed + source.substring(bodyEnd)
         }
+        val candidates = Regex("(?m)^(?:tags[ \\t]*|\"tags\"|'tags')[ \\t]*:").findAll(body).toList()
+        require(candidates.size <= 1 && candidates.all { it.value == "tags:" }) { "该 tags 结构不能安全定位，请在源码中编辑" }
         val field = Regex("(?m)^tags:[^\\r\\n]*(?:\\r?\\n(?:[ \\t]+[^\\r\\n]*|-[ \\t]+[^\\r\\n]*))*").find(yaml)
-        if (field != null) return source.replaceRange(range.first + field.range.first, range.first + field.range.last + 1, replacement)
+        if (field != null) {
+            val first = field.value.substringBefore('\n').trimEnd('\r').substringAfter(':')
+            val value = withoutComment(first)
+            val anchor = Regex("^\\s*(&[A-Za-z0-9_-]+)(?:\\s+|$)").find(value)
+            val rest = if (anchor == null) field.value.substringAfter(':') else field.value.substringAfter(':').replaceFirst(anchor.value, "")
+            require(!Regex("(?:^|[\\s\\[,])&[A-Za-z0-9_-]+|(?:^|\\s)!|^\\s*[|>{?]").containsMatchIn(rest)) { "该 tags 结构不能安全修改，请在源码中编辑" }
+            val firstValue = withoutComment(rest.substringBefore('\n')).trim()
+            val continuation = rest.substringAfter('\n', "").lineSequence().filter { it.isNotBlank() }.toList()
+            require(continuation.isEmpty() || firstValue.isEmpty() && continuation.all { Regex("^[ \\t]*-[ \\t]+[^#].*$").matches(it) && !Regex(":(?:\\s|$)").containsMatchIn(withoutComment(it)) }) { "该 tags 结构不能安全修改，请在源码中编辑" }
+            require(!Regex(":(?:\\s|$)").containsMatchIn(firstValue) && (!firstValue.startsWith('[') || firstValue.endsWith(']'))) { "该 tags 结构不能安全修改，请在源码中编辑" }
+            val prefix = first.takeWhile { it == ' ' || it == '\t' }.ifEmpty { " " }
+            val suffix = first.substring(value.length)
+            val changed = "tags:" + prefix + (anchor?.groupValues?.get(1)?.plus(" ") ?: "") + replacement.substringAfter("tags: ") + suffix
+            return source.replaceRange(range.first + field.range.first, range.first + field.range.last + 1, changed)
+        }
         val insert = source.indexOf('\n') + 1
         return source.substring(0, insert) + replacement + newline + source.substring(insert)
     }
@@ -195,6 +221,36 @@ object DocumentAnalyzer {
         return null
     }
     fun decode(value: String): String = runCatching { URLDecoder.decode(value.replace("+", "%2B"), "UTF-8") }.getOrDefault(value)
+    private fun inlineDestinationStart(raw: String): Int? {
+        var depth = 0; var i = if (raw.startsWith("!")) 1 else 0
+        while (i < raw.length) {
+            when (raw[i]) {
+                '\\' -> i++
+                '[' -> depth++
+                ']' -> { depth--; if (depth == 0) { i++; return if (raw.getOrNull(i) == '(') i + 1 else null } }
+            }
+            i++
+        }
+        return null
+    }
+    private fun destinationRange(raw: String, from: Int): IntRange? {
+        var start = from; while (raw.getOrNull(start)?.isWhitespace() == true) start++
+        val angle = raw.getOrNull(start) == '<'; if (angle) start++
+        var i = start; var depth = 0
+        while (i < raw.length) {
+            val c = raw[i]
+            if (c == '\\' && i + 1 < raw.length) { i += 2; continue }
+            if (angle && c == '>') break
+            if (!angle) {
+                if (c == '(') depth++
+                if (c == ')') { if (depth == 0) break; depth-- }
+                if (c.isWhitespace() && depth == 0) break
+            }
+            i++
+        }
+        return if (i > start) start until i else null
+    }
+    private fun htmlTarget(value: String): String = value.replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">")
     fun encode(value: String): String = value.split('/').joinToString("/") { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
     fun normalizedPath(path: String): String? {
         val parts = mutableListOf<String>()

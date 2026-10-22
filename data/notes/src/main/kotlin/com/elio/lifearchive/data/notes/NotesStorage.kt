@@ -11,6 +11,7 @@ import com.elio.lifearchive.core.document.DocumentVersion
 import com.elio.lifearchive.core.document.LibraryPath
 import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.core.document.DocumentAnalyzer
+import com.elio.lifearchive.core.document.LinkSyntax
 import com.elio.lifearchive.domain.notes.*
 import java.io.File
 import java.io.FileOutputStream
@@ -63,7 +64,7 @@ class NotesStorage private constructor(
     @Serializable private data class SaveRecord(val note: NoteRecord, val draftRevision: Long? = null)
     @Serializable private data class DraftRecord(val id: String, val base: String, val revision: Long, val text: String)
     @Serializable private data class SnapshotState(val format: Int = 1, val notes: List<NoteRecord>, val folders: List<FolderRecord> = emptyList())
-    @Serializable private data class BatchRecord(val token: String, val committed: Boolean = false)
+    @Serializable private data class BatchRecord(val token: String, val committed: Boolean = false, val rolledBack: Boolean = false)
 
     val repository: NotesRepository = Repository()
     val library: LibraryRepository = Library()
@@ -100,8 +101,13 @@ class NotesStorage private constructor(
             val batch = json.decodeFromString<BatchRecord>(batchJournal.readText())
             require(UUID.fromString(batch.token).toString() == batch.token)
             val rollback = File(root, "operations/rollback-${batch.token}")
-            if (!batch.committed) Participant().restore(rollback)
+            if (!batch.committed && !batch.rolledBack) {
+                Participant().restore(rollback)
+                atomicWrite(batchJournal, json.encodeToString(batch.copy(rolledBack = true)).toByteArray())
+                fault("batch-rollback-complete")
+            }
             check(!rollback.exists() || rollback.deleteRecursively())
+            fault("batch-cleanup")
             check(batchJournal.delete())
         }
         if (!journal.exists()) return
@@ -133,6 +139,7 @@ class NotesStorage private constructor(
         fault("index")
         val text = RawDocument.fromUtf8(documentFile(record).readBytes()).text
         index.projections().put(IndexRecord(record.id, record.version, text))
+        analysisCache.remove("${record.id}:${record.version}")
         state.notes().put(record.copy(indexPending = false))
         true
     } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
@@ -237,6 +244,7 @@ class NotesStorage private constructor(
         }
 
         override suspend fun rebuildIndex(): NoteResult<Unit> = access {
+            analysisCache.clear()
             state.notes().invalidateIndex()
             try { index.projections().clear() } catch (e: CancellationException) { throw e } catch (_: Exception) {
                 index.close()
@@ -297,31 +305,47 @@ class NotesStorage private constructor(
     }
 
     private fun attachmentPaths(): List<String> = attachments.walkTopDown().filter { it.isFile }.map { it.relativeTo(attachments).invariantSeparatorsPath }.toList()
-    private fun resolvePath(from: String, target: String, paths: List<String>): List<String> {
+    private fun validateNamespace(files: List<String>, folders: List<String>) {
+        val checked = mutableListOf<String>()
+        files.forEach { require(LibraryPath.isValid(it) && !LibraryPath.conflicts(it, checked)) { "资料路径存在大小写或文件/目录冲突：$it" }; checked += it }
+        folders.distinct().forEach { folder ->
+            val marker = "$folder/.folder"
+            require(LibraryPath.isValid(folder) && !LibraryPath.conflicts(marker, checked)) { "笔记本路径冲突：$folder" }
+            checked += marker
+        }
+    }
+    private fun resolvePath(from: String, target: String, paths: List<String>, syntax: LinkSyntax = LinkSyntax.WIKI): List<String> {
         val path = DocumentAnalyzer.decode(target.substringBefore('#')).removePrefix("/")
         if (path.isEmpty()) return listOf(from)
         if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(path)) return emptyList()
         val parent = from.substringBeforeLast('/', "")
         val relative = DocumentAnalyzer.normalizedPath(if (parent.isEmpty()) path else "$parent/$path")
         val absolute = DocumentAnalyzer.normalizedPath(path)
-        val candidates = if (path.startsWith("./") || path.startsWith("../")) listOf(relative) else listOf(absolute, relative)
+        val candidates = when {
+            target.startsWith('/') -> listOf(absolute)
+            syntax != LinkSyntax.WIKI || path.startsWith("./") || path.startsWith("../") -> listOf(relative)
+            '/' !in path -> return paths.filter { it.substringAfterLast('/').let { name -> name.equals(path, true) || name.removeSuffix(".md").equals(path, true) } }
+            else -> listOf(absolute, relative)
+        }
         for (candidate in candidates.filterNotNull().distinct()) {
             val matches = paths.filter { it.equals(candidate, true) || (!candidate.endsWith(".md", true) && it.equals("$candidate.md", true)) }
             if (matches.isNotEmpty()) return matches
         }
-        if ('/' !in path) return paths.filter { it.substringAfterLast('/').let { name -> name.equals(path, true) || name.removeSuffix(".md").equals(path, true) } }
         return emptyList()
     }
     private fun rewrite(source: String, from: String, newFrom: String, paths: List<String>, mapping: Map<String, String>): String {
         var result = source
         DocumentAnalyzer.analyze(source).links.asReversed().forEach { link ->
-            val found = resolvePath(from, link.target, paths)
+            val found = resolvePath(from, link.target, paths, link.syntax)
             require(found.size <= 1 || found.none { it in mapping }) { "存在歧义引用：${link.target}，请先明确路径" }
             if (found.size != 1) return@forEach
             val oldTarget = found.single()
             val newTarget = mapping[oldTarget] ?: oldTarget
             if (oldTarget == newTarget && from == newFrom) return@forEach
-            val fragment = link.target.substringAfter('#', "").let { if (it.isEmpty()) "" else "#$it" }
+            val newPaths = paths.map { mapping[it] ?: it }
+            if (oldTarget == newTarget && resolvePath(newFrom, link.target, newPaths, link.syntax) == listOf(newTarget)) return@forEach
+            val original = source.substring(link.start, link.end)
+            val fragment = (if ('#' in original) original.substringAfter('#') else link.target.substringAfter('#', "")).let { if (it.isEmpty()) "" else "#$it" }
             val originalPath = link.target.substringBefore('#')
             if (originalPath.isEmpty()) return@forEach
             if (link.mermaidNode != null) {
@@ -330,7 +354,7 @@ class NotesStorage private constructor(
                 result = result.replaceRange(link.start, link.end, if (link.implicitNode) "${link.mermaidNode}[$label]" else label)
                 return@forEach
             }
-            var destination = if (link.wiki) newTarget else {
+            var destination = if (originalPath.startsWith('/')) "/$newTarget" else if (link.wiki && !originalPath.startsWith("./") && !originalPath.startsWith("../")) newTarget else {
                 val parent = java.nio.file.Paths.get(newFrom).parent ?: java.nio.file.Paths.get("")
                 parent.relativize(java.nio.file.Paths.get(newTarget)).toString().replace('\\', '/')
             }
@@ -356,10 +380,11 @@ class NotesStorage private constructor(
             val file = draftFile(record.id)
             if (file.isFile) {
                 val draft = json.decodeFromString<DraftRecord>(file.readText())
-                if (digest(RawDocument(draft.text).utf8()) != record.hash && (record.path in mapping || DocumentAnalyzer.analyze(draft.text).links.any { link -> resolvePath(record.path, link.target, paths).any { it in mapping } })) error("${record.path} 有受影响的未解决草稿，请先恢复或另存")
+                if (digest(RawDocument(draft.text).utf8()) != record.hash && (record.path in mapping || DocumentAnalyzer.analyze(draft.text).links.any { link -> resolvePath(record.path, link.target, paths, link.syntax).any { it in mapping } })) error("${record.path} 有受影响的未解决草稿，请先恢复或另存")
             }
         }
         val resulting = paths.map { mapping[it] ?: it }
+        validateNamespace(resulting, state.notes().folders().map { folderMap?.invoke(it.path) ?: it.path })
         resulting.forEachIndexed { i, path ->
             require(LibraryPath.isValid(path) && !LibraryPath.conflicts(path, resulting.take(i))) { "目标存在名称或目录大小写冲突：$path" }
         }
@@ -414,7 +439,8 @@ class NotesStorage private constructor(
             val all = records.map { record ->
                 val raw = projections[record.id]?.takeIf { it.version == record.version }?.rawText.orEmpty()
                 val key = "${record.id}:${record.version}"
-                val cached = analysisCache.getOrPut(key) { DocumentAnalyzer.analyze(raw) to raw.lowercase(Locale.ROOT) }
+                val cached = if (projections[record.id]?.version == record.version) analysisCache.getOrPut(key) { DocumentAnalyzer.analyze(raw) to raw.lowercase(Locale.ROOT) }
+                    else DocumentAnalyzer.analyze("") to ""
                 val analysis = cached.first
                 val haystack = (record.path + "\n" + analysis.title.orEmpty() + "\n" + analysis.aliases.joinToString(" ") + "\n").lowercase(Locale.ROOT) + cached.second
                 Triple(record, analysis, Pair(haystack, cached.second))
@@ -533,10 +559,10 @@ class NotesStorage private constructor(
             require(record.deleted != null) { "只能永久删除回收站内笔记" }
             batch { check(documentFile(record).delete()); draftFile(id.value).takeIf { it.exists() }?.let { check(it.delete()) }; state.notes().remove(id.value); index.projections().remove(id.value) }
         }
-        override suspend fun resolve(from: NoteId, target: String): NoteResult<ResolvedLink> = access {
+        override suspend fun resolve(from: NoteId, target: String, syntax: LinkSyntax): NoteResult<ResolvedLink> = access {
             val source = state.notes().find(from.value) ?: return@access NoteResult.NotFound
             val records = state.notes().all().filter { it.deleted == null }
-            val found = resolvePath(source.path, target.substringBefore('|'), records.map { it.path } + attachmentPaths())
+            val found = resolvePath(source.path, target.substringBefore('|'), records.map { it.path } + attachmentPaths(), syntax)
             if (found.size != 1) return@access NoteResult.Success(ResolvedLink(missing = found.isEmpty(), ambiguous = if (found.size > 1) found else emptyList()))
             val path = found.single(); val record = records.find { it.path == path }
             val fragment = DocumentAnalyzer.decode(target.substringAfter('#', ""))
@@ -576,7 +602,7 @@ class NotesStorage private constructor(
                     entry.open().use { input -> file.outputStream().use { output -> val buffer = ByteArray(65536); while (true) { val n = input.read(buffer); if (n < 0) break; bytes += n; require(bytes <= 2L * 1024 * 1024 * 1024) { "导入超过 2 GiB" }; output.write(buffer, 0, n) } } }
                     if (entry.path.endsWith(".md", true)) RawDocument.fromUtf8(file.readBytes())
                 }
-                val unresolved = paths.filter { it.endsWith(".md", true) }.flatMap { path -> DocumentAnalyzer.analyze(RawDocument.fromUtf8(safeFile(directory, LibraryPath("files/$path")).readBytes()).text).links.filter { resolvePath(path, it.target, paths).isEmpty() && !Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(it.target) }.map { it.target } }.distinct()
+                val unresolved = paths.filter { it.endsWith(".md", true) }.flatMap { path -> DocumentAnalyzer.analyze(RawDocument.fromUtf8(safeFile(directory, LibraryPath("files/$path")).readBytes()).text).links.filter { resolvePath(path, it.target, paths, it.syntax).isEmpty() && !Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(it.target) }.map { it.target } }.distinct()
                 atomicWrite(File(directory, "manifest.json"), json.encodeToString(ImportManifest(folder, paths, unresolved)).toByteArray())
                 NoteResult.Success(PreparedImport(token, folder, paths.count { it.endsWith(".md", true) }, paths.count { !it.endsWith(".md", true) }, unresolved))
             } catch (e: Exception) { directory.deleteRecursively(); throw e }
@@ -588,6 +614,7 @@ class NotesStorage private constructor(
             val existing = state.notes().all().filter { it.deleted == null }.map { it.path } + attachmentPaths() + state.notes().folders().map { it.path }
             require(existing.none { it.equals(manifest.folder, true) || it.startsWith(manifest.folder + "/", true) }) { "目标目录已存在，请换一个导入目录" }
             val mapping = manifest.paths.associateWith { "${manifest.folder}/$it" }
+            validateNamespace(state.notes().all().filter { it.deleted == null }.map { it.path } + attachmentPaths() + mapping.values, state.notes().folders().map { it.path } + manifest.folder)
             val result = batch {
                 manifest.paths.forEachIndexed { index, path ->
                     activityProgress.value = LibraryProgress("导入资料", index, manifest.paths.size)
@@ -612,6 +639,7 @@ class NotesStorage private constructor(
         override suspend fun discardImport(prepared: PreparedImport) { gate.access { importDirectory(prepared.token).deleteRecursively() } }
         override suspend fun export(output: OutputStream, ids: Set<NoteId>?): NoteResult<Unit> = access {
             val records = state.notes().all().filter { it.deleted == null }; val resources = attachmentPaths(); val paths = records.map { it.path } + resources
+            validateNamespace(paths, state.notes().folders().map { it.path })
             require(ids == null || (ids.isNotEmpty() && ids.all { id -> records.any { it.id == id.value } })) { "导出的笔记已变化或不存在" }
             val selected = records.filter { ids == null || NoteId(it.id) in ids }.map { it.path }.toMutableSet()
             val attached = if (ids == null) resources.toMutableSet() else mutableSetOf()
@@ -620,7 +648,7 @@ class NotesStorage private constructor(
                 val path = selected.firstOrNull { it !in visited } ?: break; visited += path
                 val record = records.first { it.path == path }
                 DocumentAnalyzer.analyze(RawDocument.fromUtf8(documentFile(record).readBytes()).text).links.forEach { link ->
-                    val resolved = resolvePath(path, link.target, paths)
+                    val resolved = resolvePath(path, link.target, paths, link.syntax)
                     if (resolved.size == 1) { if (records.any { it.path == resolved[0] }) selected += resolved[0] else attached += resolved[0] }
                 }
             }
@@ -690,6 +718,7 @@ class NotesStorage private constructor(
                 require(!LibraryPath.conflicts(path, attachmentPaths))
                 attachmentPaths.add(path)
             }
+            validateNamespace(checkedPaths + attachmentPaths, content.folders.map { it.path })
             require(File(directory, "trash").walkTopDown().filter { it.isFile }.map { it.name }.toSet() == content.notes.filter { it.deleted != null }.map { "${it.id}.md" }.toSet())
             require(directory.list().orEmpty().all { it in setOf("state.json", "documents", "drafts", "attachments", "trash") })
         }

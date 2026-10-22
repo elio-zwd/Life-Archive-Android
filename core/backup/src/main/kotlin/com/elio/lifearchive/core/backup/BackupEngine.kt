@@ -21,8 +21,13 @@ interface BackupParticipant {
 }
 
 data class PreparedRestore(val token: String, val participants: Set<String>)
+sealed interface RestoreResult {
+    data class Committed(val cleanupPending: Boolean = false) : RestoreResult
+    data class RolledBack(val reason: String) : RestoreResult
+    data class RecoveryRequired(val reason: String) : RestoreResult
+}
 
-/** 异常或取消表示调用未完整结束；提交标记可能已落盘，须初始化并读取最终状态。 */
+/** 常规提交返回持久结果；取消或进程中断后，下一次访问先完成日志恢复。 */
 class BackupEngine(
     private val root: File,
     private val gate: StorageGate,
@@ -101,7 +106,7 @@ class BackupEngine(
     suspend fun discard(prepared: PreparedRestore) = gate.access { staged(prepared.token).deleteRecursively(); Unit }
 
     /** 仅在 UI 已明确确认替换后调用；token 不接受任意外部路径。 */
-    suspend fun commit(prepared: PreparedRestore) = gate.access {
+    suspend fun commit(prepared: PreparedRestore): RestoreResult = gate.access {
         val source = staged(prepared.token)
         validate(source)
         val rollback = File(root, "rollback")
@@ -109,16 +114,24 @@ class BackupEngine(
         snapshot(rollback)
         atomicWrite(transaction, json.encodeToString(Transaction(prepared.token)).toByteArray())
         gate.requireRecovery()
+        var committed = false
         try {
             participants.forEach { it.restore(File(source, it.id)) }
             atomicWrite(transaction, json.encodeToString(Transaction(prepared.token, true)).toByteArray())
+            committed = true
             fault("committed")
             recoverLocked()
+            RestoreResult.Committed()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            try { recoverLocked() } catch (rollbackError: Exception) { e.addSuppressed(rollbackError) }
-            throw e
+            try {
+                recoverLocked()
+                if (committed) RestoreResult.Committed() else RestoreResult.RolledBack(e.message ?: "恢复失败，已回滚")
+            } catch (rollbackError: Exception) {
+                if (committed) RestoreResult.Committed(cleanupPending = true)
+                else RestoreResult.RecoveryRequired(rollbackError.message ?: "恢复未完成")
+            }
         }
     }
 

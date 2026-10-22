@@ -30,7 +30,7 @@ interface LibraryRepository {
     suspend fun trash(id: NoteId, expected: DocumentVersion): NoteResult<Unit>
     suspend fun restore(id: NoteId, path: String? = null): NoteResult<Unit>
     suspend fun purge(id: NoteId): NoteResult<Unit>
-    suspend fun resolve(from: NoteId, target: String): NoteResult<ResolvedLink>
+    suspend fun resolve(from: NoteId, target: String, syntax: LinkSyntax = LinkSyntax.WIKI): NoteResult<ResolvedLink>
     suspend fun openResource(path: LibraryPath, offset: Long = 0, length: Long? = null): NoteResult<ResourceStream>
     suspend fun prepareImport(entries: List<ImportEntry>, folder: String): NoteResult<PreparedImport>
     suspend fun commitImport(prepared: PreparedImport): NoteResult<Unit>

@@ -41,11 +41,11 @@ class MarkdownParser {
         val blocks = mutableListOf<ReaderBlock>()
         val styles = mutableListOf<MarkRange>()
         val markers = mutableListOf<MarkerRange>()
-        val yaml = Regex("\\A\\uFEFF?---\\r?\\n[\\s\\S]*?\\r?\\n(?:---|\\.\\.\\.)(?:\\r?\\n|$)").find(source)
+        val yaml = DocumentAnalyzer.yaml(source)
         val parseSource = buildString {
-            source.forEachIndexed { i, c -> append(if ((yaml != null && i <= yaml.range.last && c != '\n' && c != '\r') || c == '\uFEFF') ' ' else c) }
+            source.forEachIndexed { i, c -> append(if ((yaml != null && i <= yaml.last && c != '\n' && c != '\r') || c == '\uFEFF') ' ' else c) }
         }
-        yaml?.let { blocks += ReaderBlock(BlockKind.PROPERTIES, 0, it.value.length, raw = it.value, label = "属性 · 原文保留") }
+        yaml?.let { blocks += ReaderBlock(BlockKind.PROPERTIES, 0, it.last + 1, raw = source.substring(it), label = "属性 · 原文保留") }
         val document = parser.parse(parseSource)
         fun runs(node: Node, marks: Set<TextMark> = emptySet(), destination: String? = null): List<InlineRun> {
             val result = mutableListOf<InlineRun>()
