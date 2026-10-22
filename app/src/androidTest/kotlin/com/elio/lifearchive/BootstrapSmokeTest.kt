@@ -18,9 +18,9 @@ class BootstrapSmokeTest {
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.app_name))
             .assertIsDisplayed()
         composeRule.waitUntil(timeoutMillis = 10000) {
-            composeRule.onAllNodes(androidx.compose.ui.test.hasText("架构底层已就绪，功能层待接入")).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodes(androidx.compose.ui.test.hasText("全部笔记")).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("架构底层已就绪，功能层待接入")
+        composeRule.onNodeWithText("全部笔记")
             .assertIsDisplayed()
     }
 }

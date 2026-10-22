@@ -34,6 +34,8 @@ class AppViewModelTest {
         override suspend fun save(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long?): NoteResult<NoteSnapshot> = error("本测试不调用")
         override suspend fun readDraft(id: NoteId): NoteResult<Draft?> = error("本测试不调用")
         override suspend fun writeDraft(draft: Draft): NoteResult<Unit> = error("本测试不调用")
+        override suspend fun readReadingOffset(id: NoteId): NoteResult<Int> = error("本测试不调用")
+        override suspend fun updateReadingOffset(id: NoteId, offset: Int): NoteResult<Unit> = error("本测试不调用")
         override suspend fun rebuildIndex(): NoteResult<Unit> = error("本测试不调用")
         override suspend fun importAttachment(path: String, input: InputStream): NoteResult<LibraryPath> = error("本测试不调用")
         override suspend fun copyAttachment(path: LibraryPath, output: OutputStream): NoteResult<Unit> = error("本测试不调用")

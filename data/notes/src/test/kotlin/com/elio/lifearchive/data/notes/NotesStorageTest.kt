@@ -119,6 +119,20 @@ class NotesStorageTest {
         }
     }
 
+    @Test fun readingOffsetSurvivesReopenWithoutChangingBodyOrVersion() = runBlocking {
+        val root = temp.newFolder()
+        val note = open(root).use { storage ->
+            val note = created(storage.repository.create("阅读位置.md", RawDocument("# 原文\n段落")))
+            assertTrue(storage.repository.updateReadingOffset(note.summary.id, 5) is NoteResult.Success)
+            assertTrue(storage.repository.updateReadingOffset(note.summary.id, -1) is NoteResult.InvalidPosition)
+            note
+        }
+        open(root).use { storage ->
+            assertEquals(5, (storage.repository.readReadingOffset(note.summary.id) as NoteResult.Success).value)
+            assertEquals(note, (storage.repository.read(note.summary.id) as NoteResult.Success).value)
+        }
+    }
+
     @Test fun damagedIndexIsRebuiltWithoutResettingState() = runBlocking {
         val root = temp.newFolder()
         val note = open(root).use { created(it.repository.create("保留ID.md", RawDocument("正文"))) }
@@ -152,6 +166,9 @@ class NotesStorageTest {
                 assertEquals(text, (storage.repository.read(note.summary.id) as NoteResult.Success).value.document.text)
             }
             assertEquals(500, storage.repository.observeNotes().first().size)
+            assertEquals(499, (storage.library.query(NotesQuery(text = "中英")) as NoteResult.Success).value.notes.size)
+            val times = (0 until 20).map { val start = System.nanoTime(); assertEquals(1, (storage.library.query(NotesQuery(text = "sample 123")) as NoteResult.Success).value.notes.size); (System.nanoTime() - start) / 1_000_000 }
+            println("电脑热搜索 20 次 p95=${times.sorted()[18]} ms；不代表目标机性能")
         }
         open(root).use { assertEquals(500, it.repository.observeNotes().first().size) }
     }

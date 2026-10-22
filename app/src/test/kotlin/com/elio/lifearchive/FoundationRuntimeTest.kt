@@ -37,6 +37,7 @@ class FoundationRuntimeTest {
         val original = (runtime.notes.create("文件名.md", RawDocument("---\nunknown: value\n---\n# 正文标题\n")) as NoteResult.Committed).value
         val id = original.summary.id
         runtime.notes.writeDraft(Draft(id, original.summary.version, 3, RawDocument("未保存草稿")))
+        runtime.notes.updateReadingOffset(id, 24)
         runtime.preferences.setTheme(ThemeMode.DARK)
         runtime.preferences.setFontScale(1.3f)
         val bytes = ByteArray(2 * 1024 * 1024) { (it % 251).toByte() }
@@ -53,6 +54,7 @@ class FoundationRuntimeTest {
             assertEquals(original.document, (reopened.notes.read(id) as NoteResult.Success).value.document)
             assertEquals(original.summary.version, (reopened.notes.read(id) as NoteResult.Success).value.summary.version)
             assertEquals(3L, (reopened.notes.readDraft(id) as NoteResult.Success).value!!.revision)
+            assertEquals(24, (reopened.notes.readReadingOffset(id) as NoteResult.Success).value)
             assertEquals(ThemeMode.DARK, reopened.preferences.preferences.first().theme)
             assertEquals(1.3f, reopened.preferences.preferences.first().fontScale)
             val out = ByteArrayOutputStream()
@@ -97,6 +99,30 @@ class FoundationRuntimeTest {
             }
             assertTrue(runtime.notes.copyAttachment(path, out) is NoteResult.Success)
             assertEquals(size, count)
+        } finally { runtime.closeAndJoin() }
+    }
+
+    @Test fun twoHundredMiBLibraryAttachmentsStreamWithoutMaterializingTheArchive() = runBlocking {
+        val runtime = FoundationRuntime(ApplicationProvider.getApplicationContext<Context>(), temp.newFolder())
+        try {
+            repeat(100) { index ->
+                val input = object : java.io.InputStream() {
+                    var remaining = 2 * 1024 * 1024
+                    override fun read(): Int = if (remaining-- > 0) index else -1
+                    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                        if (remaining <= 0) return -1
+                        check(length <= 65536); val n = minOf(length, remaining); buffer.fill(index.toByte(), offset, offset + n); remaining -= n; return n
+                    }
+                }
+                assertTrue(runtime.notes.importAttachment("资料/$index.bin", input) is NoteResult.Success)
+            }
+            val archive = temp.newFile("200MiB.zip")
+            archive.outputStream().use { runtime.backup.export(it) }
+            runtime.backup.commit(archive.inputStream().use { runtime.backup.prepare(it) })
+            var count = 0L
+            val output = object : java.io.OutputStream() { override fun write(value: Int) { count++ }; override fun write(bytes: ByteArray, start: Int, length: Int) { check(length <= 65536); count += length } }
+            repeat(100) { index -> assertTrue(runtime.notes.copyAttachment(com.elio.lifearchive.core.document.LibraryPath("资料/$index.bin"), output) is NoteResult.Success) }
+            assertEquals(200L * 1024 * 1024, count)
         } finally { runtime.closeAndJoin() }
     }
 

@@ -23,10 +23,11 @@ class PreferencesStoreTest {
         assertEquals(UserPreferences(), first.repository.preferences.first())
         first.repository.setTheme(ThemeMode.DARK)
         first.repository.setFontScale(1.25f)
+        first.repository.setRemoteLoading(RemoteLoading.AUTOMATIC)
         first.closeAndJoin()
         val second = PreferencesStore(file, StorageGate())
         try {
-            assertEquals(UserPreferences(ThemeMode.DARK, 1.25f), second.repository.preferences.first())
+            assertEquals(UserPreferences(ThemeMode.DARK, 1.25f, RemoteLoading.AUTOMATIC), second.repository.preferences.first())
             try { second.repository.setFontScale(Float.NaN); fail("应拒绝非法字号") } catch (_: IllegalArgumentException) { }
         } finally { second.closeAndJoin() }
     }
