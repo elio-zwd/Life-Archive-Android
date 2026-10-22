@@ -1,10 +1,12 @@
 # 架构入口与实施边界
 
-状态：2026-10-18 已选择模块化单体架构，并接入架构与核心数据底层，正式功能层待接入。完整决策见 [ADR-001](adr-001-android-architecture.md)，当前代码、接口和验证边界见[架构交接](../engineering/foundation-handoff.md)；原始底座交接保留为历史记录。
+状态：2026-10-18 已选择模块化单体架构，接入核心数据底层及一期编辑器交互样板；完整功能和目标机验收尚未完成。完整决策见 [ADR-001](adr-001-android-architecture.md)，底层接口见[架构交接](../engineering/foundation-handoff.md)，当前样板见[编辑器交接](../engineering/editor-prototype-handoff.md)；原始底座交接保留为历史记录。
+
+2026-10-23 已接入一期功能版，新增实际使用的 feature:settings。公共解析/原文定位下沉 core:document，完整阅读由 feature:editor 的受控本地 WebView 适配；data:notes 承担组织、索引、回收站与多文件恢复，远程缓存可丢弃且不进入备份。当前接口、状态库 v2 及旧包迁移见[功能交接](../engineering/phase-1-function-handoff.md)。用户决定功能先行、视觉重做后置；目标机验收仍待完成。
 
 ## 技术和数据约定
 
-- Kotlin + Jetpack Compose 原生 Android；已接入 Material 3、ViewModel/UDF、Navigation 3 与 Hilt，Debug 提供最小接入示例。
+- Kotlin + Jetpack Compose 原生 Android；已接入 Material 3、ViewModel/UDF、Navigation 3 与 Hilt，当前启动进入真实笔记库，Debug 提供会话内保存失败模拟。
 - 已选 Navigation 3 稳定版、Hilt、Coroutines/StateFlow、Room 和 Preferences DataStore；采用 ViewModel + UDF，Repository 隔离数据，复杂操作按需使用 Use Case。
 - 仅针对小米 14 Ultra，约 500 篇笔记；测试数据和性能基线见 ADR-001。
 - 当前 namespace / applicationId 为 `com.elio.lifearchive`；项目与显示名为 Life Archive。
@@ -24,7 +26,7 @@
 | `data:notes` | 文件、附件、草稿、Room、索引协调与笔记备份参与实现 |
 | `core` | 文档、设计系统、设置、备份等实际使用的基础能力；不依赖具体业务域 |
 
-上表是完整实施边界，目前存在 app、core:designsystem、core:document、core:backup、core:preferences、domain:notes、data:notes。feature 模块随正式功能建立；包名以 `com.elio.lifearchive` 为根按模块职责区分。依赖规则由根工程 `checkArchitecture` 检查。
+上表是完整实施边界，目前有 app、core:designsystem、core:document、core:backup、core:preferences、domain:notes、data:notes、feature:notes、feature:editor、feature:settings 十个模块；包名以 `com.elio.lifearchive` 为根按模块职责区分。依赖规则由根工程 `checkArchitecture` 检查。当前接口及验证范围见功能交接。
 
 ## 本阶段边界
 

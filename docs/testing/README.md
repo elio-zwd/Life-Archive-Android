@@ -1,6 +1,26 @@
 # 当前验证方法
 
-当前已有架构与核心数据底层、JVM 和 Robolectric 测试，以及更新后的启动冒烟测试源码；正式笔记功能与 CI 尚未建立。实际结果见[架构交接](../engineering/foundation-handoff.md)。本轮仅电脑验证，不连接设备；构建、测试、设备启动和视觉检查分别记录。
+## 一期功能版验证（当前入口，无设备）
+
+```powershell
+.\gradlew.bat verifyPhaseOne --console=plain
+```
+
+包含已有 verifyFoundation、七个 Android 模块 Lint、全部 feature 回归、Debug/仪器测试 APK 及 Release Kotlin 编译，新增迁移、多文件恢复、回收站、导入导出和缓存测试。读取 reader/package-lock.json，用本机 Node.js 24/npm 安装并组装本地阅读资源；不升级 Android 工具链。浏览器检查使用本机 Chrome/Edge，其他路径通过 LIFE_ARCHIVE_BROWSER 指定。
+
+`testReader` 可单独运行，使用公共解析生成的投影验证浅深色公式、Mermaid、嵌入、脚注、HTML 清理、默认离线、50 MiB 级 PDF 翻页及音视频元数据/定位。截图输出仓库外 TEMP/life-archive-phase1-browser。Node 输出及 Android 检查不代替实际 System WebView、系统选择器、输入法或目标机性能。
+
+本轮支持矩阵、实际验证记录和手机验收步骤以[一期功能交接](../engineering/phase-1-function-handoff.md)为准。下面的样板与底层入口继续作为历史子集保留。
+
+以下为首轮样板阶段的验证说明：当时已有架构、核心数据底层及一期编辑器交互样板，以及 JVM、Robolectric 和启动冒烟测试源码；完整一期与 CI 尚未建立。底层历史结果见[架构交接](../engineering/foundation-handoff.md)，样板与手动验收见[样板交接](../engineering/editor-prototype-handoff.md)。这些检查仅在电脑执行，不连接设备；构建、测试、设备启动和视觉检查分别记录。
+
+## 编辑器样板验证（无设备）
+
+```powershell
+.\gradlew.bat verifyEditorPrototype --console=plain
+```
+
+包含下方全部底层回归，以及两个 feature 的测试/Lint、app 的输入/导航/Activity 重建/视觉测试。长文测试覆盖 50 KiB 与 1 MiB 原文及文本控件输入、模式切换。桌面预览输出至 `%TEMP%/life-archive-editor-preview/`，编辑图明确使用键盘占位；不能作为真实输入法验收。用户手动安装目标机后按样板交接逐项记录。
 
 ## 核心底层一键验证（无设备）
 
@@ -10,7 +30,7 @@ Windows 10 x64、PowerShell 7、JDK 17，在仓库根目录执行：
 .\gradlew.bat verifyFoundation --console=plain
 ```
 
-包括：模块依赖检查、core:document/core:backup JVM 测试、data:notes/core:preferences/app 的 Robolectric 与本地状态测试、四个 Android 模块的 Debug Lint、Debug App/仪器测试 APK 构建和 Release Kotlin 编译。不会安装 APK 或调用 ADB。
+包括：模块依赖检查、core:document/core:backup JVM 测试、data:notes/core:preferences/app 及两个 feature 的 Robolectric 与本地状态测试、六个 Android 模块的 Debug Lint、Debug App/仪器测试 APK 构建和 Release Kotlin 编译。不会安装 APK 或调用 ADB。
 
 Robolectric 会下载自己的 Android 测试运行库，不需要模拟器；它的结果不能表述为真机通过。测试使用临时目录的合成文档及附件。`domain:notes` 主要为契约，不用无源码测试数量充当覆盖率。
 
@@ -55,7 +75,7 @@ adb -s $deviceSerial shell am instrument -w com.elio.lifearchive.test/androidx.t
 
 `install -r` 用于保留数据的安装/覆盖更新，不为解决签名冲突而卸载或清数据。这里直接调用仪器测试，不使用会额外管理安装生命周期的设备测试任务。
 
-冒烟测试断言应用名称与“架构底层已就绪，功能层待接入”均可见，并等待异步初始化。本轮只构建该测试 APK，未运行设备测试。后续需实际检查 Home 后返回、导航返回、浅深主题和启动日志。主题切换前记录原值，结束后恢复；截图、UI XML 和日志保存在仓库外，命令成功不能替代 UI 验收。
+冒烟测试断言应用名称与“全部笔记”均可见，并等待异步初始化。本轮只构建该测试 APK，未运行设备测试。后续需实际检查 Home 后返回、导航返回、浅深主题和启动日志。主题切换前记录原值，结束后恢复；截图、UI XML 和日志保存在仓库外，命令成功不能替代 UI 验收。
 
 ## 文档检查
 

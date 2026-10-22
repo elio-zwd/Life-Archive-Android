@@ -2,7 +2,7 @@
 
 面向个人使用的 Android 应用，第一期以本地 Markdown 笔记起步，按 Obsidian 官方内置文档语法规划文件兼容能力。整体功能范围仍在确认，架构须能承接后续选中的任务、生活管理、AI 和出行等能力。
 
-**当前状态：架构与核心数据底层已接入，功能层待接入。** 已有依赖装配、导航示例、可靠文档存储、草稿、独立索引、设置及完整备份底层；没有已验收的正式笔记编辑器或一期产品。接口、固定版本与实际验证结果见[架构交接](docs/engineering/foundation-handoff.md)，早期底座记录保留在[底座交接](docs/engineering/bootstrap-handoff.md)。
+**当前状态：一期功能版已接入，视觉重做后置，目标机验收待完成。** 包含组织搜索、源码编辑与本地完整阅读、附件、回收站、导入导出、备份恢复及可清理的远程/网页缓存。当前支持清单、数据迁移及验收表见[一期功能交接](docs/engineering/phase-1-function-handoff.md)；[首轮样板](docs/engineering/editor-prototype-handoff.md)和[底层交接](docs/engineering/foundation-handoff.md)保留为历史阶段记录。电脑检查不等于产品验收。
 
 ## 项目标识与方向
 
@@ -38,12 +38,14 @@
 | [docs/testing/](docs/testing/README.md) | 当前可执行检查与验证边界 |
 | [底座历史交接](docs/engineering/bootstrap-handoff.md) | 初始工具链、两个模块阶段的验证和接手边界 |
 | [架构交接](docs/engineering/foundation-handoff.md) | 核心接口、数据可靠性、模块规则、功能开发接入与验证结果 |
+| [编辑器样板交接](docs/engineering/editor-prototype-handoff.md) | 首轮页面、保存会话、兼容状态、APK 与手机手动验收步骤 |
+| [一期功能交接](docs/engineering/phase-1-function-handoff.md) | 当前功能、迁移、阅读与缓存边界、验证及验收表 |
 | [tools/](tools/README.md) | 手机控制、日志证据辅助工具 |
 | [tools/UPSTREAM.md](tools/UPSTREAM.md) | 工具来源、复制清单及使用配置约定 |
 
 ## 当前使用方式
 
-架构依据为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)。当前有七个实际模块：app、core:designsystem、core:document、core:backup、core:preferences、domain:notes、data:notes。Debug 接入示例使用独立资料库，正式 feature 按后续任务建立；编辑器交互与完整语法兼容仍须独立验收。
+架构依据为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)。当前有十个实际模块，新增 feature:settings；职责和依赖见功能交接。Debug 与 Release 均接入真实笔记库，Debug 额外提供会话内正文保存失败模拟。默认源码编辑，实时预览仍为实验项；输入、阅读兼容和视觉分别验收。
 
 进行整体架构选型时，先读 [AGENTS.md](AGENTS.md)，再读[整体功能版图](docs/plans/overall-feature-roadmap.md)、[一期范围](docs/plans/phase-1-local-notes.md)、[编辑器决策](docs/plans/phase-1-editor-visual-decisions.md)、第二/三期方向，最后核对[架构约束与待决事项](docs/architecture/README.md)。这些本仓库文档已足够开展架构讨论，不需要先查看旧项目。
 
@@ -51,10 +53,10 @@
 
 先阅读任务对应的计划与说明。工具的帮助和无设备测试可按[验证说明](docs/testing/README.md)运行，无需安装 Android 应用。
 
-本机需要 JDK 17 和 Android SDK 36，设置 `JAVA_HOME`，通过 `ANDROID_HOME` 或被忽略的 `local.properties` 指定 SDK。仓库根目录使用 PowerShell 7：
+本机需要 JDK 17、Android SDK 36、Node.js 24/npm，浏览器测试使用 Windows Chrome/Edge。设置 `JAVA_HOME`，通过 `ANDROID_HOME` 或被忽略的 `local.properties` 指定 SDK。仓库根目录使用 PowerShell 7：
 
 ```powershell
-.\gradlew.bat verifyFoundation --console=plain
+.\gradlew.bat verifyPhaseOne --console=plain
 ```
 
 Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。模拟器安装与启动测试见[验证说明](docs/testing/README.md)，不会随构建自动操作设备。
