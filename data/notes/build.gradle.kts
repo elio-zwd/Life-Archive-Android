@@ -17,6 +17,7 @@ android {
 kotlin { jvmToolchain(17) }
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {
+    implementation(libs.jsoup)
     api(project(":domain:notes"))
     implementation(project(":core:document"))
     api(project(":core:backup"))

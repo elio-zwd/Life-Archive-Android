@@ -22,7 +22,14 @@ internal data class NoteRecord(
     val indexPending: Boolean = true,
     val pinned: Boolean = false,
     val readingOffset: Int = 0,
+    val created: Long = 0,
+    val modified: Long = 0,
+    val deleted: Long? = null,
 )
+
+@Serializable
+@Entity(tableName = "folders")
+internal data class FolderRecord(@androidx.room.PrimaryKey val path: String)
 
 @Dao
 internal interface StateDao {
@@ -30,11 +37,15 @@ internal interface StateDao {
     @Query("SELECT * FROM notes WHERE id = :id") suspend fun find(id: String): NoteRecord?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(record: NoteRecord)
     @Query("DELETE FROM notes") suspend fun clear()
+    @Query("DELETE FROM notes WHERE id = :id") suspend fun remove(id: String)
+    @Query("SELECT * FROM folders ORDER BY path") suspend fun folders(): List<FolderRecord>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putFolder(folder: FolderRecord)
+    @Query("DELETE FROM folders") suspend fun clearFolders()
     @Query("UPDATE notes SET indexPending = 1") suspend fun invalidateIndex()
     @Transaction suspend fun replace(records: List<NoteRecord>) { clear(); records.forEach { put(it.copy(indexPending = true)) } }
 }
 
-@Database(entities = [NoteRecord::class], version = 1, exportSchema = true)
+@Database(entities = [NoteRecord::class, FolderRecord::class], version = 2, exportSchema = true)
 internal abstract class StateDatabase : RoomDatabase() { abstract fun notes(): StateDao }
 
 @Entity(tableName = "projections")
@@ -45,6 +56,8 @@ internal interface IndexDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(record: IndexRecord)
     @Query("DELETE FROM projections") suspend fun clear()
     @Query("SELECT * FROM projections WHERE id = :id") suspend fun find(id: String): IndexRecord?
+    @Query("SELECT * FROM projections") suspend fun all(): List<IndexRecord>
+    @Query("DELETE FROM projections WHERE id = :id") suspend fun remove(id: String)
 }
 
 @Database(entities = [IndexRecord::class], version = 1, exportSchema = true)

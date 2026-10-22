@@ -22,9 +22,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 @Serializable enum class ThemeMode { SYSTEM, LIGHT, DARK }
+@Serializable enum class RemoteLoading { MANUAL, AUTOMATIC }
 
 @Serializable
-data class UserPreferences(val theme: ThemeMode = ThemeMode.SYSTEM, val fontScale: Float = 1f) {
+data class UserPreferences(val theme: ThemeMode = ThemeMode.SYSTEM, val fontScale: Float = 1f, val remoteLoading: RemoteLoading = RemoteLoading.MANUAL) {
     init { require(fontScale.isFinite() && fontScale in 0.5f..3f) }
 }
 
@@ -32,6 +33,7 @@ interface PreferencesRepository {
     val preferences: Flow<UserPreferences>
     suspend fun setTheme(theme: ThemeMode)
     suspend fun setFontScale(scale: Float)
+    suspend fun setRemoteLoading(mode: RemoteLoading) { error("此设置实现尚未提供远程加载能力") }
 }
 
 /** 每个文件只允许一个存活实例；关闭实例后须等待 scope 完成再重新打开同一文件。 */
@@ -41,8 +43,9 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
     private val store = PreferenceDataStoreFactory.create(scope = scope) { file }
     private val themeKey = stringPreferencesKey("theme")
     private val fontKey = floatPreferencesKey("font_scale")
+    private val remoteKey = stringPreferencesKey("remote_loading")
     private val values = store.data.map { prefs ->
-        UserPreferences(prefs[themeKey]?.let(ThemeMode::valueOf) ?: ThemeMode.SYSTEM, prefs[fontKey] ?: 1f)
+        UserPreferences(prefs[themeKey]?.let(ThemeMode::valueOf) ?: ThemeMode.SYSTEM, prefs[fontKey] ?: 1f, prefs[remoteKey]?.let(RemoteLoading::valueOf) ?: RemoteLoading.MANUAL)
     }
 
     val repository: PreferencesRepository = object : PreferencesRepository {
@@ -56,6 +59,7 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
             store.edit { it[fontKey] = scale }
             Unit
         }
+        override suspend fun setRemoteLoading(mode: RemoteLoading) = gate.access { store.edit { it[remoteKey] = mode.name }; Unit }
     }
 
     @Serializable private data class Snapshot(val format: Int = 1, val preferences: UserPreferences)
@@ -74,7 +78,7 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
         override suspend fun restore(directory: File) {
             validate(directory)
             val value = Json.decodeFromString<Snapshot>(File(directory, "settings.json").readText()).preferences
-            store.edit { it.clear(); it[themeKey] = value.theme.name; it[fontKey] = value.fontScale }
+            store.edit { it.clear(); it[themeKey] = value.theme.name; it[fontKey] = value.fontScale; it[remoteKey] = value.remoteLoading.name }
         }
     }
 

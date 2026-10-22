@@ -24,7 +24,19 @@ sealed interface NoteResult<out T> {
     data object NotFound : NoteResult<Nothing>
     data object PathConflict : NoteResult<Nothing>
     data class InvalidPath(val reason: String) : NoteResult<Nothing>
+    data class InvalidPosition(val reason: String) : NoteResult<Nothing>
     data class StorageFailure(val reason: String, val recoveryRequired: Boolean = false) : NoteResult<Nothing>
+}
+
+fun NoteResult<*>.failureMessage(): String = when (this) {
+    is NoteResult.Success, is NoteResult.Committed -> "操作已完成"
+    is NoteResult.Conflict -> "内容版本已变化，请重新打开后操作；当前草稿保留"
+    NoteResult.DraftConflict -> "草稿修订已变化，请先处理已有草稿"
+    NoteResult.NotFound -> "资料不存在或已进入回收站"
+    NoteResult.PathConflict -> "目标名称或大小写冲突，请更换路径"
+    is NoteResult.InvalidPath -> reason
+    is NoteResult.InvalidPosition -> reason
+    is NoteResult.StorageFailure -> reason + if (recoveryRequired) "（需完成中断恢复后再操作）" else ""
 }
 
 /** 所有正文写入经过此接口；Flow 只传元数据，不用于回写每个按键。 */
@@ -36,6 +48,8 @@ interface NotesRepository {
     suspend fun save(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long? = null): NoteResult<NoteSnapshot>
     suspend fun readDraft(id: NoteId): NoteResult<Draft?>
     suspend fun writeDraft(draft: Draft): NoteResult<Unit>
+    suspend fun readReadingOffset(id: NoteId): NoteResult<Int>
+    suspend fun updateReadingOffset(id: NoteId, offset: Int): NoteResult<Unit>
     suspend fun rebuildIndex(): NoteResult<Unit>
     suspend fun importAttachment(path: String, input: InputStream): NoteResult<LibraryPath>
     suspend fun copyAttachment(path: LibraryPath, output: OutputStream): NoteResult<Unit>
