@@ -1,15 +1,29 @@
-import mermaid from './mermaid/mermaid.esm.min.mjs';
 const params = new URLSearchParams(location.search);
 const rootId = params.get('note');
-const auto = params.get('auto') === 'true';
+let auto = params.get('auto') === 'true';
+let revision = params.get('rev') || 'initial';
+let dark = params.get('dark') === 'true';
+let generation = 0; let controller; let rendering;
+let mermaidPromise; let mathPromise;
+const resourceRecords = new WeakMap();
 const content = document.querySelector('#content');
 const status = document.querySelector('#status');
 document.documentElement.classList.toggle('dark', params.get('dark') === 'true');
 document.documentElement.style.fontSize = `${17 * (Number(params.get('scale')) || 1)}px`;
-mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: params.get('dark') === 'true' ? 'dark' : 'neutral', suppressErrorRendering: true, maxTextSize: 100000 });
+async function diagrams() {
+  const mermaid = (await (mermaidPromise ||= import('./mermaid/mermaid.esm.min.mjs'))).default;
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'neutral', suppressErrorRendering: true, maxTextSize: 100000 });
+  return mermaid;
+}
+async function mathEngine() {
+  return mathPromise ||= new Promise((resolve, reject) => {
+    const script = document.createElement('script'); script.src = 'mathjax/tex-svg.js';
+    script.onload = () => MathJax.startup.promise.then(() => resolve(MathJax), reject); script.onerror = () => reject(Error('公式资源加载失败')); document.head.append(script);
+  });
+}
 const query = (name, values) => `/reader/${name}?${new URLSearchParams(values)}`;
-async function json(name, values) { const response = await fetch(query(name, values)); if (!response.ok) throw Error('内容不可用'); return response.json(); }
-function action(type, value, page = false, from = rootId) { location.href = query('action', { type, value, page: String(page), from }); }
+async function json(name, values) { const response = await fetch(query(name, values), { signal: controller?.signal }); if (!response.ok) throw Error('内容不可用'); return response.json(); }
+function action(type, value, page = false, from = rootId, syntax = 'WIKI') { location.href = query('action', { type, value, page: String(page), from, syntax, revision }); }
 function element(name, text, className) { const node = document.createElement(name); if (text != null) node.textContent = text; if (className) node.className = className; return node; }
 function button(text, callback) { const node = element('button', text); node.addEventListener('click', callback); return node; }
 function error(node, message) { node.replaceChildren(element('span', message, 'error')); }
@@ -17,7 +31,7 @@ function sourceOwner(node) { return node.closest('[data-note]')?.dataset.note ||
 const remoteSeen = new Set();
 let unique = 0;
 let rootBlocks = [];
-async function resolve(target, from) { return json('resolve', { from, target }); }
+async function resolve(target, from, syntax = 'WIKI') { return json('resolve', { from, target, syntax }); }
 function localResource(path) { return query('resource', { path }); }
 function isLocalResource(value) { if (!value) return false; const url = new URL(value, location.href); return url.origin === location.origin && url.pathname.startsWith('/reader/'); }
 function safeContent(html) {
@@ -34,6 +48,8 @@ function safeContent(html) {
 }
 async function remote(node, url, page, refreshOnly = false) {
   const box = element('div', null, 'resource');
+  box.dataset.resourceUrl = url; box.dataset.resourcePage = String(page);
+  resourceRecords.set(box, { original: node.cloneNode(false), url, page });
   const cached = await json('cache-info', { url, page: String(page) });
   if (cached.key) {
     const src = `/reader/cached/${cached.key}/content`;
@@ -47,8 +63,26 @@ async function remote(node, url, page, refreshOnly = false) {
     if (auto && !remoteSeen.has(`${page}:${url}`)) { remoteSeen.add(`${page}:${url}`); setTimeout(() => action('cache', url, page), 150); }
   }
   box.append(button(page ? '在线原网页' : '系统打开', () => action(page ? 'online' : 'link', url)));
-  node.replaceWith(box);
+  if (node.isConnected) node.replaceWith(box);
 }
+window.readerResourceUpdated = async (url, page) => {
+  const captured = generation;
+  for (const box of document.querySelectorAll('[data-resource-url]')) {
+    if (box.dataset.resourceUrl !== url || box.dataset.resourcePage !== String(page)) continue;
+    const record = resourceRecords.get(box); if (!record) continue;
+    const original = record.original.cloneNode(false);
+    const staging = element('div', null, 'reader-staging'); staging.style.width = `${box.getBoundingClientRect().width}px`; staging.dataset.note = sourceOwner(box); staging.append(original); document.body.append(staging);
+    const playing = box.querySelector('audio,video'); const time = playing?.currentTime; const paused = playing?.paused;
+    try {
+      await remote(original, url, page);
+      if (captured !== generation || !box.isConnected) return;
+      const next = staging.querySelector('audio,video');
+      if (next && Number.isFinite(time)) next.addEventListener('loadedmetadata', () => { next.currentTime = time; if (!paused) next.play().catch(() => {}); }, { once: true });
+      box.replaceWith(...staging.childNodes);
+    } catch (e) { if (e.name !== 'AbortError') status.textContent = `资源更新失败：${e.message}`; }
+    finally { staging.remove(); }
+  }
+};
 async function pdf(node, url, target) {
   const box = element('div', null, 'pdf');
   const controls = element('div', null, 'pdf-controls');
@@ -146,21 +180,21 @@ async function decorate(root, stack) {
     const active = image.getAttribute('src'); if (isLocalResource(active)) continue;
     const src = active || image.dataset.originalSrc;
     if (/^https?:\/\//i.test(src)) { await remote(image, src, false); continue; }
-    const result = await resolve(src, sourceOwner(image));
+    const result = await resolve(src, sourceOwner(image), 'MARKDOWN');
     if (result.attachment) image.src = localResource(result.attachment); else { image.removeAttribute('src'); image.alt = `图片不存在：${src}`; }
   }
   for (const media of root.querySelectorAll('audio[src],video[src],audio[data-original-src],video[data-original-src]')) {
     const active = media.getAttribute('src'); if (isLocalResource(active)) continue;
     const src = active || media.dataset.originalSrc;
     if (/^https?:\/\//i.test(src)) await remote(media, src, false);
-    else { const result = await resolve(src, sourceOwner(media)); if (result.attachment) media.src = localResource(result.attachment); else media.removeAttribute('src'); }
+    else { const result = await resolve(src, sourceOwner(media), 'HTML'); if (result.attachment) media.src = localResource(result.attachment) + (src.includes('#') ? '#' + src.split('#').slice(1).join('#') : ''); else media.removeAttribute('src'); }
   }
   const math = [...root.querySelectorAll('.math:not([data-rendered])')];
-  if (math.length) { await MathJax.startup.promise; for (const node of math) { try { const svg = await MathJax.tex2svgPromise(node.dataset.tex, { display: node.dataset.display === 'true' }); node.replaceChildren(svg); node.dataset.rendered = 'true'; } catch (e) { error(node, `公式错误：${e.message}`); } } }
+  if (math.length) { const mathjax = await mathEngine(); for (const node of math) { try { const svg = await mathjax.tex2svgPromise(node.dataset.tex, { display: node.dataset.display === 'true' }); node.replaceChildren(svg); node.dataset.rendered = 'true'; } catch (e) { error(node, `公式错误：${e.message}`); } } }
   for (const code of root.querySelectorAll('pre>code.language-mermaid')) {
     const box = element('div', null, 'mermaid'); const source = code.textContent;
-    box.dataset.source = code.parentElement.dataset.source || '0'; code.parentElement.replaceWith(box);
-    try { const { svg } = await mermaid.render(`diagram-${unique++}`, source); box.innerHTML = svg; box.querySelectorAll('.internal-link').forEach(node => { node.style.cursor = 'pointer'; node.addEventListener('click', () => action('link', node.textContent.trim())); }); }
+    box.dataset.source = code.parentElement.dataset.source || '0'; box.dataset.diagramSource = source; code.parentElement.replaceWith(box);
+    try { const { svg } = await (await diagrams()).render(`diagram-${unique++}`, source); box.innerHTML = svg; box.querySelectorAll('.internal-link').forEach(node => { node.style.cursor = 'pointer'; node.addEventListener('click', () => action('link', node.textContent.trim(), false, sourceOwner(box))); }); }
     catch (e) { error(box, `Mermaid 语法错误：${e.message}`); box.append(element('pre', source)); }
   }
   // 块标识保留定位信息，但不作为正文可见文字。
@@ -173,23 +207,58 @@ content.addEventListener('click', async event => {
   const href = link.getAttribute('href') || '';
   if (href.startsWith('#fn-')) { event.preventDefault(); document.getElementById(href.slice(1))?.scrollIntoView(); return; }
   event.preventDefault(); const target = link.dataset.target || href;
-  if (target && target !== '#') action('link', target, false, sourceOwner(link));
+  if (target && target !== '#') action('link', target, false, sourceOwner(link), link.classList.contains('internal-link') || link.classList.contains('embedded-label') ? 'WIKI' : 'MARKDOWN');
 });
 window.readerOffset = () => {
   const nodes = [...content.querySelectorAll('[data-source]')].filter(n => !n.closest('.embedded-note') && !n.parentElement.closest('.footnotes') && n.getBoundingClientRect().bottom >= 0);
   return Number(nodes.find(n => n.getBoundingClientRect().top >= -20)?.dataset.source || nodes[0]?.dataset.source || 0);
 };
 window.readerReload = async () => {
+  const captured = ++generation; const capturedRevision = revision;
+  controller?.abort(); controller = new AbortController();
+  const staging = element('main', null, 'reader-staging');
+  staging.style.width = `${content.getBoundingClientRect().width}px`; document.body.append(staging);
   try {
     const restoreOffset = window.readerReady ? window.readerOffset() : Number(params.get('offset')) || 0;
     status.textContent = '';
-    const data = await json('document', { note: rootId }); rootBlocks = data.blocks;
-    content.dataset.note = rootId; content.innerHTML = safeContent(data.html);
-    await decorate(content, [rootId]);
+    const data = await json('document', { note: rootId, revision: capturedRevision });
+    if (captured !== generation) return;
+    staging.dataset.note = rootId; staging.innerHTML = safeContent(data.html);
+    await decorate(staging, [rootId]);
+    if (captured !== generation) return;
+    for (const image of staging.querySelectorAll('img')) {
+      if (!image.complete) await Promise.race([image.decode().catch(() => {}), new Promise(resolve => setTimeout(resolve, 1500))]);
+      if (!image.complete && !image.width && !image.style.height) { image.style.aspectRatio = '2 / 1'; image.style.width = '100%'; }
+    }
+    if (captured !== generation) return;
+    rootBlocks = data.blocks; content.dataset.note = rootId; content.replaceChildren(...staging.childNodes);
+    document.documentElement.classList.remove('reader-preparing');
     const offset = restoreOffset;
     const node = [...content.querySelectorAll('[data-source]')].filter(n => !n.closest('.embedded-note') && Number(n.dataset.source) <= offset).at(-1);
     if (offset && node) node.scrollIntoView();
     window.readerReady = true;
-  } catch (e) { status.textContent = `阅读加载失败：${e.message}`; }
+    window.readerRevision = capturedRevision;
+    action('ready', '');
+  } catch (e) { if (captured === generation && e.name !== 'AbortError') { status.textContent = `阅读加载失败：${e.message}`; document.documentElement.classList.remove('reader-preparing'); status.append(button('重试', () => window.readerReload())); action('error', e.message); } }
+  finally { staging.remove(); }
 };
-await window.readerReload();
+window.readerUpdate = async config => {
+  const changed = config.revision && config.revision !== revision;
+  const themeChanged = dark !== !!config.dark;
+  const autoChanged = auto !== !!config.auto;
+  if (changed) revision = config.revision;
+  dark = !!config.dark; auto = !!config.auto;
+  document.documentElement.classList.toggle('dark', dark);
+  document.documentElement.style.fontSize = `${17 * (Number(config.scale) || 1)}px`;
+  if (changed) { rendering = window.readerReload(); return rendering; }
+  if (themeChanged) for (const node of content.querySelectorAll('.mermaid[data-diagram-source]')) {
+    const { svg } = await (await diagrams()).render(`diagram-${unique++}`, node.dataset.diagramSource); node.innerHTML = svg;
+    node.querySelectorAll('.internal-link').forEach(link => link.addEventListener('click', () => action('link', link.textContent.trim(), false, sourceOwner(node))));
+  }
+  if (autoChanged && auto) for (const box of content.querySelectorAll('[data-resource-url]')) {
+    const record = resourceRecords.get(box); if (record) window.readerResourceUpdated(record.url, record.page);
+  }
+  return rendering;
+};
+rendering = window.readerReload();
+await rendering;

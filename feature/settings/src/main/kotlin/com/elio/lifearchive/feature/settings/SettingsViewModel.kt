@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elio.lifearchive.core.backup.BackupEngine
 import com.elio.lifearchive.core.backup.PreparedRestore
+import com.elio.lifearchive.core.backup.RestoreResult
 import com.elio.lifearchive.core.preferences.*
 import com.elio.lifearchive.domain.notes.*
 import java.io.InputStream
@@ -39,10 +40,30 @@ class SettingsViewModel(private val preferences: PreferencesRepository, private 
         mutable.value = state.value.copy(restore = prepared); "备份已验证，确认后替换现有资料"
     }
     fun cancelRestore() = run { state.value.restore?.let { backup.discard(it) }; mutable.value = state.value.copy(restore = null); "已取消恢复" }
-    fun restore(onRestored: () -> Unit) = run {
+    fun restore(beforeRestore: suspend () -> Boolean = { true }, onRestored: () -> Unit) = run {
         val prepared = state.value.restore ?: error("请先选择备份")
-        try { backup.commit(prepared); check(notes.initialize() is NoteResult.Success); mutable.value = state.value.copy(restore = null); onRestored(); "完整恢复成功" }
+        check(beforeRestore()) { "当前编辑内容尚未安全保存，未替换资料" }
+        try {
+            when (val result = backup.commit(prepared)) {
+                is RestoreResult.Committed -> {
+                    val initialized = notes.initialize()
+                    mutable.value = state.value.copy(restore = null, importing = null)
+                    when {
+                        initialized !is NoteResult.Success -> "资料已替换，资料库初始化未完成，请重启后检查：$initialized"
+                        result.cleanupPending -> "资料已恢复，临时文件待清理"
+                        else -> "完整恢复成功"
+                    }
+                }
+                is RestoreResult.RolledBack -> { mutable.value = state.value.copy(restore = null); "恢复失败，现有资料已回滚：${result.reason}" }
+                is RestoreResult.RecoveryRequired -> error("资料库需完成恢复，请重启后重试：${result.reason}")
+            }
+        }
+        catch (e: CancellationException) { throw e }
         catch (e: Exception) { notes.initialize(); throw e }
+        finally {
+            // 已结束的编辑会话不能在失败回滚后继续复用；所有提交结果均换代导航。
+            onRestored()
+        }
     }
     fun prepareImport(entries: List<ImportEntry>) = run {
         val result = library.prepareImport(entries, "导入-${UUID.randomUUID().toString().take(8)}")

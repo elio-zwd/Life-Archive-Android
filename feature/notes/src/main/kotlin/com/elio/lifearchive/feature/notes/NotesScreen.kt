@@ -56,6 +56,7 @@ fun NotesScreen(
                 }
             }
             if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            if (state.updating && !state.loading) item { Text("正在更新列表…", style = MaterialTheme.typography.labelSmall) }
             state.progress?.let { progress -> item { Text("${progress.operation} ${progress.completed}/${progress.total}"); LinearProgressIndicator(progress = { if (progress.total == 0) 0f else progress.completed.toFloat() / progress.total }, modifier = Modifier.fillMaxWidth()) } }
             if (state.error != null && !naming) item { Text(state.error, color = colors.error) }
             if (state.error != null && !naming) item { TextButton(onClick = onRebuild) { Text("重建索引并重试") } }
@@ -70,7 +71,7 @@ fun NotesScreen(
                 }
             }
             items(state.notes, key = { it.id.value }) { note ->
-                Surface(shape = MaterialTheme.shapes.medium, color = colors.surfaceContainer, modifier = Modifier.fillMaxWidth().clickable { onOpen(note.id) }) {
+                Surface(shape = MaterialTheme.shapes.medium, color = colors.surfaceContainer, modifier = Modifier.fillMaxWidth().clickable(enabled = !state.updating) { onOpen(note.id) }) {
                     Column(Modifier.padding(18.dp)) {
                         Text(note.path.value.substringAfterLast('/').removeSuffix(".md"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(6.dp))

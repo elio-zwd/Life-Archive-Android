@@ -10,6 +10,7 @@ enum class FormatAction { BOLD, ITALIC, HEADING, BULLET, TASK, QUOTE, CODE }
 /** 原文及撤销历史属于同一会话；切模式只替换展示，不重建文本状态。 */
 class EditorSession(raw: String) {
     val text = TextFieldState(raw, initialSelection = TextRange(0))
+    val scroll = androidx.compose.foundation.ScrollState(0)
     private val newline = if (raw.contains("\r\n")) "\r\n" else "\n"
 
     fun format(action: FormatAction) {

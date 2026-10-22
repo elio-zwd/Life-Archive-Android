@@ -10,34 +10,46 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancelAndJoin
 import java.util.UUID
 
-data class NotesUiState(val notes: List<NoteSummary> = emptyList(), val loading: Boolean = true, val creating: Boolean = false, val error: String? = null, val query: NotesQuery = NotesQuery(), val listing: LibraryListing? = null, val progress: LibraryProgress? = null)
+data class NotesUiState(val notes: List<NoteSummary> = emptyList(), val loading: Boolean = true, val creating: Boolean = false, val error: String? = null, val query: NotesQuery = NotesQuery(), val listing: LibraryListing? = null, val progress: LibraryProgress? = null, val updating: Boolean = false)
 
 class NotesViewModel(private val repository: NotesRepository, private val library: LibraryRepository? = null) : ViewModel() {
     private val mutableState = MutableStateFlow(NotesUiState())
     val state = mutableState.asStateFlow()
+    private var queryJob: Job? = null
+    private var request = 0L
     init {
         if (library != null) viewModelScope.launch { library.progress.collect { value -> mutableState.value = state.value.copy(progress = value) } }
         viewModelScope.launch {
-            try { repository.observeNotes().collect { mutableState.value = mutableState.value.copy(notes = it, loading = false); refresh() } }
+            try { repository.observeNotes().collect { if (library == null) mutableState.value = mutableState.value.copy(notes = it, loading = false) else refresh() } }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { mutableState.value = mutableState.value.copy(loading = false, error = e.message ?: "无法读取笔记列表") }
         }
     }
 
     fun clearError() { mutableState.value = mutableState.value.copy(error = null) }
-    private var queryJob: Job? = null
     fun query(value: NotesQuery) {
-        mutableState.value = mutableState.value.copy(query = value)
+        request++
+        mutableState.value = mutableState.value.copy(query = value, updating = true)
         queryJob?.cancel(); queryJob = viewModelScope.launch { delay(200); refresh() }
     }
     suspend fun refresh() {
         val engine = library ?: return
         val captured = state.value.query
-        when (val result = engine.query(captured)) {
-            is NoteResult.Success -> if (captured == state.value.query) mutableState.value = mutableState.value.copy(notes = result.value.notes.map { it.summary }, listing = result.value, error = null, loading = false)
-            else -> mutableState.value = mutableState.value.copy(error = "查询失败：${result.failureMessage()}", loading = false)
+        val sequence = ++request
+        mutableState.value = state.value.copy(updating = true)
+        try {
+            val result = engine.query(captured)
+            if (sequence != request || captured != state.value.query) return
+            mutableState.value = when (result) {
+                is NoteResult.Success -> state.value.copy(notes = result.value.notes.map { it.summary }, listing = result.value, error = null, loading = false, updating = false)
+                else -> state.value.copy(error = "查询失败：${result.failureMessage()}", loading = false, updating = false)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
+            if (sequence == request) mutableState.value = state.value.copy(error = "查询失败：${e.message}", loading = false, updating = false)
         }
     }
     fun operation(action: suspend (LibraryRepository) -> NoteResult<Unit>) {
@@ -46,6 +58,7 @@ class NotesViewModel(private val repository: NotesRepository, private val librar
     }
     fun rebuild() { viewModelScope.launch { val result = repository.rebuildIndex(); if (result is NoteResult.StorageFailure) mutableState.value = mutableState.value.copy(error = result.reason) else refresh() } }
     fun quick(onCreated: (NoteId) -> Unit) = create("快速记录-${UUID.randomUUID().toString().take(8)}", onCreated)
+    suspend fun retire() { viewModelScope.coroutineContext[Job]?.cancelAndJoin() }
 
     fun create(name: String, onCreated: (NoteId) -> Unit) {
         if (mutableState.value.creating) return

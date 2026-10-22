@@ -24,13 +24,14 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+data class ReaderSnapshot(val source: String, val revision: String = java.util.UUID.randomUUID().toString())
 interface ReaderRenderer {
-    @Composable fun Content(document: ParsedDocument, fontScale: Float, initialOffset: Int, onOffset: (Int) -> Unit, loadImage: suspend (String) -> ByteArray?, onLink: (String) -> Unit, services: ReaderServices? = null)
+    @Composable fun Content(document: ReaderSnapshot, fontScale: Float, initialOffset: Int, onOffset: (Int) -> Unit, loadImage: suspend (String) -> ByteArray?, onLink: (String) -> Unit, services: ReaderServices? = null)
 }
 
 object ComposeReaderRenderer : ReaderRenderer {
-    @Composable override fun Content(document: ParsedDocument, fontScale: Float, initialOffset: Int, onOffset: (Int) -> Unit, loadImage: suspend (String) -> ByteArray?, onLink: (String) -> Unit, services: ReaderServices?) {
-        val blocks = document.blocks
+    @Composable override fun Content(document: ReaderSnapshot, fontScale: Float, initialOffset: Int, onOffset: (Int) -> Unit, loadImage: suspend (String) -> ByteArray?, onLink: (String) -> Unit, services: ReaderServices?) {
+        val blocks = remember(document.source) { MarkdownParser().parse(document.source).blocks }
         val index = blocks.indexOfLast { it.start <= initialOffset }.coerceAtLeast(0)
         val state = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = index)
         val currentOnOffset by rememberUpdatedState(onOffset)

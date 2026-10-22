@@ -35,11 +35,21 @@ internal suspend fun directoryEntries(context: Context, tree: Uri): List<ImportE
     entries
 }
 internal suspend fun openAttachment(context: Context, library: LibraryRepository, path: LibraryPath) {
-    val resource = library.openResource(path)
-    check(resource is NoteResult.Success) { "附件不可用：$resource" }
-    val directory = File(context.cacheDir, "shared").also { check(it.isDirectory || it.mkdirs()) }
-    val file = File(directory, "${UUID.randomUUID()}-${path.value.substringAfterLast('/')}")
-    withContext(Dispatchers.IO) { resource.value.stream.use { input -> file.outputStream().use { input.copyTo(it, 65536) } } }
+    val (file, mime) = withContext(Dispatchers.IO) {
+        val directory = File(context.cacheDir, "shared").also { check(it.isDirectory || it.mkdirs()) }
+        cleanSharedCopies(directory)
+        val resource = library.openResource(path)
+        check(resource is NoteResult.Success) { "附件不可用：$resource" }
+        val file = File(directory, "${UUID.randomUUID()}-${path.value.substringAfterLast('/')}")
+        try { resource.value.stream.use { input -> file.outputStream().use { input.copyTo(it, 65536) } } }
+        catch (e: Exception) { file.delete(); throw e }
+        file to resource.value.info.mime
+    }
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-    context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, resource.value.info.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+}
+internal fun cleanSharedCopies(directory: File, now: Long = System.currentTimeMillis()) {
+    // 外部阅读器可能仍持有授权；仅清理一天前的副本。
+    val cutoff = now - 24L * 60 * 60 * 1000
+    directory.listFiles().orEmpty().filter { it.isFile && it.lastModified() < cutoff }.forEach { it.delete() }
 }

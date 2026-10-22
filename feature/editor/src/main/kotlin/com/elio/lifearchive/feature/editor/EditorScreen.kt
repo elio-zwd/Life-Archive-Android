@@ -138,9 +138,14 @@ fun EditorScreen(
             if (state.mode == EditorMode.LIVE && session != null && session.text.text.length > FULL_PREVIEW_LIMIT) Text("长文实时样式仅覆盖光标附近，完整原文仍可编辑", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             Box(Modifier.weight(1f)) {
                 if (session != null) {
-                    if (editing) editorEngine.Content(session, state.mode, state.parsed, fontScale, requestFocus = true, enabled = !state.busy)
-                    else if (state.parsed != null && state.parsed.source == session.text.text.toString()) readerRenderer.Content(state.parsed, fontScale, initialReadingOffset, onReadingOffset, loadImage, onLink, services)
-                    else LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (editing) {
+                        if (state.parsed != null || session.text.text.isEmpty()) editorEngine.Content(session, state.mode, state.projection?.document ?: state.parsed, fontScale, requestFocus = true, enabled = !state.busy)
+                        else LinearProgressIndicator(Modifier.fillMaxWidth())
+                    } else {
+                        val raw = session.text.text.toString()
+                        val snapshot = remember(session, raw) { ReaderSnapshot(raw) }
+                        readerRenderer.Content(snapshot, fontScale, initialReadingOffset, onReadingOffset, loadImage, onLink, services)
+                    }
                 }
             }
         }

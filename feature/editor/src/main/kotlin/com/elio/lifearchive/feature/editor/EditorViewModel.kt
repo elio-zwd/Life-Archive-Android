@@ -13,6 +13,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withContext
 
 data class EditorUiState(
@@ -20,17 +21,20 @@ data class EditorUiState(
     val mode: EditorMode = EditorMode.READ, val parsed: ParsedDocument? = null,
     val pendingDraft: Draft? = null, val draftConflict: Boolean = false,
     val message: String? = null, val busy: Boolean = false,
+    val projection: EditorRenderProjection? = null,
 )
 
-class EditorViewModel(private val repository: NotesRepository, val id: NoteId, startEditing: Boolean, private val location: Int? = null) : ViewModel() {
+class EditorViewModel(private val repository: NotesRepository, val id: NoteId, startEditing: Boolean, private val location: Int? = null, private val parse: suspend (String) -> ParsedDocument = { text -> withContext(Dispatchers.Default) { MarkdownParser().parse(text) } }) : ViewModel() {
     private val mutableState = MutableStateFlow(EditorUiState(mode = if (startEditing) EditorMode.SOURCE else EditorMode.READ))
     val state = mutableState.asStateFlow()
     var session by mutableStateOf<EditorSession?>(null); private set
     var persistence: EditorPersistence? = null; private set
     private var snapshot: NoteSnapshot? = null
     private var readingOffset = 0
-    val initialReadingOffset get() = readingOffset
-    private val parser = MarkdownParser()
+    private var entryOffset = 0
+    val initialReadingOffset get() = entryOffset
+    private var revision = 0L
+    private var retired = false
     private var simulateFailure = false
     private val sessionRepository = object : NotesRepository by repository {
         override suspend fun save(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long?): NoteResult<NoteSnapshot> =
@@ -46,6 +50,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
             if (draftResult !is NoteResult.Success) { mutableState.value = mutableState.value.copy(loading = false, error = draftResult.explanation()); return@launch }
             val draft = draftResult.value
             readingOffset = location ?: (repository.readReadingOffset(id) as? NoteResult.Success)?.value ?: 0
+            entryOffset = readingOffset
             val newSession = EditorSession(read.value.document.text)
             if (location != null) newSession.text.edit { selection = TextRange(location.coerceIn(0, length)) }
             session = newSession
@@ -54,25 +59,35 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
             if (pending != null) persistence?.blockAutomaticSave()
             mutableState.value = mutableState.value.copy(loading = false, name = read.value.summary.path.value.removeSuffix(".md"), mode = if (pending != null) EditorMode.READ else mutableState.value.mode, pendingDraft = pending, draftConflict = pending != null && pending.baseVersion != read.value.summary.version)
             launch {
-                snapshotFlow { newSession.text.text.toString() }.collectLatest { text ->
+                snapshotFlow { newSession.text.text.toString() }.collect { text ->
                     if (mutableState.value.pendingDraft == null) persistence?.changed(text)
-                    val parsed = withContext(Dispatchers.Default) { parser.parse(text) }
-                    mutableState.value = mutableState.value.copy(parsed = parsed)
+                }
+            }
+            launch {
+                snapshotFlow { newSession.text.text.toString() }.collectLatest { text ->
+                    val captured = ++revision
+                    val previous = mutableState.value.projection
+                    val updated = if (previous != null) withContext(Dispatchers.Default) { previous.reparseChangedBlock(text) } else null
+                    if (updated != null && !retired && captured == revision && newSession.text.text.toString() == text) mutableState.value = mutableState.value.copy(projection = EditorRenderProjection(captured, updated))
+                    val parsed = parse(text)
+                    if (!retired && captured == revision && newSession.text.text.toString() == text) mutableState.value = mutableState.value.copy(parsed = parsed, projection = EditorRenderProjection(captured, parsed))
                 }
             }
         }
     }
 
     fun changeMode(mode: EditorMode) {
+        if (retired) return
         if (mutableState.value.pendingDraft != null && mode != EditorMode.READ) return
         val editor = session ?: return
-        if (mode == EditorMode.READ) readingOffset = editor.text.selection.start
+        if (mode == EditorMode.READ) { readingOffset = editor.text.selection.start; entryOffset = readingOffset }
         else if (mutableState.value.mode == EditorMode.READ) editor.text.edit { selection = TextRange(readingOffset.coerceIn(0, length)) }
         mutableState.value = mutableState.value.copy(mode = mode)
         if (mode == EditorMode.READ) viewModelScope.launch { flush() }
     }
 
     fun restoreDraft() {
+        if (retired) return
         val draft = mutableState.value.pendingDraft ?: return
         if (mutableState.value.draftConflict) return
         val original = snapshot ?: return
@@ -84,7 +99,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
 
     fun copyDraft(onCreated: (NoteId) -> Unit) {
         val document = mutableState.value.pendingDraft?.document ?: session?.let { RawDocument(it.text.text.toString()) } ?: return
-        if (mutableState.value.busy) return
+        if (retired || mutableState.value.busy) return
         mutableState.value = mutableState.value.copy(busy = true)
         viewModelScope.launch {
             val result = repository.create("恢复的草稿-${UUID.randomUUID().toString().take(8)}.md", document)
@@ -93,19 +108,22 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         }
     }
 
-    fun readingPosition(offset: Int) { readingOffset = offset }
-    fun message(value: String) { mutableState.value = mutableState.value.copy(message = value) }
+    fun readingPosition(offset: Int) { if (!retired) readingOffset = offset.coerceAtLeast(0) }
+    fun message(value: String) { if (!retired) mutableState.value = mutableState.value.copy(message = value) }
     fun clearMessage() { mutableState.value = mutableState.value.copy(message = null) }
-    fun applyTags(tags: List<String>) {
-        if (state.value.pendingDraft != null) { message("请先处理草稿"); return }
-        val editor = session ?: return
-        if (editor.text.composition != null) { message("请完成当前输入后再修改标签"); return }
+    fun applyTags(tags: List<String>): Boolean {
+        if (retired) return false
+        if (state.value.pendingDraft != null) { message("请先处理草稿"); return false }
+        val editor = session ?: return false
+        if (editor.text.composition != null) { message("请完成当前输入后再修改标签"); return false }
         editor.text.edit {
             val raw = asCharSequence().toString(); val changed = com.elio.lifearchive.core.document.DocumentAnalyzer.withTags(raw, tags)
             val cursor = selection.start; replace(0, length, changed); selection = TextRange((cursor + changed.length - raw.length).coerceIn(0, length))
         }
+        return true
     }
     fun insertAttachment(path: String) {
+        if (retired) return
         if (state.value.pendingDraft != null) { message("请先处理草稿"); return }
         if (session?.text?.composition != null) { message("附件已入库，请完成输入后插入：$path"); return }
         changeMode(EditorMode.SOURCE)
@@ -114,7 +132,8 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
     fun backgroundSave() { viewModelScope.launch { flush() } }
 
     suspend fun flush(): Boolean {
-        val editor = session ?: return false
+        if (retired) return true
+        val editor = session ?: return true // 尚未取得正文，没有本地输入需要保护。
         if (mutableState.value.pendingDraft != null) {
             repository.updateReadingOffset(id, readingOffset)
             return true // 尚未确认的草稿保持原样，不用阅读正文覆盖它。
@@ -130,13 +149,20 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
     }
 
     fun leave(onLeave: () -> Unit) {
-        if (mutableState.value.busy) return
+        if (retired || mutableState.value.busy) return
         mutableState.value = mutableState.value.copy(busy = true)
         viewModelScope.launch {
             val safe = flush()
             mutableState.value = mutableState.value.copy(busy = false)
             if (safe && !simulateFailure) onLeave() else message("尚未安全保存，请重试后再离开。当前内容仍保留在编辑器中。")
         }
+    }
+
+    suspend fun retire(): Boolean {
+        if (!flush()) return false
+        retired = true
+        viewModelScope.coroutineContext[kotlinx.coroutines.Job]?.cancelAndJoin()
+        return true
     }
 
     fun setSimulatedFailure(enabled: Boolean) {
