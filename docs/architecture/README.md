@@ -4,6 +4,8 @@
 
 2026-10-23 已接入一期功能版，新增实际使用的 feature:settings。公共解析/原文定位下沉 core:document，完整阅读由 feature:editor 的受控本地 WebView 适配；data:notes 承担组织、索引、回收站与多文件恢复，远程缓存可丢弃且不进入备份。当前接口、状态库 v2 及旧包迁移见[功能交接](../engineering/phase-1-function-handoff.md)。用户决定功能先行、视觉重做后置；目标机验收仍待完成。
 
+0.2.1 的显示修订、链接语法类型、恢复结果和会话换代协议见[稳定性修复交接](../engineering/phase-1-stability-handoff.md)，未改变模块依赖与权威数据归属。
+
 ## 技术和数据约定
 
 - Kotlin + Jetpack Compose 原生 Android；已接入 Material 3、ViewModel/UDF、Navigation 3 与 Hilt，当前启动进入真实笔记库，Debug 提供会话内保存失败模拟。

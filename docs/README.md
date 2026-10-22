@@ -27,6 +27,8 @@
 
 ## 工程与资料
 
+- [一期稳定性修复交接](engineering/phase-1-stability-handoff.md)：0.2.1 的渲染、高亮、保存/恢复、查询、链接及缓存并发修复和验收表；最新验证入口。
+
 - [一期功能交接](engineering/phase-1-function-handoff.md)：当前功能、数据与备份迁移、阅读兼容矩阵、远程缓存边界及手机验收表。
 
 - [编辑器交互样板交接](engineering/editor-prototype-handoff.md)：首轮功能入口、编辑保存与恢复语义、语法支持清单、电脑验证及小米 14 Ultra 手动验收步骤。

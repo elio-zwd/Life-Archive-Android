@@ -10,7 +10,7 @@
 
 `testReader` 可单独运行，使用公共解析生成的投影验证浅深色公式、Mermaid、嵌入、脚注、HTML 清理、默认离线、50 MiB 级 PDF 翻页及音视频元数据/定位。截图输出仓库外 TEMP/life-archive-phase1-browser。Node 输出及 Android 检查不代替实际 System WebView、系统选择器、输入法或目标机性能。
 
-本轮支持矩阵、实际验证记录和手机验收步骤以[一期功能交接](../engineering/phase-1-function-handoff.md)为准。下面的样板与底层入口继续作为历史子集保留。
+最新修复、验证记录和手机验收步骤以[稳定性修复交接](../engineering/phase-1-stability-handoff.md)为准，完整支持矩阵见[一期功能交接](../engineering/phase-1-function-handoff.md)。新增回归覆盖 SOURCE/LIVE 连续空行高亮、解析与保存并发、WebView 无关状态更新、旧查询回执、YAML 锚点、多文件回滚清理、排队下载清理、分享失败和恢复后会话失效。下面的样板与底层入口继续作为历史子集保留。
 
 以下为首轮样板阶段的验证说明：当时已有架构、核心数据底层及一期编辑器交互样板，以及 JVM、Robolectric 和启动冒烟测试源码；完整一期与 CI 尚未建立。底层历史结果见[架构交接](../engineering/foundation-handoff.md)，样板与手动验收见[样板交接](../engineering/editor-prototype-handoff.md)。这些检查仅在电脑执行，不连接设备；构建、测试、设备启动和视觉检查分别记录。
 

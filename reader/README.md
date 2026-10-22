@@ -13,4 +13,6 @@
 
 包含浅深色公式、Mermaid、表格及 Callout、章节嵌入及循环处理、脚注、HTML 脚本清理、默认不访问远程资源、50 MiB 级合成 PDF 翻页，以及合成 WAV/MP4 的浏览器解码与定位检查。MP4 由本机 FFmpeg 生成蓝色画面，无外部素材；WAV 与大 PDF 在测试进程内生成。FFmpeg 不是运行测试的依赖。
 
-浏览器检查不能代替 Android WebView、目标机媒体编码、系统文件选择器或中文输入验收。正式支持状态见[功能交接](../docs/engineering/phase-1-function-handoff.md)。
+稳定性检查另外采样浅深首帧，延迟图表库验证原子展示，检查嵌入链接的来源笔记、旧渲染回执、刷新不清空整页、配置及单资源更新保留其他媒体/Callout 会话，以及普通正文不加载复杂渲染库。
+
+浏览器检查不能代替 Android WebView、目标机媒体编码、系统文件选择器或中文输入验收。最新结果见[稳定性修复交接](../docs/engineering/phase-1-stability-handoff.md)，完整支持状态见[功能交接](../docs/engineering/phase-1-function-handoff.md)。
