@@ -11,7 +11,7 @@ import org.commonmark.parser.IncludeSourceSpans
 import org.commonmark.parser.Parser
 
 enum class BlockKind { PARAGRAPH, HEADING, QUOTE, CALLOUT, CODE, TABLE, IMAGE, RAW, PROPERTIES, DIVIDER }
-enum class TextMark { NORMAL, BOLD, ITALIC, STRIKE, CODE, LINK, HEADING, QUOTE }
+enum class TextMark { NORMAL, BOLD, ITALIC, STRIKE, HIGHLIGHT, CODE, LINK, HEADING, QUOTE }
 data class InlineRun(val text: String, val marks: Set<TextMark> = emptySet(), val destination: String? = null)
 data class ReaderBlock(
     val kind: BlockKind, val start: Int, val end: Int,
@@ -41,6 +41,7 @@ class MarkdownParser {
         val blocks = mutableListOf<ReaderBlock>()
         val styles = mutableListOf<MarkRange>()
         val markers = mutableListOf<MarkerRange>()
+        val highlightExcluded = mutableListOf<IntRange>()
         val yaml = DocumentAnalyzer.yaml(source)
         val parseSource = buildString {
             source.forEachIndexed { i, c -> append(if ((yaml != null && i <= yaml.last && c != '\n' && c != '\r') || c == '\uFEFF') ' ' else c) }
@@ -72,6 +73,7 @@ class MarkdownParser {
         fun highlight(node: Node) {
             val (start, end) = range(node)
             if (end > start) {
+                if (node is Code || node is FencedCodeBlock || node is IndentedCodeBlock || node is HtmlBlock) highlightExcluded += start until end
                 val original = source.substring(start, end)
                 val mark = when (node) {
                     is Heading -> TextMark.HEADING
@@ -109,6 +111,16 @@ class MarkdownParser {
             }
         }
         highlight(document)
+        val chars = parseSource.toCharArray()
+        fun hideHighlight(range: IntRange) { range.forEach { i -> if (chars[i] != '\n' && chars[i] != '\r') chars[i] = ' ' } }
+        highlightExcluded.forEach(::hideHighlight)
+        Regex("%%[\\s\\S]*?%%|<!--[\\s\\S]*?-->|(?s)\\$\\$(.+?)\\$\\$|(?<![\\\\$])\\$(?!\\$)([^$\\n]+?)(?<!\\\\)\\$(?!\\$)").findAll(String(chars)).forEach { hideHighlight(it.range) }
+        val masked = String(chars)
+        Regex("(?<![=\\\\])==(?=\\S)(.+?)(?<=\\S)==(?![=])").findAll(masked).forEach { match ->
+            styles += MarkRange(match.range.first, match.range.last + 1, TextMark.HIGHLIGHT)
+            markers += MarkerRange(match.range.first, match.range.first + 2)
+            markers += MarkerRange(match.range.last - 1, match.range.last + 1)
+        }
         fun flatten(node: Node, prefix: String = "", depth: Int = 0) {
             val (start, end) = range(node)
             val raw = source.substring(start, end)
