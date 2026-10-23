@@ -1,5 +1,23 @@
 # 当前验证方法
 
+## 0.2.2 阅读提速验证
+
+仍执行下方 verifyPhaseOne。新增纯 Kotlin 阅读投影范围测试、阅读缓存持久化/损坏/容量/清理代次测试、根快照不重复读取、缓存失败回退、受限消息校验、首屏后预备高亮及设置/恢复清理回归。浏览器检查区分首屏可读与按需内容完成，完整兼容检查会主动遍历待加载内容。
+
+性能对比先保存 0.2.1 的 reader 源资源到仓库外 baseline 根目录（内含 reader/index.html），共享固定版本的生成资源。app 本地测试会在系统 TEMP/life-archive-reader-fixtures 导出实际验收样例、sampleLandscape 配图及精确 UTF-8 的 50 KiB/1 MiB 文档。无需连接设备。
+
+```powershell
+$env:LIFE_ARCHIVE_READER_BASELINE = 'D:/Temp/life-archive-reader-022/baseline'
+$env:LIFE_ARCHIVE_EVIDENCE = 'D:/Temp/life-archive-reader-022'
+node reader/test/open-performance.mjs
+```
+
+每组至少 20 次，按样例、50 KiB、1 MiB 和 50 MiB PDF 交替比较两个版本，输出原始记录、p50/p95、浏览器 JS 堆及命中率。`LIFE_ARCHIVE_PERF_DOCUMENTS` 可指定单组名称补测；不指定则测全部已导出样例。脚本在开始时冻结源资源并记录指纹，PDF 通过范围流读取，并分别记录首屏占位与指定页真正完成；不会把占位当作 PDF 渲染成功。
+
+HTTP 测试适配模拟原生缓存通信，共用相同正文投影、配图和固定版本的阅读库，不能将桌面数值等同完整 Android 打开时间；Native 缓存与读取边界另由本地测试覆盖。目标机手动记录从点击到可读的时间。Debug 的 LifeArchiveReader 日志另外记录 BODY/FIRST_SCREEN/IDLE、进入页面/网页耗时、HTML 命中及派生物命中数，不包含正文。
+
+最新实际结果和手动验收步骤见[阅读提速交接](../engineering/phase-1-reader-performance-handoff.md)。
+
 ## 一期功能版验证（当前入口，无设备）
 
 ```powershell
@@ -10,7 +28,7 @@
 
 `testReader` 可单独运行，使用公共解析生成的投影验证浅深色公式、Mermaid、嵌入、脚注、HTML 清理、默认离线、50 MiB 级 PDF 翻页及音视频元数据/定位。截图输出仓库外 TEMP/life-archive-phase1-browser。Node 输出及 Android 检查不代替实际 System WebView、系统选择器、输入法或目标机性能。
 
-最新修复、验证记录和手机验收步骤以[稳定性修复交接](../engineering/phase-1-stability-handoff.md)为准，完整支持矩阵见[一期功能交接](../engineering/phase-1-function-handoff.md)。新增回归覆盖 SOURCE/LIVE 连续空行高亮、解析与保存并发、WebView 无关状态更新、旧查询回执、YAML 锚点、多文件回滚清理、排队下载清理、分享失败和恢复后会话失效。下面的样板与底层入口继续作为历史子集保留。
+最新实现、验证记录和手机验收步骤以[阅读提速交接](../engineering/phase-1-reader-performance-handoff.md)为准，0.2.1 缺陷修复见[稳定性修复交接](../engineering/phase-1-stability-handoff.md)，完整支持矩阵见[一期功能交接](../engineering/phase-1-function-handoff.md)。既有回归覆盖 SOURCE/LIVE 连续空行高亮、解析与保存并发、WebView 无关状态更新、旧查询回执、YAML 锚点、多文件回滚清理、排队下载清理、分享失败和恢复后会话失效。下面的样板与底层入口继续作为历史子集保留。
 
 以下为首轮样板阶段的验证说明：当时已有架构、核心数据底层及一期编辑器交互样板，以及 JVM、Robolectric 和启动冒烟测试源码；完整一期与 CI 尚未建立。底层历史结果见[架构交接](../engineering/foundation-handoff.md)，样板与手动验收见[样板交接](../engineering/editor-prototype-handoff.md)。这些检查仅在电脑执行，不连接设备；构建、测试、设备启动和视觉检查分别记录。
 

@@ -6,7 +6,7 @@
 
 - 使用简体中文沟通、编写文档和必要注释；注释解释约束与原因。
 - 面向 Windows 10 x64，Windows 命令使用 `pwsh.exe`（PowerShell 7）。
-- 当前已接入一期功能版，默认源码编辑与完整阅读，源码/实时预览均保留高亮，实时预览仍为实验项；整体视觉重做后置。目标机输入、系统交互、性能与最终视觉尚未验收，不能把电脑测试等同产品验收。最新入口见 [稳定性修复交接](docs/engineering/phase-1-stability-handoff.md)，完整范围、历史样板及底层从 [一期功能交接](docs/engineering/phase-1-function-handoff.md)按需读取。
+- 当前已接入一期功能版，默认源码编辑与完整阅读，源码/实时预览均保留高亮，实时预览仍为实验项；阅读首屏优先并使用可丢弃的按需缓存，整体视觉重做后置。目标机输入、系统交互、性能与最终视觉尚未验收，不能把电脑测试等同产品验收。最新入口见 [阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整范围、历史样板及底层从 [一期功能交接](docs/engineering/phase-1-function-handoff.md)按需读取。
 - 产品只做 Android，技术方向为 Kotlin + Jetpack Compose。应用标识为 `com.elio.lifearchive`，显示名为 Life Archive。
 - 第一阶段聚焦本地笔记；第二阶段才讨论 AI 与见域共用能力，第三阶段讨论电脑协作。具体范围见 [文档索引](docs/README.md)。
 - 整体架构讨论必须读取[功能版图](docs/plans/overall-feature-roadmap.md)和[架构要求](docs/architecture/README.md)，再按需阅读对应阶段计划；新项目需求以本仓库记录为依据，不默认回查旧仓库或继承旧版功能。

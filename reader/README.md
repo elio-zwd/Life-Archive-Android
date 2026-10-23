@@ -1,5 +1,9 @@
 # 本地阅读运行资源与浏览器检查
 
+0.2.2 使用首屏优先及前后一屏按需渲染，复杂库仍离线打包；缓存只保存派生投影/SVG/尺寸，接口不向笔记或离线网页开放私有路径。兼容检查通过 readerDrain 主动遍历，另测屏外延后、缓存命中不加载复杂库、字号/宽度失效、折叠加载和嵌入目标更新。
+
+打开性能脚本为 test/open-performance.mjs，依赖 app 本地测试导出的实际样例和配图。冻结 baseline、参数及测量边界见[验证说明](../docs/testing/README.md)，结果见[提速交接](../docs/engineering/phase-1-reader-performance-handoff.md)。
+
 此目录负责固定、组装阅读器资源，不保存笔记或用户缓存。现有 Node.js 24、npm、PowerShell 7 与 Windows Chrome/Edge 用于电脑检查；Android 工具链仍为 JDK 17、SDK 36。
 
 `package-lock.json` 固定 MathJax 4.1.3、Mermaid 12.2.0、PDF.js 6.4.299、DOMPurify 3.4.17，以及测试用 Playwright 1.58.2。Gradle 在首次构建时执行 `npm.cmd ci --ignore-scripts`，再把需要的资源、字体及许可证复制到 feature:editor 的被忽略构建目录。APK 内不引用 CDN。不要手工修改 node_modules 或生成资源。

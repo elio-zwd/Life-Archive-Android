@@ -7,6 +7,7 @@
 - [整体功能版图与旧版迁移评估](plans/overall-feature-roadmap.md)：功能分类、既有分期映射及待确认的后期候选，不等于全部获准实现。
 - [第一期：Android 本地 Markdown 笔记](plans/phase-1-local-notes.md)
 - [第一期：编辑器交互与视觉决策](plans/phase-1-editor-visual-decisions.md)
+- [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
 - [第二期：AI 与共享能力](plans/phase-2-ai-and-shared-capabilities.md)
 - [第三期：电脑与 Obsidian 协作](plans/phase-3-computer-obsidian.md)
 
@@ -27,7 +28,9 @@
 
 ## 工程与资料
 
-- [一期稳定性修复交接](engineering/phase-1-stability-handoff.md)：0.2.1 的渲染、高亮、保存/恢复、查询、链接及缓存并发修复和验收表；最新验证入口。
+- [阅读打开提速交接](engineering/phase-1-reader-performance-handoff.md)：0.2.2 的首屏调度、缓存接口、性能对比和手机验收；最新验证入口。
+
+- [一期稳定性修复交接](engineering/phase-1-stability-handoff.md)：0.2.1 的渲染、高亮、保存/恢复、查询、链接及缓存并发修复和验收表。
 
 - [一期功能交接](engineering/phase-1-function-handoff.md)：当前功能、数据与备份迁移、阅读兼容矩阵、远程缓存边界及手机验收表。
 

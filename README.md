@@ -2,7 +2,7 @@
 
 面向个人使用的 Android 应用，第一期以本地 Markdown 笔记起步，按 Obsidian 官方内置文档语法规划文件兼容能力。整体功能范围仍在确认，架构须能承接后续选中的任务、生活管理、AI 和出行等能力。
 
-**当前状态：一期功能版及 0.2.1 稳定性修复已接入，视觉重做后置，目标机验收待完成。** 包含组织搜索、源码编辑与本地完整阅读、附件、回收站、导入导出、备份恢复及可清理的远程/网页缓存。最新缺陷与验收入口见[稳定性修复交接](docs/engineering/phase-1-stability-handoff.md)，完整支持清单和迁移见[一期功能交接](docs/engineering/phase-1-function-handoff.md)；[首轮样板](docs/engineering/editor-prototype-handoff.md)和[底层交接](docs/engineering/foundation-handoff.md)保留为历史阶段记录。电脑检查不等于产品验收。
+**当前状态：一期功能版及 0.2.2 阅读提速已接入，视觉重做后置，目标机验收待完成。** 包含组织搜索、源码编辑与本地完整阅读、附件、回收站、导入导出、备份恢复及可清理缓存。阅读采用首屏优先与按需持久缓存，最新实现、检查和验收见[阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)；此前缺陷见[稳定性修复交接](docs/engineering/phase-1-stability-handoff.md)，完整支持清单和迁移见[一期功能交接](docs/engineering/phase-1-function-handoff.md)。电脑检查不等于产品验收。
 
 ## 项目标识与方向
 
@@ -40,7 +40,8 @@
 | [架构交接](docs/engineering/foundation-handoff.md) | 核心接口、数据可靠性、模块规则、功能开发接入与验证结果 |
 | [编辑器样板交接](docs/engineering/editor-prototype-handoff.md) | 首轮页面、保存会话、兼容状态、APK 与手机手动验收步骤 |
 | [一期功能交接](docs/engineering/phase-1-function-handoff.md) | 当前功能、迁移、阅读与缓存边界、验证及验收表 |
-| [稳定性修复交接](docs/engineering/phase-1-stability-handoff.md) | 打开/输入闪烁、数据安全修复、最新验证及手机验收表 |
+| [稳定性修复交接](docs/engineering/phase-1-stability-handoff.md) | 0.2.1 打开/输入闪烁、数据安全修复及历史验收记录 |
+| [阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md) | 0.2.2 首屏优先、32/256 MiB 阅读缓存、性能与验收 |
 | [tools/](tools/README.md) | 手机控制、日志证据辅助工具 |
 | [tools/UPSTREAM.md](tools/UPSTREAM.md) | 工具来源、复制清单及使用配置约定 |
 

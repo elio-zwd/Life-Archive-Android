@@ -1,5 +1,7 @@
 # 架构入口与实施边界
 
+0.2.2 新增首屏优先调度和 ReaderCacheRepository 派生缓存接口，仍沿用十个模块、状态库 v2 和备份外层 v1。缓存通过领域接口调用，阅读结果不能回写正文；当前入口见[阅读提速交接](../engineering/phase-1-reader-performance-handoff.md)。
+
 状态：2026-10-18 已选择模块化单体架构，接入核心数据底层及一期编辑器交互样板；完整功能和目标机验收尚未完成。完整决策见 [ADR-001](adr-001-android-architecture.md)，底层接口见[架构交接](../engineering/foundation-handoff.md)，当前样板见[编辑器交接](../engineering/editor-prototype-handoff.md)；原始底座交接保留为历史记录。
 
 2026-10-23 已接入一期功能版，新增实际使用的 feature:settings。公共解析/原文定位下沉 core:document，完整阅读由 feature:editor 的受控本地 WebView 适配；data:notes 承担组织、索引、回收站与多文件恢复，远程缓存可丢弃且不进入备份。当前接口、状态库 v2 及旧包迁移见[功能交接](../engineering/phase-1-function-handoff.md)。用户决定功能先行、视觉重做后置；目标机验收仍待完成。

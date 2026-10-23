@@ -8,6 +8,8 @@
 
 稳定性实现补充：公共引用模型显式区分 WikiLink、Markdown 和 HTML 的路径语义；编辑/阅读使用带修订的显示快照，保存独立运行。多文件回滚结果先落盘再清理；完整恢复返回已提交/已回滚/仍需恢复结果，并在替换前结束旧会话、替换后换代导航。模块边界、状态库 v2 和备份外层 v1 不变，具体协议及验证见[稳定性修复交接](../engineering/phase-1-stability-handoff.md)。
 
+阅读提速实现补充：ReaderCacheRepository 是 domain:notes 的可丢弃派生接口，由 data:notes 实现、app 装配，供编辑阅读与设置调用；不增加模块、权威状态或备份参与者。ReaderSnapshot 复用已核验正文，文档投影保留原文定位；首屏与屏外资源分阶段准备。缓存代次跨普通重启保留，清理/资料替换时换代；具体边界与检查见[阅读提速交接](../engineering/phase-1-reader-performance-handoff.md)。
+
 ## 1. 选型结论与比较
 
 采用 **Kotlin + Jetpack Compose 的模块化单体架构**：一个 Android 安装包，以 Gradle 模块隔离主要职责；按业务域组织功能，界面采用 ViewModel + 单向数据流（UDF），业务通过 Repository 接口访问数据，复杂操作使用 Use Case。借用 Clean Architecture 的依赖方向与可测试性，不要求每次调用都套三层转发。
