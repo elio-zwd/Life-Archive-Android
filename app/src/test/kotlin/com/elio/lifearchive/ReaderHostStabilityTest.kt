@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 class ReaderHostStabilityTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     @Suppress("UNCHECKED_CAST")
-    private inline fun <reified T> unused(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ -> error("不应调用 ${method.name}") } as T
+    private inline fun <reified T> unused(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { proxy, method, args -> when (method.name) { "equals" -> proxy === args?.firstOrNull(); "hashCode" -> System.identityHashCode(proxy); "toString" -> T::class.java.simpleName; else -> error("不应调用 ${method.name}") } } as T
     private fun find(view: View): WebView? = if (view is WebView) view else (view as? ViewGroup)?.let { group -> (0 until group.childCount).firstNotNullOfOrNull { find(group.getChildAt(it)) } }
     private fun request(revision: String, type: String) = object : WebResourceRequest {
         override fun getUrl() = Uri.parse("https://appassets.androidplatform.net/reader/action?type=$type&value=目标&revision=$revision")

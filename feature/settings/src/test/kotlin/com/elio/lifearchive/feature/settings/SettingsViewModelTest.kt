@@ -67,6 +67,27 @@ class SettingsViewModelTest {
             assertTrue(reset); assertNull(result.restore); assertTrue(result.message!!.contains("资料已替换"))
         } finally { model.viewModelScope.cancel(); preferences.closeAndJoin(); Dispatchers.resetMain() }
     }
+    @Test fun readingCacheHasIndependentUsageAndIsRetiredBeforeRestore() = runBlocking {
+        Dispatchers.setMain(Dispatchers.Unconfined)
+        val gate = StorageGate(); val preferences = PreferencesStore(File(temp.newFolder(), "settings.preferences_pb"), gate)
+        val engine = BackupEngine(temp.newFolder(), gate, listOf(preferences.backupParticipant))
+        var cleared = 0
+        val reader = object : ReaderCacheRepository {
+            override suspend fun token() = ReaderCacheToken("$cleared")
+            override suspend fun get(token: ReaderCacheToken, key: ReaderArtifactKey): String? = null
+            override suspend fun put(token: ReaderCacheToken, key: ReaderArtifactKey, value: String) = false
+            override suspend fun usage() = ReaderCacheUsage(32, 256)
+            override suspend fun clear() { cleared++ }
+        }
+        val notes = fake<NotesRepository> { if (it == "initialize") { assertEquals(2, cleared); NoteResult.Success(Unit) } else error(it) }
+        val model = SettingsViewModel(preferences.repository, engine, notes, fake<LibraryRepository> { error(it) }, cache(), reader)
+        try {
+            assertEquals(32, model.state.value.readerMemoryBytes); assertEquals(256, model.state.value.readerCacheBytes)
+            model.clearReaderCache(); model.done(); assertEquals(1, cleared); assertEquals(0, model.state.value.cacheBytes)
+            val zip = ByteArrayOutputStream().also { engine.export(it) }.toByteArray()
+            model.prepareRestore { zip.inputStream() }; model.done(); model.restore {}; model.done(); assertEquals(2, cleared)
+        } finally { model.viewModelScope.cancel(); preferences.closeAndJoin(); Dispatchers.resetMain() }
+    }
     @Test fun stagedImportRequiresExplicitCommitAndCanBeDiscarded() = runBlocking {
         Dispatchers.setMain(Dispatchers.Unconfined)
         val gate = StorageGate(); val preferences = PreferencesStore(File(temp.newFolder(), "settings.preferences_pb"), gate)

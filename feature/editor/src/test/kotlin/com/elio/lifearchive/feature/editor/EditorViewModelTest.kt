@@ -14,6 +14,20 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class EditorViewModelTest {
+    @Test fun readingDefersHighlightUntilFirstScreenAndEditingReusesThePreparedResult() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = MemoryNotes(); var parses = 0
+        val model = EditorViewModel(repo, repo.note.summary.id, false, parse = { parses++; MarkdownParser().parse(it) })
+        try {
+            runCurrent(); assertNotNull(model.session); assertEquals(0, parses)
+            model.readerLoaded(ReaderLoadEvent(ReaderLoadPhase.FIRST_SCREEN, "reading", 25, false))
+            advanceTimeBy(199); runCurrent(); assertEquals(0, parses)
+            advanceTimeBy(1); runCurrent(); assertEquals(1, parses)
+            model.changeMode(EditorMode.SOURCE); runCurrent(); assertEquals(1, parses)
+            assertEquals("原文", model.state.value.parsed!!.source)
+        } finally { model.viewModelScope.coroutineContext[Job]!!.cancelAndJoin(); Dispatchers.resetMain() }
+    }
+
     @Test fun retiredSessionCannotWriteIntoARestoredLibraryOrAcceptLateAttachmentCallbacks() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val repo = MemoryNotes()
