@@ -5,11 +5,27 @@ import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
 import org.commonmark.ext.gfm.tables.TablesExtension
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
+import kotlinx.serialization.Serializable
+import java.security.MessageDigest
+
+@Serializable data class ReadingRange(val start: Int, val end: Int)
+@Serializable data class ReadingAnchor(val name: String, val start: Int, val end: Int)
+@Serializable data class ReadingProjection(val html: String, val ranges: List<ReadingRange>, val blocks: List<ReadingAnchor>, val digest: String)
+
+fun documentDigest(value: String): String = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
 
 /** 仅供显示的投影，变换后的文本不进入保存接口。data-source 始终指向原始正文。 */
 object HtmlProjection {
+    const val VERSION = "reading-2"
+    fun project(source: String): ReadingProjection {
+        val ranges = mutableListOf<ReadingRange>()
+        val html = renderHtml(source, ranges)
+        val anchors = DocumentAnalyzer.analyze(source).blocks.map { ReadingAnchor(it.name, it.start, it.end) }
+        return ReadingProjection(html, ranges, anchors, documentDigest(source))
+    }
     fun escape(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;")
-    fun render(source: String): String {
+    fun render(source: String): String = renderHtml(source, null)
+    private fun renderHtml(source: String, ranges: MutableList<ReadingRange>?): String {
         val extensions = listOf(TablesExtension.create(), StrikethroughExtension.create())
         val masked = DocumentAnalyzer.masked(source)
         data class Replacement(val start: Int, val end: Int, val text: String)
@@ -58,7 +74,14 @@ object HtmlProjection {
         val parser = Parser.builder().extensions(extensions).includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES).build()
         val renderer = HtmlRenderer.builder().extensions(extensions).attributeProviderFactory {
             org.commonmark.renderer.html.AttributeProvider { node, _, attributes ->
-                node.sourceSpans.firstOrNull()?.let { span -> attributes["data-source"] = mapping.getOrElse(lines[span.lineIndex] + span.columnIndex + if (text.startsWith("\uFEFF")) 1 else 0) { source.length }.toString() }
+                node.sourceSpans.firstOrNull()?.let { span ->
+                    val bom = if (text.startsWith("\uFEFF")) 1 else 0
+                    val start = mapping.getOrElse(lines[span.lineIndex] + span.columnIndex + bom) { source.length }
+                    val last = node.sourceSpans.last()
+                    val end = mapping.getOrElse(lines[last.lineIndex] + last.columnIndex + last.length + bom) { source.length }
+                    attributes["data-source"] = start.toString(); attributes["data-source-end"] = end.toString()
+                    if (node.parent is org.commonmark.node.Document) ranges?.add(ReadingRange(start, end))
+                }
             }
         }.build()
         val html = renderer.render(parser.parse(projected))
