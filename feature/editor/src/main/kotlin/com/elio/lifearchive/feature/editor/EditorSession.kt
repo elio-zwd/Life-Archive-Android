@@ -5,6 +5,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import com.elio.lifearchive.core.document.*
@@ -25,7 +26,7 @@ class EditorSession(raw: String) {
     val scroll = androidx.compose.foundation.ScrollState(0)
     private val newline = if (raw.contains("\r\n")) "\r\n" else "\n"
     var active by mutableStateOf(true); private set
-    var focusRequest by mutableStateOf(0); private set
+    var focusRequest by mutableIntStateOf(0); private set
     val canModify get() = active && text.composition == null
 
     fun anchor(): EditorAnchor? = if (canModify) EditorAnchor(this, inputEpoch.get(), text.text.toString(), text.selection) else null
