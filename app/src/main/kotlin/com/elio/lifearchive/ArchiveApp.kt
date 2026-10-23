@@ -53,7 +53,7 @@ import kotlinx.serialization.Serializable
 @Serializable internal data class OnlineDestination(val url: String) : NavKey
 
 @Composable
-internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesRepository, values: UserPreferences, debugControls: Boolean, library: LibraryRepository? = null, remote: RemoteCacheRepository? = null, backup: BackupEngine? = null) {
+internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesRepository, values: UserPreferences, debugControls: Boolean, library: LibraryRepository? = null, remote: RemoteCacheRepository? = null, backup: BackupEngine? = null, readerCache: ReaderCacheRepository? = null) {
     val backStack = rememberNavBackStack(remember { NotesHome() })
     val scope = rememberCoroutineScope()
     val pendingTransfers = remember { mutableSetOf<Job>() }
@@ -72,7 +72,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
     LaunchedEffect(backStack.toList()) { homes.keys.retainAll(backStack.filterIsInstance<NotesHome>().toSet()) }
     val activity = LocalActivity.current
     val context = LocalContext.current
-    val settings: SettingsViewModel? = if (library != null && remote != null && backup != null) viewModel(factory = remember(library, remote, backup) { viewModelFactory { initializer { SettingsViewModel(preferences, backup, notes, library, remote) } } }) else null
+    val settings: SettingsViewModel? = if (library != null && remote != null && backup != null) viewModel(factory = remember(library, remote, backup, readerCache) { viewModelFactory { initializer { SettingsViewModel(preferences, backup, notes, library, remote, readerCache) } } }) else null
     if (settings != null) {
         val transferState by settings.state.collectAsStateWithLifecycle()
         LaunchedEffect(transferState.message) { transferState.message?.let { message = it; activeEditor?.message(it) } }
@@ -190,7 +190,10 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 EditorRoute(model, values.fontScale, debugControls,
                     onBack = { if (backStack.lastOrNull() == key) backStack.removeLastOrNull() },
                     onOpenCopy = { if (backStack.lastOrNull() == key) backStack.add(NoteDestination(it.value, true)) },
-                    services = if (library != null && remote != null) ReaderServices(NoteId(key.id), notes, library, remote, values.remoteLoading == RemoteLoading.AUTOMATIC, model::message) else null,
+                    services = if (library != null && remote != null) ReaderServices(NoteId(key.id), notes, library, remote, values.remoteLoading == RemoteLoading.AUTOMATIC, model::message, readerCache) { event ->
+                        model.readerLoaded(event)
+                        if (debugControls) android.util.Log.d("LifeArchiveReader", "phase=${event.phase} note=${key.id} entryMs=${model.openElapsedMs()} pageMs=${event.elapsedMs} htmlHit=${event.cacheHit} artifactHits=${event.artifactHits}")
+                    } else null,
                     onLink = ::openLink, onAttach = { attachmentEntry = key.entry; attachmentPicker.launch(arrayOf("*/*")) },
                     onManage = { scope.launch { val listing = library?.query(); if (backStack.lastOrNull() == key) managed = (listing as? NoteResult.Success)?.value?.notes?.find { it.summary.id.value == key.id } } },
                 )
@@ -201,7 +204,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 if (settings != null) {
                     val state by settings.state.collectAsStateWithLifecycle()
                     SettingsScreen(state, values, onBack = { backStack.removeLastOrNull() }, onTheme = settings::theme, onFont = settings::font, onRemote = settings::remote,
-                        onClearCache = settings::clearCache, onImportFiles = { importPicker.launch(arrayOf("text/markdown", "text/plain", "application/octet-stream")) },
+                        onClearCache = settings::clearCache, onClearReaderCache = settings::clearReaderCache, onImportFiles = { importPicker.launch(arrayOf("text/markdown", "text/plain", "application/octet-stream")) },
                         onImportDirectory = { directoryPicker.launch(null) }, onExport = { pickExport("zip") }, onBackup = { pickExport("backup") },
                         onPickRestore = { backupPicker.launch(arrayOf("application/zip", "application/octet-stream")) }, onRestore = { settings.restore(beforeRestore = {
                             val sessions = editors.values.toList()

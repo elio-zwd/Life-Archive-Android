@@ -22,6 +22,7 @@ data class EditorUiState(
     val pendingDraft: Draft? = null, val draftConflict: Boolean = false,
     val message: String? = null, val busy: Boolean = false,
     val projection: EditorRenderProjection? = null,
+    val path: String? = null, val version: String? = null,
 )
 
 class EditorViewModel(private val repository: NotesRepository, val id: NoteId, startEditing: Boolean, private val location: Int? = null, private val parse: suspend (String) -> ParsedDocument = { text -> withContext(Dispatchers.Default) { MarkdownParser().parse(text) } }) : ViewModel() {
@@ -35,7 +36,10 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
     val initialReadingOffset get() = entryOffset
     private var revision = 0L
     private var retired = false
+    private val prepareHighlight = MutableStateFlow(startEditing)
     private var simulateFailure = false
+    private val openedAt = System.nanoTime()
+    fun openElapsedMs(): Long = (System.nanoTime() - openedAt) / 1_000_000
     private val sessionRepository = object : NotesRepository by repository {
         override suspend fun save(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long?): NoteResult<NoteSnapshot> =
             if (simulateFailure) NoteResult.StorageFailure("样板模拟：正文写入失败") else repository.save(id, expected, document, acknowledgedDraftRevision)
@@ -57,14 +61,15 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
             persistence = EditorPersistence(sessionRepository, read.value, viewModelScope, draft?.revision ?: 0)
             val pending = draft?.takeIf { it.document != read.value.document }
             if (pending != null) persistence?.blockAutomaticSave()
-            mutableState.value = mutableState.value.copy(loading = false, name = read.value.summary.path.value.removeSuffix(".md"), mode = if (pending != null) EditorMode.READ else mutableState.value.mode, pendingDraft = pending, draftConflict = pending != null && pending.baseVersion != read.value.summary.version)
+            mutableState.value = mutableState.value.copy(loading = false, name = read.value.summary.path.value.removeSuffix(".md"), path = read.value.summary.path.value, version = read.value.summary.version.value, mode = if (pending != null) EditorMode.READ else mutableState.value.mode, pendingDraft = pending, draftConflict = pending != null && pending.baseVersion != read.value.summary.version)
             launch {
                 snapshotFlow { newSession.text.text.toString() }.collect { text ->
                     if (mutableState.value.pendingDraft == null) persistence?.changed(text)
                 }
             }
             launch {
-                snapshotFlow { newSession.text.text.toString() }.collectLatest { text ->
+                combine(snapshotFlow { newSession.text.text.toString() }, prepareHighlight) { text, ready -> text to ready }.collectLatest { (text, ready) ->
+                    if (!ready) return@collectLatest
                     val captured = ++revision
                     val previous = mutableState.value.projection
                     val updated = if (previous != null) withContext(Dispatchers.Default) { previous.reparseChangedBlock(text) } else null
@@ -83,7 +88,15 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         if (mode == EditorMode.READ) { readingOffset = editor.text.selection.start; entryOffset = readingOffset }
         else if (mutableState.value.mode == EditorMode.READ) editor.text.edit { selection = TextRange(readingOffset.coerceIn(0, length)) }
         mutableState.value = mutableState.value.copy(mode = mode)
+        if (mode != EditorMode.READ) prepareHighlight.value = true
         if (mode == EditorMode.READ) viewModelScope.launch { flush() }
+    }
+
+    fun readerLoaded(event: ReaderLoadEvent) {
+        if (!retired && event.phase == ReaderLoadPhase.FIRST_SCREEN) viewModelScope.launch {
+            kotlinx.coroutines.delay(200)
+            if (!retired) prepareHighlight.value = true
+        }
     }
 
     fun restoreDraft() {
@@ -95,6 +108,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         session?.text?.edit { replace(0, length, draft.document.text); selection = TextRange(0) }
         persistence?.changed(draft.document.text)
         mutableState.value = mutableState.value.copy(pendingDraft = null, mode = EditorMode.SOURCE, message = "已恢复草稿，继续编辑后自动保存")
+        prepareHighlight.value = true
     }
 
     fun copyDraft(onCreated: (NoteId) -> Unit) {

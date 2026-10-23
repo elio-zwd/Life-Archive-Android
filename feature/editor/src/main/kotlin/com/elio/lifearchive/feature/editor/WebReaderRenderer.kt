@@ -12,6 +12,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.elio.lifearchive.core.document.*
 import com.elio.lifearchive.domain.notes.*
 import java.io.ByteArrayInputStream
@@ -19,7 +21,7 @@ import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class ReaderServices(val id: NoteId, val notes: NotesRepository, val library: LibraryRepository, val remote: RemoteCacheRepository, val automatic: Boolean, val message: (String) -> Unit)
+data class ReaderServices(val id: NoteId, val notes: NotesRepository, val library: LibraryRepository, val remote: RemoteCacheRepository, val automatic: Boolean, val message: (String) -> Unit, val cache: ReaderCacheRepository? = null, val onLoad: (ReaderLoadEvent) -> Unit = {})
 
 object WebReaderRenderer : ReaderRenderer {
     @Composable override fun Content(document: ReaderSnapshot, fontScale: Float, initialOffset: Int, onOffset: (Int) -> Unit, loadImage: suspend (String) -> ByteArray?, onLink: (String) -> Unit, services: ReaderServices?) {
@@ -28,6 +30,8 @@ object WebReaderRenderer : ReaderRenderer {
         val currentOffset by rememberUpdatedState(onOffset)
         val currentLink by rememberUpdatedState(onLink)
         val currentDocument by rememberUpdatedState(document)
+        val currentLoad by rememberUpdatedState(services.onLoad)
+        val documentLoader = remember(services.id, services.notes, services.cache) { ReaderDocumentLoader(services.notes, services.cache, scope) }
         val background = androidx.compose.material3.MaterialTheme.colorScheme.background
         val darkTheme = androidx.compose.material3.MaterialTheme.colorScheme.onBackground.red > background.red
         val initial = remember(services.id) { initialOffset }
@@ -46,6 +50,24 @@ object WebReaderRenderer : ReaderRenderer {
                 settings.domStorageEnabled = false
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 val loader = WebViewAssetLoader.Builder().addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(context)).build()
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) WebViewCompat.addWebMessageListener(this, "ReaderCache", setOf("https://appassets.androidplatform.net")) { view, message, origin, mainFrame, reply ->
+                    val raw = runCatching { message.data }.getOrNull() ?: return@addWebMessageListener
+                    if (view.tag == null || raw.length > 8 * 1024 * 1024 + 2048) return@addWebMessageListener
+                    val captured = currentDocument.revision
+                    scope.launch(Dispatchers.Default) {
+                        val value = runCatching { JSONObject(raw) }.getOrNull() ?: return@launch
+                        if (!ReaderCacheMessages.allowed(mainFrame, origin.toString(), captured, value)) return@launch
+                        val valid = withContext(Dispatchers.Main) { view.tag != null && captured == currentDocument.revision }
+                        if (!valid) return@launch
+                        if (value.optString("type") == "phase") {
+                            val phase = runCatching { ReaderLoadPhase.valueOf(value.getString("phase")) }.getOrNull() ?: return@launch
+                            withContext(Dispatchers.Main) { if (view.tag != null && captured == currentDocument.revision) currentLoad(ReaderLoadEvent(phase, captured, value.optLong("elapsed").coerceIn(0, 3600000), value.optBoolean("cacheHit"), value.optInt("artifactHits").coerceAtLeast(0))) }
+                        } else if (value.optString("type") == "cache-put" && services.cache != null) {
+                            val accepted = try { ReaderCacheMessages.put(value, services.cache) } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
+                            withContext(Dispatchers.Main) { if (view.tag != null && captured == currentDocument.revision && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) reply.postMessage(JSONObject().put("request", value.optString("request")).put("accepted", accepted).toString()) }
+                        }
+                    }
+                }
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView, url: String) { if (view.tag != null) view.evaluateJavascript("window.readerUpdate?.($currentConfiguration)", null) }
                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
@@ -56,14 +78,26 @@ object WebReaderRenderer : ReaderRenderer {
                                 when (uri.path) {
                                     "/reader/document" -> {
                                         val id = NoteId(uri.getQueryParameter("note") ?: services.id.value)
-                                        val snapshot = services.notes.read(id)
-                                        if (snapshot !is NoteResult.Success) return@runBlocking missing()
                                         val captured = currentDocument
                                         if (id == services.id && uri.getQueryParameter("revision")?.let { it != captured.revision } == true) return@runBlocking missing()
-                                        val source = if (id == services.id) captured.source else snapshot.value.document.text
-                                        val analysis = DocumentAnalyzer.analyze(source)
-                                        json(JSONObject().put("id", id.value).put("revision", if (id == services.id) captured.revision else snapshot.value.summary.version.value).put("path", snapshot.value.summary.path.value).put("html", HtmlProjection.render(source))
-                                            .put("blocks", JSONArray(analysis.blocks.map { JSONObject().put("name", it.name).put("start", it.start).put("end", it.end) })))
+                                        documentLoader.load(id, services.id, captured)?.let(::json) ?: missing()
+                                    }
+                                    "/reader/render-cache" -> {
+                                        val cache = services.cache ?: return@runBlocking json(JSONObject())
+                                        val token = ReaderCacheToken(uri.getQueryParameter("namespace").orEmpty())
+                                        val kind = runCatching { ReaderArtifactKind.valueOf(uri.getQueryParameter("kind").orEmpty()) }.getOrNull()
+                                        if (kind == null || kind == ReaderArtifactKind.HTML) return@runBlocking json(JSONObject())
+                                        val value = cache.get(token, ReaderArtifactKey(kind, uri.getQueryParameter("key").orEmpty()))
+                                        json(JSONObject().put("value", value))
+                                    }
+                                    "/reader/resource-info" -> {
+                                        val path = LibraryPath(uri.getQueryParameter("path") ?: return@runBlocking missing())
+                                        val result = services.library.openResource(path, 0, null) as? NoteResult.Success ?: return@runBlocking missing()
+                                        result.value.stream.use { input ->
+                                            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                            android.graphics.BitmapFactory.decodeStream(input, null, bounds)
+                                            json(JSONObject().put("width", bounds.outWidth.coerceAtLeast(0)).put("height", bounds.outHeight.coerceAtLeast(0)))
+                                        }
                                     }
                                     "/reader/resolve" -> {
                                         val syntax = runCatching { LinkSyntax.valueOf(uri.getQueryParameter("syntax") ?: "WIKI") }.getOrDefault(LinkSyntax.WIKI)
@@ -98,7 +132,10 @@ object WebReaderRenderer : ReaderRenderer {
                         if (uri.host == "appassets.androidplatform.net" && uri.path == "/reader/action") {
                             if (uri.getQueryParameter("revision") != currentDocument.revision) return true
                             when (uri.getQueryParameter("type")) {
-                                "ready" -> if (uri.getQueryParameter("revision") == currentDocument.revision) { readyRevision = currentDocument.revision; revealed = true; view.alpha = 1f }
+                                "ready" -> if (uri.getQueryParameter("revision") == currentDocument.revision) {
+                                    readyRevision = currentDocument.revision; revealed = true; view.alpha = 1f
+                                    currentLoad(ReaderLoadEvent(ReaderLoadPhase.FIRST_SCREEN, currentDocument.revision, uri.getQueryParameter("value")?.toLongOrNull() ?: 0, uri.getQueryParameter("cacheHit") == "true", uri.getQueryParameter("artifactHits")?.toIntOrNull() ?: 0))
+                                }
                                 "error" -> if (uri.getQueryParameter("revision") == currentDocument.revision) { revealed = true; view.alpha = 1f }
                                 "link" -> {
                                     val value = uri.getQueryParameter("value").orEmpty()

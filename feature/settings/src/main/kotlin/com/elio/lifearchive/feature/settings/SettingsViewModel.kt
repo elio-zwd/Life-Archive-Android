@@ -14,12 +14,16 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-data class SettingsUiState(val busy: Boolean = false, val message: String? = null, val cacheBytes: Long = 0, val restore: PreparedRestore? = null, val importing: PreparedImport? = null)
-class SettingsViewModel(private val preferences: PreferencesRepository, private val backup: BackupEngine, private val notes: NotesRepository, private val library: LibraryRepository, private val cache: RemoteCacheRepository) : ViewModel() {
+data class SettingsUiState(val busy: Boolean = false, val message: String? = null, val cacheBytes: Long = 0, val restore: PreparedRestore? = null, val importing: PreparedImport? = null, val readerCacheBytes: Long = 0, val readerMemoryBytes: Long = 0)
+class SettingsViewModel(private val preferences: PreferencesRepository, private val backup: BackupEngine, private val notes: NotesRepository, private val library: LibraryRepository, private val cache: RemoteCacheRepository, private val readerCache: ReaderCacheRepository? = null) : ViewModel() {
     private val mutable = MutableStateFlow(SettingsUiState())
     val state = mutable.asStateFlow()
     init { refreshCache() }
-    fun refreshCache() { viewModelScope.launch { val bytes = cache.size(); mutable.value = state.value.copy(cacheBytes = bytes) } }
+    fun refreshCache() { viewModelScope.launch {
+        val bytes = cache.size()
+        val reading = runCatching { readerCache?.usage() }.getOrNull()
+        mutable.value = state.value.copy(cacheBytes = bytes, readerCacheBytes = reading?.diskBytes ?: 0, readerMemoryBytes = reading?.memoryBytes ?: 0)
+    } }
     private fun run(action: suspend () -> String) {
         if (state.value.busy) return
         mutable.value = state.value.copy(busy = true, message = null)
@@ -34,6 +38,7 @@ class SettingsViewModel(private val preferences: PreferencesRepository, private 
     fun font(value: Float) = run { preferences.setFontScale(value); "字号已保存" }
     fun remote(value: RemoteLoading) = run { preferences.setRemoteLoading(value); "远程加载设置已保存" }
     fun clearCache() = run { cache.clear(); mutable.value = state.value.copy(cacheBytes = 0); "已清理远程资源及网页副本，笔记和附件不受影响" }
+    fun clearReaderCache() = run { readerCache?.clear(); mutable.value = state.value.copy(readerCacheBytes = 0, readerMemoryBytes = 0); "已清理阅读加速缓存，后续按需重新生成" }
     fun exportBackup(open: () -> OutputStream?) = run { withContext(Dispatchers.IO) { (open() ?: error("无法创建备份文件")).use { backup.export(it) } }; "完整备份导出成功" }
     fun prepareRestore(open: () -> InputStream?) = run {
         val prepared = withContext(Dispatchers.IO) { (open() ?: error("无法读取备份")).use { backup.prepare(it) } }
@@ -44,6 +49,8 @@ class SettingsViewModel(private val preferences: PreferencesRepository, private 
         val prepared = state.value.restore ?: error("请先选择备份")
         check(beforeRestore()) { "当前编辑内容尚未安全保存，未替换资料" }
         try {
+            // 替换前使派生任务失效；缓存失败不能让已结束的会话重新写入。
+            readerCache?.clear()
             when (val result = backup.commit(prepared)) {
                 is RestoreResult.Committed -> {
                     val initialized = notes.initialize()

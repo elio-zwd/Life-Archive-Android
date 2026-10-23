@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 import com.elio.lifearchive.core.preferences.*
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun SettingsScreen(state: SettingsUiState, preferences: UserPreferences, onBack: () -> Unit, onTheme: (ThemeMode) -> Unit, onFont: (Float) -> Unit, onRemote: (RemoteLoading) -> Unit, onClearCache: () -> Unit, onImportFiles: () -> Unit, onImportDirectory: () -> Unit, onExport: () -> Unit, onBackup: () -> Unit, onPickRestore: () -> Unit, onRestore: () -> Unit, onCancelRestore: () -> Unit, onImport: () -> Unit, onCancelImport: () -> Unit) {
+@Composable fun SettingsScreen(state: SettingsUiState, preferences: UserPreferences, onBack: () -> Unit, onTheme: (ThemeMode) -> Unit, onFont: (Float) -> Unit, onRemote: (RemoteLoading) -> Unit, onClearCache: () -> Unit, onImportFiles: () -> Unit, onImportDirectory: () -> Unit, onExport: () -> Unit, onBackup: () -> Unit, onPickRestore: () -> Unit, onRestore: () -> Unit, onCancelRestore: () -> Unit, onImport: () -> Unit, onCancelImport: () -> Unit, onClearReaderCache: () -> Unit = {}) {
     BackHandler(enabled = state.busy) { }
     Scaffold(topBar = { TopAppBar(title = { Text("设置与资料管理") }, navigationIcon = { TextButton(onClick = onBack, enabled = !state.busy) { Text("返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -22,6 +22,10 @@ import com.elio.lifearchive.core.preferences.*
             Text("字号：${(preferences.fontScale * 100).toInt()}%")
             var scale by remember(preferences.fontScale) { mutableFloatStateOf(preferences.fontScale) }
             Slider(value = scale.coerceIn(.5f, 3f), onValueChange = { scale = it }, onValueChangeFinished = { onFont(scale) }, valueRange = .5f..3f, enabled = !state.busy)
+            HorizontalDivider(); Text("阅读加速", style = MaterialTheme.typography.titleMedium)
+            Text("已打开内容按需缓存；正文、草稿和附件不受清理影响，不进入完整备份。")
+            Text("磁盘 ${(state.readerCacheBytes / 1024 / 1024)} MiB / 256 MiB · 内存 ${(state.readerMemoryBytes / 1024 / 1024)} MiB / 32 MiB")
+            OutlinedButton(onClick = onClearReaderCache, enabled = !state.busy) { Text("清理阅读加速缓存") }
             HorizontalDivider(); Text("远程内容", style = MaterialTheme.typography.titleMedium)
             Text("本地笔记、公式、图表与库内附件始终离线可用。远程资源及网页正文副本属于可清理缓存。")
             Row { RemoteLoading.entries.forEach { mode -> TextButton(onClick = { onRemote(mode) }, enabled = !state.busy) { Text((if (mode == preferences.remoteLoading) "✓ " else "") + if (mode == RemoteLoading.MANUAL) "手动加载" else "自动缓存") } } }

@@ -17,6 +17,7 @@ import com.elio.lifearchive.core.preferences.PreferencesRepository
 import com.elio.lifearchive.domain.notes.NotesRepository
 import com.elio.lifearchive.domain.notes.LibraryRepository
 import com.elio.lifearchive.domain.notes.RemoteCacheRepository
+import com.elio.lifearchive.domain.notes.ReaderCacheRepository
 import com.elio.lifearchive.core.backup.BackupEngine
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
     @Inject internal lateinit var preferences: PreferencesRepository
     @Inject internal lateinit var library: LibraryRepository
     @Inject internal lateinit var remote: RemoteCacheRepository
+    @Inject internal lateinit var readerCache: ReaderCacheRepository
     @Inject internal lateinit var backup: BackupEngine
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,7 +47,7 @@ class MainActivity : ComponentActivity() {
                 when {
                     state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
                     !state.ready -> Scaffold { Text("正在恢复本地状态…", modifier = androidx.compose.ui.Modifier.padding(it)) }
-                    else -> ArchiveApp(notes, preferences, state.preferences, variant.debugControls, library, remote, backup)
+                    else -> ArchiveApp(notes, preferences, state.preferences, variant.debugControls, library, remote, backup, readerCache)
                 }
             }
         }

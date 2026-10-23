@@ -24,7 +24,13 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-data class ReaderSnapshot(val source: String, val revision: String = java.util.UUID.randomUUID().toString())
+data class ReaderSnapshot(val source: String, val revision: String = java.util.UUID.randomUUID().toString(), val path: String? = null, val version: String? = null) {
+    // 由读取投影的后台任务首次计算，不在 Compose 重组中遍历长文。
+    val digest: String by lazy { com.elio.lifearchive.core.document.documentDigest(source) }
+}
+
+enum class ReaderLoadPhase { BODY, FIRST_SCREEN, IDLE }
+data class ReaderLoadEvent(val phase: ReaderLoadPhase, val revision: String, val elapsedMs: Long, val cacheHit: Boolean, val artifactHits: Int = 0)
 interface ReaderRenderer {
     @Composable fun Content(document: ReaderSnapshot, fontScale: Float, initialOffset: Int, onOffset: (Int) -> Unit, loadImage: suspend (String) -> ByteArray?, onLink: (String) -> Unit, services: ReaderServices? = null)
 }

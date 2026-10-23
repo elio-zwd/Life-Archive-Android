@@ -143,7 +143,7 @@ fun EditorScreen(
                         else LinearProgressIndicator(Modifier.fillMaxWidth())
                     } else {
                         val raw = session.text.text.toString()
-                        val snapshot = remember(session, raw) { ReaderSnapshot(raw) }
+                        val snapshot = remember(session, raw, state.path) { ReaderSnapshot(raw, path = state.path, version = state.version) }
                         readerRenderer.Content(snapshot, fontScale, initialReadingOffset, onReadingOffset, loadImage, onLink, services)
                     }
                 }
