@@ -94,9 +94,11 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> if (uris.isNotEmpty()) libraryOperation { try { settings?.prepareImport(withContext(Dispatchers.IO) { selectedEntries(context, uris) }) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { message = "所选文件不可读取：${e.message}" } } }
     val directoryPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> if (uri != null) libraryOperation { try { settings?.prepareImport(directoryEntries(context, uri)) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { message = "目录读取失败：${e.message}" } } }
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val requestedEntry = attachmentEntry
+        attachmentEntry = null
         if (uri != null) {
             val origin = backStack.lastOrNull() as? NoteDestination
-            val editor = activeEditor?.takeIf { origin != null && origin.entry == attachmentEntry && it.id.value == origin.id }
+            val editor = activeEditor?.takeIf { origin != null && origin.entry == requestedEntry && it.id.value == origin.id }
             if (editor == null) { message = "笔记会话已变化，本次未导入附件，请重新选择"; return@rememberLauncherForActivityResult }
             libraryOperation {
                 try {
@@ -110,7 +112,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 } catch (e: kotlinx.coroutines.CancellationException) { throw e }
                 catch (e: Exception) { if (activeEditor === editor) editor.message("附件导入失败：${e.message}") else message = "附件导入失败：${e.message}" }
             }
-        }
+        } else activeEditor?.cancelAttachment()
     }
     fun pickExport(type: String, id: String? = null) {
         exportType = type; exportId = id
@@ -184,7 +186,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 )
             }
             entry<NoteDestination> { key ->
-                val factory = remember(notes, key) { viewModelFactory { initializer { EditorViewModel(notes, NoteId(key.id), key.editing, key.offset) } } }
+                val factory = remember(notes, library, key) { viewModelFactory { initializer { EditorViewModel(notes, NoteId(key.id), key.editing, key.offset, library = library) } } }
                 val model: EditorViewModel = viewModel(factory = factory)
                 SideEffect { editors[key.entry] = model; if (backStack.lastOrNull() == key) activeEditor = model }
                 EditorRoute(model, values.fontScale, debugControls,
@@ -194,7 +196,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                         model.readerLoaded(event)
                         if (debugControls) android.util.Log.d("LifeArchiveReader", "phase=${event.phase} note=${key.id} entryMs=${model.openElapsedMs()} pageMs=${event.elapsedMs} htmlHit=${event.cacheHit} artifactHits=${event.artifactHits}")
                     } else null,
-                    onLink = ::openLink, onAttach = { attachmentEntry = key.entry; attachmentPicker.launch(arrayOf("*/*")) },
+                    onLink = ::openLink, onAttach = { if (model.prepareAttachment()) { attachmentEntry = key.entry; attachmentPicker.launch(arrayOf("*/*")) } },
                     onManage = { scope.launch { val listing = library?.query(); if (backStack.lastOrNull() == key) managed = (listing as? NoteResult.Success)?.value?.notes?.find { it.summary.id.value == key.id } } },
                 )
             }

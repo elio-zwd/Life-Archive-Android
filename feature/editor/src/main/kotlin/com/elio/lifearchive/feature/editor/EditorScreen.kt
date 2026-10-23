@@ -1,9 +1,7 @@
 package com.elio.lifearchive.feature.editor
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -24,6 +22,7 @@ import kotlinx.coroutines.launch
 fun EditorRoute(model: EditorViewModel, fontScale: Float, debugControls: Boolean, onBack: () -> Unit, onOpenCopy: (NoteId) -> Unit, services: ReaderServices? = null, onLink: ((String) -> Unit)? = null, onAttach: () -> Unit = {}, onManage: () -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val coordinator = model.persistence
+    val tools = remember(model) { EditorToolActions(model::command, model::beginInsertion, model::dismissInsertion, model::reanchorInsertion, model::editInsertion, model::searchLinkNotes, model::insertExternal, model::insertTemplateFromPrompt, model::insertNoteLink, model::reinsertAttachment) }
     val status = if (coordinator == null) SaveStatus() else coordinator.status.collectAsStateWithLifecycle().value
     val lifecycle = LocalLifecycleOwner.current
     BackHandler { model.leave(onBack) }
@@ -39,7 +38,7 @@ fun EditorRoute(model: EditorViewModel, fontScale: Float, debugControls: Boolean
         onCopy = { model.copyDraft(onOpenCopy) }, onFailureSimulation = model::setSimulatedFailure,
         initialReadingOffset = model.initialReadingOffset, onReadingOffset = model::readingPosition,
         loadImage = model::image, onLink = onLink ?: { model.message("链接目标：$it") }, services = services,
-        onAttach = onAttach, onManage = onManage,
+        onAttach = onAttach, onManage = onManage, toolActions = tools,
     )
 }
 
@@ -53,11 +52,11 @@ fun EditorScreen(
     loadImage: suspend (String) -> ByteArray? = { null }, onLink: (String) -> Unit = {},
     editorEngine: EditorEngine = ComposeEditorEngine, readerRenderer: ReaderRenderer = WebReaderRenderer,
     services: ReaderServices? = null, onAttach: () -> Unit = {}, onManage: () -> Unit = {},
+    toolActions: EditorToolActions? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     var modes by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
-    var expandedTools by rememberSaveable { mutableStateOf(false) }
     var failure by rememberSaveable { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     val editing = state.mode != EditorMode.READ
@@ -69,7 +68,7 @@ fun EditorScreen(
                     navigationIcon = { TextButton(onClick = onBack, enabled = !state.busy) { Text("返回") } },
                     title = { TextButton(onClick = onManage) { Text(state.name.ifBlank { "笔记" }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold) } },
                     actions = {
-                        TextButton(onClick = onAttach, enabled = state.pendingDraft == null) { Text("附件") }
+                        TextButton(onClick = onAttach, enabled = state.pendingDraft == null && !state.busy && !state.commandRunning && session?.canModify == true) { Text("附件") }
                         Box {
                             TextButton(onClick = { modes = true }) { Text(if (state.mode == EditorMode.LIVE) "实时预览" else state.mode.label) }
                             DropdownMenu(expanded = modes, onDismissRequest = { modes = false }) {
@@ -93,27 +92,9 @@ fun EditorScreen(
             }
         },
         bottomBar = {
-            if (editing && session != null) Surface(color = colors.surfaceContainer, tonalElevation = 0.dp) {
-                Column {
-                    HorizontalDivider(color = colors.outlineVariant)
-                    if (expandedTools) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
-                        TextButton(onClick = { session.format(FormatAction.BOLD) }) { Text("加粗") }
-                        TextButton(onClick = { session.format(FormatAction.ITALIC) }) { Text("斜体") }
-                        TextButton(onClick = { session.format(FormatAction.QUOTE) }) { Text("引用") }
-                        TextButton(onClick = { session.format(FormatAction.CODE) }) { Text("行内代码") }
-                    }
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp)) {
-                        TextButton(onClick = session::undo) { Text("撤销") }
-                        TextButton(onClick = session::redo) { Text("重做") }
-                        TextButton(onClick = { session.format(FormatAction.HEADING) }) { Text("标题") }
-                        TextButton(onClick = { session.format(FormatAction.BULLET) }) { Text("列表") }
-                        TextButton(onClick = { session.format(FormatAction.TASK) }) { Text("待办") }
-                        TextButton(onClick = { expandedTools = !expandedTools }) { Text(if (expandedTools) "收起格式" else "格式") }
-                        TextButton(onClick = { keyboard?.hide() }) { Text("收起键盘") }
-                    }
-                    Spacer(Modifier.navigationBarsPadding())
-                }
-            }
+            if (editing && session != null) EditorToolbar(session, !state.busy && !state.commandRunning && state.pendingDraft == null, state.projection?.document ?: state.parsed,
+                onCommand = { command, anchor -> if (toolActions != null) toolActions.command(command, anchor) else { session.command(command, anchor); Unit } },
+                onInsert = toolActions?.begin ?: {}, onAttach = onAttach)
         },
         floatingActionButton = { if (!editing && session != null && state.pendingDraft == null) ExtendedFloatingActionButton(onClick = { onMode(EditorMode.SOURCE) }) { Text("编辑笔记") } },
     ) { padding ->
@@ -135,6 +116,7 @@ fun EditorScreen(
                 if (save.conflict) TextButton(onClick = onCopy, enabled = !state.busy) { Text("将当前内容另存为新笔记") }
             }
             if (state.message != null) Text(state.message, style = MaterialTheme.typography.bodySmall, color = colors.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            if (state.attachmentToInsert != null) TextButton(onClick = { toolActions?.reinsertAttachment?.invoke() }, enabled = editing && !state.busy && !state.commandRunning && session?.canModify == true) { Text("将附件插入当前光标") }
             if (state.mode == EditorMode.LIVE && session != null && session.text.text.length > FULL_PREVIEW_LIMIT) Text("长文实时样式仅覆盖光标附近，完整原文仍可编辑", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             Box(Modifier.weight(1f)) {
                 if (session != null) {
@@ -150,4 +132,5 @@ fun EditorScreen(
             }
         }
     }
+    if (toolActions != null) EditorInsertionDialog(state, toolActions)
 }

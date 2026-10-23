@@ -55,6 +55,7 @@ object ComposeEditorEngine : EditorEngine {
                         TextMark.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
                         TextMark.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
                         TextMark.STRIKE -> SpanStyle(textDecoration = TextDecoration.LineThrough)
+                        TextMark.HIGHLIGHT -> SpanStyle(background = colors.tertiaryContainer, color = colors.onTertiaryContainer)
                         TextMark.CODE -> SpanStyle(fontFamily = FontFamily.Monospace, background = colors.surfaceContainerHighest)
                         TextMark.HEADING -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = (23 * fontScale).sp)
                         TextMark.LINK -> SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline)
@@ -68,15 +69,15 @@ object ComposeEditorEngine : EditorEngine {
         }
         BasicTextField(
             state = session.text,
-            enabled = enabled,
+            enabled = enabled && session.active,
             modifier = Modifier.fillMaxSize().testTag("editor-body").focusRequester(focus).padding(horizontal = 22.dp, vertical = 16.dp),
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = colors.onSurface, fontSize = (17 * fontScale).sp, lineHeight = (29 * fontScale).sp,
                 fontFamily = if (mode == EditorMode.SOURCE) FontFamily.Monospace else FontFamily.Default,
             ),
-            cursorBrush = SolidColor(colors.primary), outputTransformation = transformation, scrollState = session.scroll,
+            cursorBrush = SolidColor(colors.primary), inputTransformation = session.continuation, outputTransformation = transformation, scrollState = session.scroll,
         )
-        LaunchedEffect(requestFocus) { if (requestFocus) { focus.requestFocus(); keyboard?.show() } }
+        LaunchedEffect(requestFocus, session.focusRequest) { if (requestFocus && session.active) { focus.requestFocus(); keyboard?.show() } }
     }
 }
 

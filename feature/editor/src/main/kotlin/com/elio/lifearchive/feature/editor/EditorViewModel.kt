@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.elio.lifearchive.core.document.LibraryPath
 import com.elio.lifearchive.core.document.DocumentVersion
 import com.elio.lifearchive.core.document.RawDocument
+import com.elio.lifearchive.core.document.*
 import com.elio.lifearchive.domain.notes.*
 import java.io.ByteArrayOutputStream
 import java.util.UUID
@@ -23,9 +24,16 @@ data class EditorUiState(
     val message: String? = null, val busy: Boolean = false,
     val projection: EditorRenderProjection? = null,
     val path: String? = null, val version: String? = null,
+    val commandRunning: Boolean = false, val insertion: EditorInsertion? = null,
+    val linkChoices: List<NoteLinkChoice> = emptyList(), val linkLoading: Boolean = false,
+    val insertionError: String? = null, val attachmentToInsert: String? = null,
 )
 
-class EditorViewModel(private val repository: NotesRepository, val id: NoteId, startEditing: Boolean, private val location: Int? = null, private val parse: suspend (String) -> ParsedDocument = { text -> withContext(Dispatchers.Default) { MarkdownParser().parse(text) } }) : ViewModel() {
+enum class EditorInsertKind { EXTERNAL_LINK, WIKI_LINK, CODE_BLOCK, CALLOUT }
+data class EditorInsertion(val key: String, val kind: EditorInsertKind, val anchor: EditorAnchor, val label: String = "", val target: String = "", val parameter: String = "", val query: String = "", val selected: NoteLinkChoice? = null, val markdown: Boolean = false)
+data class NoteLinkChoice(val id: NoteId, val path: String, val title: String?)
+
+class EditorViewModel(private val repository: NotesRepository, val id: NoteId, startEditing: Boolean, private val location: Int? = null, private val parse: suspend (String) -> ParsedDocument = { text -> withContext(Dispatchers.Default) { MarkdownParser().parse(text) } }, private val library: LibraryRepository? = null) : ViewModel() {
     private val mutableState = MutableStateFlow(EditorUiState(mode = if (startEditing) EditorMode.SOURCE else EditorMode.READ))
     val state = mutableState.asStateFlow()
     var session by mutableStateOf<EditorSession?>(null); private set
@@ -39,6 +47,8 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
     private val prepareHighlight = MutableStateFlow(startEditing)
     private var simulateFailure = false
     private val openedAt = System.nanoTime()
+    private var linkRequest = 0L
+    private var attachmentAnchor: EditorAnchor? = null
     fun openElapsedMs(): Long = (System.nanoTime() - openedAt) / 1_000_000
     private val sessionRepository = object : NotesRepository by repository {
         override suspend fun save(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long?): NoteResult<NoteSnapshot> =
@@ -85,6 +95,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         if (retired) return
         if (mutableState.value.pendingDraft != null && mode != EditorMode.READ) return
         val editor = session ?: return
+        dismissInsertion()
         if (mode == EditorMode.READ) { readingOffset = editor.text.selection.start; entryOffset = readingOffset }
         else if (mutableState.value.mode == EditorMode.READ) editor.text.edit { selection = TextRange(readingOffset.coerceIn(0, length)) }
         mutableState.value = mutableState.value.copy(mode = mode)
@@ -125,6 +136,105 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
     fun readingPosition(offset: Int) { if (!retired) readingOffset = offset.coerceAtLeast(0) }
     fun message(value: String) { if (!retired) mutableState.value = mutableState.value.copy(message = value) }
     fun clearMessage() { mutableState.value = mutableState.value.copy(message = null) }
+    private fun editable(): Boolean = !retired && !state.value.busy && state.value.pendingDraft == null && state.value.mode != EditorMode.READ && session?.canModify == true
+
+    fun command(command: MarkdownCommand, anchor: EditorAnchor? = session?.anchor()) {
+        performCommand(command, anchor)
+    }
+    private fun performCommand(command: MarkdownCommand, anchor: EditorAnchor?, onApplied: () -> Unit = {}) {
+        if (!editable() || state.value.commandRunning || anchor == null) return
+        val editor = session ?: return
+        val prompt = state.value.insertion
+        mutableState.value = state.value.copy(commandRunning = true)
+        viewModelScope.launch {
+            try {
+                val edit = withContext(Dispatchers.Default) { editor.calculate(anchor, command) }
+                if (!editable() || session !== editor) return@launch
+                if (prompt != null && state.value.insertion != prompt) {
+                    if (state.value.insertion != null) mutableState.value = state.value.copy(insertionError = "插入内容已变化，请重新确认")
+                    return@launch
+                }
+                val error = editor.apply(anchor, edit)
+                mutableState.value = state.value.copy(message = error, insertionError = error)
+                if (error == null) { onApplied(); dismissInsertion() }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (_: Exception) { message("格式操作未完成，原文保持不变，请重试") }
+            finally { if (!retired) mutableState.value = state.value.copy(commandRunning = false) }
+        }
+    }
+
+    fun beginInsertion(kind: EditorInsertKind) {
+        if (!editable() || state.value.commandRunning) return
+        val anchor = session?.anchor() ?: return
+        mutableState.value = state.value.copy(insertion = EditorInsertion(UUID.randomUUID().toString(), kind, anchor, label = anchor.source.substring(anchor.selection.min, anchor.selection.max), parameter = if (kind == EditorInsertKind.CALLOUT) "NOTE" else ""), insertionError = null, linkChoices = emptyList())
+        if (kind == EditorInsertKind.WIKI_LINK) searchLinkNotes("")
+    }
+    fun dismissInsertion() {
+        linkRequest++
+        if (state.value.insertion != null) session?.requestInputFocus()
+        mutableState.value = state.value.copy(insertion = null, linkChoices = emptyList(), linkLoading = false, insertionError = null)
+    }
+    fun reanchorInsertion() {
+        if (!editable()) return
+        val anchor = session?.anchor() ?: return
+        mutableState.value = state.value.copy(insertion = state.value.insertion?.copy(anchor = anchor), insertionError = null)
+    }
+    fun editInsertion(update: (EditorInsertion) -> EditorInsertion) {
+        val old = state.value.insertion ?: return
+        val changed = update(old)
+        mutableState.value = state.value.copy(insertion = changed.copy(key = old.key, kind = old.kind, anchor = old.anchor), insertionError = null)
+    }
+    fun searchLinkNotes(query: String) {
+        val request = state.value.insertion?.takeIf { it.kind == EditorInsertKind.WIKI_LINK } ?: return
+        val sequence = ++linkRequest
+        mutableState.value = state.value.copy(linkLoading = true, insertionError = null, insertion = request.copy(query = query, selected = null))
+        viewModelScope.launch {
+            val result = try { library?.query(NotesQuery(text = query)) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+            if (retired || sequence != linkRequest || state.value.insertion?.key != request.key) return@launch
+            mutableState.value = state.value.copy(linkLoading = false,
+                linkChoices = (result as? NoteResult.Success)?.value?.notes?.map { NoteLinkChoice(it.summary.id, it.summary.path.value, it.title) }.orEmpty(),
+                insertionError = if (result is NoteResult.Success) null else "查询笔记失败，请重试")
+        }
+    }
+    fun insertExternal(label: String, target: String) {
+        val prompt = state.value.insertion?.takeIf { it.kind == EditorInsertKind.EXTERNAL_LINK } ?: return
+        val markup = try { MarkdownReferences.external(label, target) } catch (e: IllegalArgumentException) { mutableState.value = state.value.copy(insertionError = e.message); return }
+        command(MarkdownCommand.InsertLink(markup), prompt.anchor)
+    }
+    fun insertTemplateFromPrompt(parameter: String) {
+        val prompt = state.value.insertion?.takeIf { it.kind == EditorInsertKind.CODE_BLOCK || it.kind == EditorInsertKind.CALLOUT } ?: return
+        val kind = if (prompt.kind == EditorInsertKind.CODE_BLOCK) InsertTemplate.CODE_BLOCK else InsertTemplate.CALLOUT
+        command(MarkdownCommand.Template(kind, parameter), prompt.anchor)
+    }
+    fun insertNoteLink(choice: NoteLinkChoice, label: String, markdown: Boolean = false) {
+        val prompt = state.value.insertion?.takeIf { it.kind == EditorInsertKind.WIKI_LINK } ?: return
+        if (!editable() || state.value.commandRunning) return
+        viewModelScope.launch {
+            val latest = try { repository.read(choice.id) as? NoteResult.Success } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+            if (!editable() || state.value.insertion != prompt) return@launch
+            if (latest == null) { mutableState.value = state.value.copy(insertionError = "目标笔记已不可用，请重新选择"); return@launch }
+            val path = latest.value.summary.path
+            val display = label.ifBlank { path.value.substringAfterLast('/').removeSuffix(".md") }
+            val wiki = MarkdownReferences.wiki(path, display)
+            if (!markdown && wiki == null) { mutableState.value = state.value.copy(insertionError = "此名称不适合双链，请选择下方的 Markdown 链接方式"); return@launch }
+            val from = state.value.path?.let(::LibraryPath) ?: return@launch
+            val target = if (markdown) MarkdownReferences.relative(from, path, label) else wiki!!
+            val syntax = if (markdown) LinkSyntax.MARKDOWN else LinkSyntax.WIKI
+            val linkTarget = if (markdown) DocumentAnalyzer.analyze(target).links.singleOrNull()?.target else path.value
+            val resolved = try { linkTarget?.let { library?.resolve(id, it, syntax) } as? NoteResult.Success } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+            if (!editable() || state.value.insertion != prompt) return@launch
+            if (resolved?.value?.note != choice.id) { mutableState.value = state.value.copy(insertionError = "无法确认链接目标，请刷新后重新选择"); return@launch }
+            command(MarkdownCommand.InsertLink(target), prompt.anchor)
+        }
+    }
+
+    fun prepareAttachment(): Boolean {
+        if (retired || state.value.busy || state.value.commandRunning || state.value.pendingDraft != null || session?.canModify != true) return false
+        if (state.value.mode == EditorMode.READ) changeMode(EditorMode.SOURCE)
+        attachmentAnchor = session?.anchor()
+        return attachmentAnchor != null
+    }
+    fun cancelAttachment() { attachmentAnchor = null }
     fun applyTags(tags: List<String>): Boolean {
         if (retired) return false
         if (state.value.pendingDraft != null) { message("请先处理草稿"); return false }
@@ -138,10 +248,25 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
     }
     fun insertAttachment(path: String) {
         if (retired) return
-        if (state.value.pendingDraft != null) { message("请先处理草稿"); return }
-        if (session?.text?.composition != null) { message("附件已入库，请完成输入后插入：$path"); return }
-        changeMode(EditorMode.SOURCE)
-        session?.text?.edit { val at = selection.min; replace(selection.min, selection.max, "![[${path}]]"); selection = TextRange(at + path.length + 5) }
+        val anchor = attachmentAnchor
+        attachmentAnchor = null
+        if (!editable() || anchor == null || session?.matches(anchor) != true) {
+            mutableState.value = state.value.copy(attachmentToInsert = path, message = "附件已入库，原插入位置已变化，可选择插入当前光标")
+            return
+        }
+        insertAttachmentAt(path, anchor)
+    }
+    fun reinsertAttachment() {
+        if (!editable()) return
+        val path = state.value.attachmentToInsert ?: return
+        session?.anchor()?.let { insertAttachmentAt(path, it) }
+    }
+    private fun insertAttachmentAt(path: String, anchor: EditorAnchor) {
+        val from = state.value.path?.let(::LibraryPath) ?: return
+        val target = runCatching { LibraryPath(path) }.getOrNull() ?: return
+        val markup = MarkdownReferences.wiki(target, embed = true) ?: MarkdownReferences.relative(from, target, embed = true)
+        mutableState.value = state.value.copy(attachmentToInsert = path)
+        performCommand(MarkdownCommand.InsertLink(markup), anchor) { mutableState.value = state.value.copy(attachmentToInsert = null) }
     }
     fun backgroundSave() { viewModelScope.launch { flush() } }
 
@@ -175,6 +300,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
     suspend fun retire(): Boolean {
         if (!flush()) return false
         retired = true
+        session?.close()
         viewModelScope.coroutineContext[kotlinx.coroutines.Job]?.cancelAndJoin()
         return true
     }
