@@ -1,5 +1,16 @@
 # 当前验证方法
 
+## 0.2.3 工具栏与回车续写验证
+
+入口仍为 `verifyPhaseOne`，不连接设备。增加纯 Kotlin 命令／模板／续写测试、EditorSession 一步撤销与原文保真、实际 Android InputConnection 组合协议、真实触摸单击／双击／长按、面板焦点、过期链接／附件回调及 Activity 重建表单回归。阅读脚本使用 Kotlin 命令实际生成的模板检查表格、代码、分隔线、Callout、公式、Mermaid 与脚注，不另写一套手工 HTML 充当模板结果。
+
+```powershell
+.\gradlew.bat :core:document:test :feature:editor:testDebugUnitTest :app:testDebugUnitTest --console=plain
+.\gradlew.bat verifyPhaseOne --console=plain
+```
+
+新增测试在电脑验证 InputConnection 调用协议，不运行用户的手机输入法。双击手感、候选词、系统选择器、键盘遮挡、滚动与最终视觉另按[工具栏交接](../engineering/phase-1-toolbar-handoff.md)手动验收。已有阅读提速基线与性能测试入口保留下方；本轮未重复性能对比，不用编译通过推断目标机速度。
+
 ## 0.2.2 阅读提速验证
 
 仍执行下方 verifyPhaseOne。新增纯 Kotlin 阅读投影范围测试、阅读缓存持久化/损坏/容量/清理代次测试、根快照不重复读取、缓存失败回退、受限消息校验、首屏后预备高亮及设置/恢复清理回归。浏览器检查区分首屏可读与按需内容完成，完整兼容检查会主动遍历待加载内容。

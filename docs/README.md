@@ -8,6 +8,7 @@
 - [第一期：Android 本地 Markdown 笔记](plans/phase-1-local-notes.md)
 - [第一期：编辑器交互与视觉决策](plans/phase-1-editor-visual-decisions.md)
 - [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
+- [第一期：工具栏增强与回车续写](plans/phase-1-editor-toolbar.md)：标题手势、格式／插入面板、选区保护与输入事务约定。
 - [第二期：AI 与共享能力](plans/phase-2-ai-and-shared-capabilities.md)
 - [第三期：电脑与 Obsidian 协作](plans/phase-3-computer-obsidian.md)
 
@@ -28,7 +29,9 @@
 
 ## 工程与资料
 
-- [阅读打开提速交接](engineering/phase-1-reader-performance-handoff.md)：0.2.2 的首屏调度、缓存接口、性能对比和手机验收；最新验证入口。
+- [工具栏与回车续写交接](engineering/phase-1-toolbar-handoff.md)：0.2.3 的使用、输入协议回归、APK 与手机验收；最新验证入口。
+
+- [阅读打开提速交接](engineering/phase-1-reader-performance-handoff.md)：0.2.2 的首屏调度、缓存接口、性能对比和手机验收。
 
 - [一期稳定性修复交接](engineering/phase-1-stability-handoff.md)：0.2.1 的渲染、高亮、保存/恢复、查询、链接及缓存并发修复和验收表。
 
