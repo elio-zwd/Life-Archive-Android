@@ -134,7 +134,12 @@ class DocumentAnalysisTest {
             [^note]: 脚注内容 **可格式化**。
         """.trimIndent()
         val nested = "# 目标\n\n## 章节\n\n嵌入段落。[同目录](local.md#section)\n\n```mermaid\ngraph TD\n C[嵌入目标] --> D\n class C internal-link;\n```\n\n![[循环]]\n"
-        val data = buildJsonObject { put("root", HtmlProjection.render(source)); put("nested", HtmlProjection.render(nested)); put("nestedHeadingOffset", DocumentAnalyzer.heading(DocumentAnalyzer.analyze(nested), "章节")!!.start); put("source", source) }
+        var generated = "# 工具栏生成内容\n\n"
+        InsertTemplate.entries.forEach { kind ->
+            generated = MarkdownEditing.calculate(generated, EditSelection(generated.length), MarkdownCommand.Template(kind)).apply(generated)
+            generated += "\n\n"
+        }
+        val data = buildJsonObject { put("root", HtmlProjection.render(source)); put("nested", HtmlProjection.render(nested)); put("nestedHeadingOffset", DocumentAnalyzer.heading(DocumentAnalyzer.analyze(nested), "章节")!!.start); put("source", source); put("toolbarGenerated", HtmlProjection.render(generated)) }
         File("build/reader-fixtures.json").apply { parentFile.mkdirs(); writeText(data.toString()) }
     }
 }

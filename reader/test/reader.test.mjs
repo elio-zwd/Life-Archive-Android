@@ -42,8 +42,9 @@ const server = http.createServer(async (request, response) => {
       const revision = url.searchParams.get('revision'); const note = url.searchParams.get('note'); if (note === 'root') rootReads++;
       const html = revision === 'slow' ? '<p data-source="0">旧响应</p>' : revision === 'fast' ? '<p data-source="0">新响应</p>' : revision === 'plain' ? '<p data-source="0">普通正文</p>' : revision === 'deferred' ? '<h1 data-source="0">首屏先读</h1><p data-source="10">无需等待屏外排版。</p><div data-source="100" style="height:5000px">长文上下文</div><p id="lazy-anchor" data-source="5000">当前阅读段落 <span class="math" data-display="false" data-tex="x^7+y^7"></span></p><pre data-source="5100"><code class="language-mermaid">flowchart LR\n延迟-->就绪</code></pre>' : revision === 'folded' ? '<h1 data-source="0">折叠内容按需加载</h1><blockquote data-source="20"><p>[!note]- 折叠图表\n展开后准备</p><pre data-source="40"><code class="language-mermaid">flowchart LR\n打开-->完成</code></pre></blockquote>' : note === 'target' ? (changedNested ? fixtures.nested.replace('嵌入段落', '嵌入正文已更新') : fixtures.nested) : fixtures.root;
       if (revision === 'slow') await new Promise(resolve => setTimeout(resolve, 180));
-      const projectionKey = createHash('sha256').update(html).digest('hex'); const cacheHit = documentKeys.has(projectionKey); documentKeys.add(projectionKey);
-      return reply({ id: note, revision, path: '验收.md', html: revision === 'resource-failure' ? '<h1 data-source="0">附件失败可重试</h1><img src="https://failure.example/image.png">' : revision === 'concurrency' ? '<h1 data-source="0">附件并发检查</h1><p data-source="10"><img alt="10x10" src="a.png"><img alt="10x10" src="b.png"><img alt="10x10" src="c.png"></p>' : revision === 'old-size' ? '<h1 data-source="0">尺寸缓存校验</h1><p data-source="10"><img src="图片.png"></p>' : html, blocks: [], projectionKey, cacheNamespace, cacheHit });
+      const projection = revision === 'toolbar' ? fixtures.toolbarGenerated : html;
+      const projectionKey = createHash('sha256').update(projection).digest('hex'); const cacheHit = documentKeys.has(projectionKey); documentKeys.add(projectionKey);
+      return reply({ id: note, revision, path: '验收.md', html: revision === 'resource-failure' ? '<h1 data-source="0">附件失败可重试</h1><img src="https://failure.example/image.png">' : revision === 'concurrency' ? '<h1 data-source="0">附件并发检查</h1><p data-source="10"><img alt="10x10" src="a.png"><img alt="10x10" src="b.png"><img alt="10x10" src="c.png"></p>' : revision === 'old-size' ? '<h1 data-source="0">尺寸缓存校验</h1><p data-source="10"><img src="图片.png"></p>' : projection, blocks: [], projectionKey, cacheNamespace, cacheHit });
     }
     if (url.pathname === '/reader/resolve') {
       const target = url.searchParams.get('target');
@@ -215,6 +216,15 @@ try {
   await page.waitForFunction(() => window.readerReady === true); await page.evaluate(() => window.readerDrain());
   assert.equal(await page.locator('img').evaluate(node => node.style.aspectRatio), '1 / 1'); checks.push('旧附件尺寸缓存不能覆盖实际解码尺寸');
   assert.deepEqual(JSON.parse(artifacts.get(`GEOMETRY:${createHash('sha256').update('image-size|图片.png').digest('hex')}`)), { width: 1, height: 1 });
+  await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=toolbar&dark=true&offset=0&auto=false`);
+  await page.waitForFunction(() => window.readerReady === true); await page.evaluate(() => window.readerDrain());
+  assert.equal(await page.locator('table tbody tr').count(), 2);
+  assert.equal(await page.locator('pre code').filter({ hasText: '在这里输入代码' }).count(), 1);
+  assert.equal(await page.locator('#content > hr').count(), 1);
+  assert.ok((await page.locator('aside.callout').innerText()).includes('提示内容'));
+  assert.equal(await page.locator('.math svg').count(), 2); assert.equal(await page.locator('.mermaid svg').count(), 1);
+  assert.ok((await page.locator('.footnotes').innerText()).includes('脚注内容'));
+  checks.push('工具栏实际生成的表格代码分隔线 Callout 公式 Mermaid 脚注完整阅读');
   assert.equal(errors.length, 0, errors.join('\n')); assert.equal(failures.length, 0, failures.join('\n'));
   console.log(`PASS ${checks.length} 浏览器检查：${checks.join('、')}`);
 } catch (error) {

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollToNode
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -45,5 +46,23 @@ class NavigationHostTest {
         compose.onNodeWithText("返回").performClick()
         compose.waitUntil(15000) { compose.onAllNodes(hasText("＋  新建笔记")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("＋  新建笔记").assertIsDisplayed()
+    }
+
+    @Test fun insertionFormSurvivesActivityRecreationAndCancellationKeepsTheBody() {
+        compose.waitUntil(15000) { compose.onAllNodes(hasText("＋  新建笔记")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("＋  新建笔记").performClick()
+        compose.onNodeWithTag("note-name").performTextInput("工具栏重建-${java.util.UUID.randomUUID().toString().take(6)}")
+        compose.onNodeWithText("创建", substring = false).performClick()
+        compose.waitUntil(15000) { compose.onAllNodes(androidx.compose.ui.test.hasTestTag("editor-body")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("editor-body").performTextInput("保留正文")
+        compose.onNodeWithTag("tool-insert").performClick()
+        compose.onNodeWithTag("editor-tool-panel").performScrollToNode(hasText("链接", substring = false))
+        compose.onNodeWithText("链接", substring = false).performClick()
+        compose.onNodeWithTag("insert-target").performTextInput("https://example.com/保留")
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithTag("insert-target").assertIsDisplayed()
+        compose.onNodeWithText("https://example.com/保留", substring = false).assertIsDisplayed()
+        compose.onNodeWithText("取消", substring = false).performClick()
+        compose.onNodeWithText("保留正文", substring = false).assertIsDisplayed()
     }
 }

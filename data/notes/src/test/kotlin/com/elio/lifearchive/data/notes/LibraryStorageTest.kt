@@ -23,6 +23,23 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class) @Config(sdk = [28])
 class LibraryStorageTest {
+    @Test fun toolbarLinksResolveSpecialPathsAndDoNotSelectTheRootNamesake() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            storage.create("目标(1).md", "根目录")
+            val local = storage.create("本子/目标(1).md", "本子目标")
+            val special = storage.create("资料/a#b(c).md", "特殊文件")
+            val from = storage.create("本子/引用.md", "正文")
+            for (target in listOf(local, special)) {
+                val markup = MarkdownReferences.relative(from.summary.path, target.summary.path, "显示[名]")
+                val link = DocumentAnalyzer.analyze(markup).links.single()
+                assertEquals(target.summary.id, (storage.library.resolve(from.summary.id, link.target, link.syntax) as NoteResult.Success).value.note)
+            }
+            val wiki = MarkdownReferences.wiki(local.summary.path, "同名显示")!!
+            val link = DocumentAnalyzer.analyze(wiki).links.single()
+            assertEquals(local.summary.id, (storage.library.resolve(from.summary.id, link.target, link.syntax) as NoteResult.Success).value.note)
+            assertNull(MarkdownReferences.wiki(special.summary.path))
+        }
+    }
     @Test fun relocationPreservesAbsolutePathsFragmentsAndUnchangedSourceRepresentation() = runBlocking {
         open(temp.newFolder()).use { storage ->
             val target = storage.create("目标(1).md", "# 小节")
