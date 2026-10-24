@@ -1,5 +1,16 @@
 # 当前验证方法
 
+## 0.2.5 首页列表性能修复验证
+
+入口仍为 `verifyPhaseOne`，不连接设备。`NotesScreenTest` 用 500 篇合成笔记检查上下滚动不再扫描详情列表、提示增删及排序后保留可见笔记和偏移、点击与管理使用正确资料；500 项标签／笔记本选择检查屏外选项按需组合并可选到末项。数据测试覆盖无搜索词列表、跨文件名／标题／别名／正文搜索、匹配偏移、目录／标签和回收站过滤；ViewModel 检查重复查询不再触发刷新。
+
+```powershell
+.\gradlew.bat :feature:notes:testDebugUnitTest :data:notes:testDebugUnitTest --console=plain
+.\gradlew.bat verifyPhaseOne --console=plain
+```
+
+这些检查验证工作量和交互正确性，不测手机帧时间。掉帧率、连续滑动及目标机验收见[列表性能修复交接](../engineering/phase-1-list-performance-handoff.md)。
+
 ## 0.2.4 编辑器输入修复验证
 
 入口仍为 `verifyPhaseOne`，不连接设备。新增 64 种混合容器、空项退出、编号上限、CRLF、检查点失效与扫描范围、正文快照复用、样式区间查询、输入／回车按键／粘贴协议、初次高亮未就绪仍可输入及 200 ms 防抖回归。既有草稿、保存和全部一期回归继续执行。
