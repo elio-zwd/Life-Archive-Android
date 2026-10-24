@@ -1,6 +1,7 @@
 package com.elio.lifearchive.feature.editor
 
 import android.view.View
+import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.compose.foundation.layout.Box
@@ -72,5 +73,90 @@ class EditorInputProtocolTest {
         compose.runOnIdle { assertEquals("> - [x] 甲\n> ", session.text.text.toString()) }
         compose.onNodeWithTag("editor-body").performTextInput("粘贴\n- 原样\n- [x] 完成")
         compose.runOnIdle { assertTrue(session.text.text.toString().endsWith("粘贴\n- 原样\n- [x] 完成")) }
+    }
+
+    @Test fun mixedToolbarCommandsAndChineseEnterWorkInSourceMode() = mixedInput(EditorMode.SOURCE)
+    @Test fun mixedToolbarCommandsAndChineseEnterWorkInLiveMode() = mixedInput(EditorMode.LIVE)
+
+    private fun mixedInput(mode: EditorMode) {
+        val session = EditorSession("")
+        val connection = input(session, mode)
+        for (style in ListStyle.entries) for (quoteFirst in listOf(false, true)) {
+            var expected = ""
+            compose.runOnIdle {
+                session.edit { replace(0, length, ""); selection = TextRange(0) }
+                if (quoteFirst) session.command(MarkdownCommand.Quote)
+                session.command(MarkdownCommand.List(style))
+                if (!quoteFirst) session.command(MarkdownCommand.Quote)
+                expected = session.content.source + "中文😀"
+                connection.setComposingText("zhongwen", 1)
+            }
+            compose.waitForIdle()
+            compose.runOnIdle { connection.commitText("中文😀", 1) }
+            compose.waitForIdle()
+            compose.runOnIdle {
+                assertEquals(expected, session.content.source)
+                connection.commitText("\n", 1)
+            }
+            compose.waitForIdle()
+            compose.runOnIdle {
+                val continuation = requireNotNull(MarkdownContinuation.calculate(expected, expected.length))
+                val next = expected + continuation.replacement
+                assertEquals(next, session.content.source)
+                session.undo(); assertEquals(expected, session.content.source)
+                session.redo(); assertEquals(next, session.content.source)
+                connection.deleteSurroundingText(1, 0)
+            }
+            compose.waitForIdle()
+            compose.onNodeWithTag("editor-body").performClick()
+            compose.onNodeWithTag("editor-body").assertIsFocused()
+        }
+    }
+
+    @Test fun selectionReplacementCompositionAndBatchPasteKeepTheirOriginalInput() {
+        val session = EditorSession("1. > 中文😀")
+        val connection = input(session)
+        compose.runOnIdle { session.edit { selection = TextRange(length - 4, length) }; connection.commitText("\n", 1) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("1. > \n", session.content.source) }
+        compose.runOnIdle {
+            session.edit { replace(0, length, "1. > 内容"); selection = TextRange(length) }
+            connection.beginBatchEdit()
+            connection.commitText("粘贴\n- 原样\n> 保留", 1)
+            connection.endBatchEdit()
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("1. > 内容粘贴\n- 原样\n> 保留", session.content.source) }
+    }
+
+    @Test fun enterKeyEventsUseTheSameContinuationInSourceMode() = keyEventInput(EditorMode.SOURCE)
+    @Test fun enterKeyEventsUseTheSameContinuationInLiveMode() = keyEventInput(EditorMode.LIVE)
+
+    @Test fun crlfPastedIntoAnEmptyNoteKeepsItsNewlineOnEnterAndUndo() {
+        val session = EditorSession("")
+        val connection = input(session)
+        compose.runOnIdle { connection.commitText("前文\r\n1. > 中文😀", 1) }
+        compose.waitForIdle()
+        compose.runOnIdle { connection.commitText("\n", 1) }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("前文\r\n1. > 中文😀\r\n2. > ", session.content.source)
+            session.undo(); assertEquals("前文\r\n1. > 中文😀", session.content.source)
+        }
+    }
+
+    private fun keyEventInput(mode: EditorMode) {
+        val session = EditorSession("1. > 中文😀")
+        session.edit { selection = TextRange(length) }
+        val connection = input(session, mode)
+        compose.runOnIdle {
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("1. > 中文😀\n2. > ", session.content.source)
+            session.undo(); assertEquals("1. > 中文😀", session.content.source)
+        }
     }
 }

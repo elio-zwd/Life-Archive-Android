@@ -22,6 +22,20 @@ import org.robolectric.annotation.Config
 class EditorInteractionTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun inputDoesNotWaitForInitialHighlightOrLoseFocusWhenAnEmptyNoteGetsText() {
+        val session = EditorSession("")
+        var state by mutableStateOf(EditorUiState(loading = false, mode = EditorMode.SOURCE))
+        compose.setContent { LifeArchiveTheme { Box(Modifier.requiredSize(412.dp, 750.dp)) { EditorScreen(state, session, SaveStatus()) } } }
+        compose.onNodeWithTag("editor-body").performTextInput("中文😀")
+        compose.onNodeWithTag("editor-body").assertIsDisplayed().assertIsFocused()
+        compose.runOnIdle { assertEquals("中文😀", session.content.source); state = state.copy(mode = EditorMode.LIVE) }
+        compose.onNodeWithTag("editor-body").performTextInput("继续")
+        compose.onNodeWithTag("editor-body").assertIsFocused()
+        compose.runOnIdle { state = state.copy(parsed = MarkdownParser().parse(session.content.source)) }
+        compose.onNodeWithTag("editor-body").assertIsFocused()
+        compose.runOnIdle { assertEquals("中文😀继续", session.content.source) }
+    }
+
     @Test fun emptyLinesPreserveRenderedHighlightsWhileTheParserIsDelayedInBothModes() {
         val raw = "# 标题\n\n**中文高亮**\n末尾"
         var session by mutableStateOf(EditorSession(raw))

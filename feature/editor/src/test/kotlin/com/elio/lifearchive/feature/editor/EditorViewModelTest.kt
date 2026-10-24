@@ -14,6 +14,33 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class EditorViewModelTest {
+    @Test fun focusAndCursorChangesDoNotStartParsingAndTypingDebouncesFullParsing() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = MemoryNotes(); var parses = 0
+        val model = EditorViewModel(repo, repo.note.summary.id, true, parse = { parses++; MarkdownParser().parse(it) })
+        try {
+            model.state.first { it.parsed != null }
+            val session = model.session!!
+            val initial = session.content
+            repeat(20) {
+                session.edit { selection = androidx.compose.ui.text.TextRange(it % (length + 1)) }
+                session.requestInputFocus()
+                androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications(); runCurrent()
+            }
+            assertSame(initial, session.content); assertEquals(1, parses)
+            repeat(12) {
+                session.edit { append("字") }
+                androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications(); runCurrent()
+            }
+            val latest = session.content
+            model.state.first { it.projection?.document?.source == latest.source }
+            advanceTimeBy(199); runCurrent(); assertEquals(1, parses)
+            advanceTimeBy(1); runCurrent()
+            model.state.first { it.parsed?.source == latest.source }
+            assertEquals(2, parses)
+        } finally { model.viewModelScope.coroutineContext[Job]!!.cancelAndJoin(); Dispatchers.resetMain() }
+    }
+
     @Test fun readingDefersHighlightUntilFirstScreenAndEditingReusesThePreparedResult() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val repo = MemoryNotes(); var parses = 0
