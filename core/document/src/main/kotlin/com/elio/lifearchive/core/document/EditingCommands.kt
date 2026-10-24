@@ -176,7 +176,7 @@ object MarkdownEditing {
 }
 
 internal data class EditLine(val start: Int, val end: Int, val terminatorEnd: Int)
-internal fun editLine(source: String, position: Int): EditLine {
+internal fun editLine(source: CharSequence, position: Int): EditLine {
     val start = source.lastIndexOf('\n', position - 1) + 1
     val next = source.indexOf('\n', start).let { if (it < 0) source.length else it }
     val end = if (next > start && source[next - 1] == '\r') next - 1 else next
@@ -196,10 +196,8 @@ internal data class EditPrefix(val contentStart: Int, val containers: List<EditC
     val list get() = containers.lastOrNull { it.style != null }
     val quote get() = containers.lastOrNull { it.style == null }
 }
-private val listMarker = Regex("(?:[-+*]|[0-9]{1,9}[.)])(?:[ \\t]+|$)")
-private val taskMarker = Regex("\\[([ xX])](?:[ \\t]+|$)")
-internal fun linePrefix(source: String, line: EditLine): EditPrefix {
-    var at = line.start + if (line.start == 0 && source.startsWith('\uFEFF')) 1 else 0
+internal fun linePrefix(source: CharSequence, line: EditLine): EditPrefix {
+    var at = line.start + if (line.start == 0 && source.getOrNull(0) == '\uFEFF') 1 else 0
     val containers = mutableListOf<EditContainer>()
     repeat(32) {
         val indent = at
@@ -208,20 +206,29 @@ internal fun linePrefix(source: String, line: EditLine): EditPrefix {
             val start = at++; if (at < line.end && source[at] == ' ') at++
             containers += EditContainer(start, at, indent)
         } else {
-            val marker = listMarker.find(source.substring(at, line.end))?.takeIf { it.range.first == 0 }
-                ?: return EditPrefix(at, containers)
-            val start = at; at += marker.value.length
-            val number = marker.value.takeWhile { it.isDigit() }.toIntOrNull()
-            val task = taskMarker.find(source.substring(at, line.end))?.takeIf { it.range.first == 0 }
-            val checkbox = if (task != null) at + 1 else -1
-            if (task != null) at += task.value.length
-            containers += EditContainer(start, at, indent, if (task != null) ListStyle.TASK else if (number != null) ListStyle.ORDERED else ListStyle.BULLET, task?.groupValues?.get(1)?.lowercase() == "x", checkbox, number)
+            val start = at
+            var end = at
+            var number: Int? = null
+            if (end < line.end && source[end] in "-+*") end++
+            else {
+                while (end < line.end && source[end] in '0'..'9' && end - start < 10) end++
+                if (end - start !in 1..9 || end >= line.end || source[end] !in ".)") return EditPrefix(at, containers)
+                number = source.subSequence(start, end).toString().toInt()
+                end++
+            }
+            if (end == start || end < line.end && source[end] !in " \t") return EditPrefix(at, containers)
+            at = end
+            while (at < line.end && source[at] in " \t") at++
+            val task = at + 2 < line.end && source[at] == '[' && source[at + 1] in " xX" && source[at + 2] == ']' && (at + 3 == line.end || source[at + 3] in " \t")
+            val checkbox = if (task) at + 1 else -1
+            val checked = task && source[checkbox] in "xX"
+            if (task) { at += 3; while (at < line.end && source[at] in " \t") at++ }
+            containers += EditContainer(start, at, indent, if (task) ListStyle.TASK else if (number != null) ListStyle.ORDERED else ListStyle.BULLET, checked, checkbox, number)
         }
     }
     return EditPrefix(at, containers)
 }
 internal data class EditHeading(val level: Int, val markerStart: Int, val markerEnd: Int, val closing: IntRange? = null, val setext: EditLine? = null)
-private val atx = Regex("#{1,6}(?:[ \\t]+|$)")
 internal fun headingLine(source: String, line: EditLine): EditLine {
     if (line.start == 0) return line
     val previous = editLine(source, line.start - 1)
@@ -229,18 +236,31 @@ internal fun headingLine(source: String, line: EditLine): EditLine {
 }
 internal fun heading(source: String, line: EditLine): EditHeading {
     val at = linePrefix(source, line).contentStart
-    val match = atx.find(source.substring(at, line.end))?.takeIf { it.range.first == 0 }
-    if (match != null) {
-        val end = at + match.value.length
-        val tail = Regex("[ \\t]+#+[ \\t]*$").find(source.substring(end, line.end))
-        return EditHeading(match.value.takeWhile { it == '#' }.length, at, end, tail?.let { (end + it.range.first)..(end + it.range.last) })
+    var hashes = at
+    while (hashes < line.end && source[hashes] == '#' && hashes - at < 7) hashes++
+    if (hashes - at in 1..6 && (hashes == line.end || source[hashes] in " \t")) {
+        var end = hashes
+        while (end < line.end && source[end] in " \t") end++
+        var tailEnd = line.end
+        while (tailEnd > end && source[tailEnd - 1] in " \t") tailEnd--
+        var tailStart = tailEnd
+        while (tailStart > end && source[tailStart - 1] == '#') tailStart--
+        val closing = if (tailStart < tailEnd && tailStart > end && source[tailStart - 1] in " \t") {
+            while (tailStart > end && source[tailStart - 1] in " \t") tailStart--
+            tailStart until line.end
+        } else null
+        return EditHeading(hashes - at, at, end, closing)
     }
     if (line.terminatorEnd < source.length && at < line.end) {
         val next = editLine(source, line.terminatorEnd)
         val prefix = linePrefix(source, next)
-        val underline = source.substring(prefix.contentStart, next.end).trim()
-        if (underline.isNotEmpty() && underline.all { it == '=' } || underline.isNotEmpty() && underline.all { it == '-' })
-            return EditHeading(if (underline[0] == '=') 1 else 2, at, at, setext = next)
+        // 普通长段落无需复制下一整行来判断 Setext。
+        if (source.getOrNull(prefix.contentStart) in listOf('=', '-')) {
+            var end = next.end
+            while (end > prefix.contentStart && source[end - 1].isWhitespace()) end--
+            if ((prefix.contentStart until end).all { source[it] == source[prefix.contentStart] })
+                return EditHeading(if (source[prefix.contentStart] == '=') 1 else 2, at, at, setext = next)
+        }
     }
     return EditHeading(0, at, at)
 }
