@@ -30,15 +30,18 @@ object ComposeEditorEngine : EditorEngine {
         val colors = MaterialTheme.colorScheme
         val focus = remember { FocusRequester() }
         val keyboard = LocalSoftwareKeyboardController.current
-        val currentParsed by rememberUpdatedState(parsed)
+        val display = remember(session, parsed) { parsed?.let(session::display) }
+        val currentDisplay by rememberUpdatedState(display)
         val transformation = remember(session, mode, colors, fontScale) {
             OutputTransformation {
-                val base = currentParsed ?: return@OutputTransformation
-                val parsed = EditorRenderProjection(0, base).forText(asCharSequence().toString())
+                val prepared = currentDisplay ?: return@OutputTransformation
+                val snapshot = session.content
+                val changes = session.changesSince(prepared.revision) ?: return@OutputTransformation
+                if (length != snapshot.source.length) return@OutputTransformation
                 val selection = session.text.selection
                 val composition = session.text.composition
-                val window = previewWindow(parsed.source.length, selection.end)
-                val hidden = if (mode == EditorMode.SOURCE) emptyList() else visibleMarkers(parsed, selection, composition).filter { it.start >= window.first && it.end <= window.last }
+                val window = previewWindow(snapshot.source.length, selection.end)
+                val hidden = if (mode == EditorMode.SOURCE) emptyList() else visibleMarkers(snapshot.source, prepared.markers(window, changes), selection, composition)
                 hidden.asReversed().forEach { replace(it.start, it.end, "") }
                 val removed = IntArray(hidden.size + 1)
                 hidden.forEachIndexed { i, marker -> removed[i + 1] = removed[i] + marker.end - marker.start }
@@ -49,8 +52,7 @@ object ComposeEditorEngine : EditorEngine {
                     val partial = hidden.getOrNull(low)?.let { (offset - it.start).coerceIn(0, it.end - it.start) } ?: 0
                     return offset - removed[low] - partial
                 }
-                parsed.styles.forEach { range ->
-                    if (range.end < window.first || range.start > window.last) return@forEach
+                prepared.styles(window, changes, snapshot.source.length).forEach { range ->
                     val style = when (range.mark) {
                         TextMark.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
                         TextMark.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
@@ -88,19 +90,5 @@ internal fun previewWindow(length: Int, cursor: Int): IntRange =
     else (cursor - 4096).coerceAtLeast(0)..(cursor + 4096).coerceAtMost(length)
 
 /** 激活行及选区/组合输入跨越的行不隐藏标记，避免点击及输入时失去语法上下文。 */
-internal fun visibleMarkers(parsed: ParsedDocument, selection: TextRange, composition: TextRange?): List<MarkerRange> {
-    fun protected(range: TextRange): IntRange {
-        val start = parsed.source.lastIndexOf('\n', (range.min - 1).coerceAtLeast(-1)) + 1
-        val end = parsed.source.indexOf('\n', range.max.coerceAtMost(parsed.source.length)).let { if (it < 0) parsed.source.length else it }
-        return start..end
-    }
-    val active = protected(selection)
-    val composing = composition?.let(::protected)
-    return parsed.markers.filter { marker ->
-        marker.start !in active && marker.end - 1 !in active &&
-            (composing == null || (marker.start !in composing && marker.end - 1 !in composing))
-    }.fold(mutableListOf()) { result, marker ->
-        if (result.lastOrNull()?.end?.let { it > marker.start } != true) result += marker
-        result
-    }
-}
+internal fun visibleMarkers(parsed: ParsedDocument, selection: TextRange, composition: TextRange?): List<MarkerRange> =
+    visibleMarkers(parsed.source, parsed.markers, selection, composition)

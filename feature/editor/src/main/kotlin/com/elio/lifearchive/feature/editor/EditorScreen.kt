@@ -121,10 +121,11 @@ fun EditorScreen(
             Box(Modifier.weight(1f)) {
                 if (session != null) {
                     if (editing) {
-                        if (state.parsed != null || session.text.text.isEmpty()) editorEngine.Content(session, state.mode, state.projection?.document ?: state.parsed, fontScale, requestFocus = true, enabled = !state.busy)
-                        else LinearProgressIndicator(Modifier.fillMaxWidth())
+                        // 高亮准备不能阻塞输入连接，也不能在空笔记刚输入时卸载文本控件。
+                        editorEngine.Content(session, state.mode, state.projection?.document ?: state.parsed, fontScale, requestFocus = true, enabled = !state.busy)
+                        if (state.parsed == null && session.text.text.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
                     } else {
-                        val raw = session.text.text.toString()
+                        val raw = session.content.source
                         val snapshot = remember(session, raw, state.path) { ReaderSnapshot(raw, path = state.path, version = state.version) }
                         readerRenderer.Content(snapshot, fontScale, initialReadingOffset, onReadingOffset, loadImage, onLink, services)
                     }

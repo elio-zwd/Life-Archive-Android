@@ -49,9 +49,17 @@ private data class ToolItem(val label: String, val action: () -> Unit, val enabl
 @Composable
 internal fun EditorToolbar(session: EditorSession, enabled: Boolean, parsed: ParsedDocument?, onCommand: (MarkdownCommand, EditorAnchor?) -> Unit, onInsert: (EditorInsertKind) -> Unit, onAttach: () -> Unit) {
     var panel by rememberSaveable(session) { mutableStateOf<ToolsPanel?>(null) }
-    val source = session.text.text.toString()
+    val snapshot = session.content
+    val source = snapshot.source
     val selection = session.text.selection
-    val tools = remember(source, selection, parsed) { MarkdownEditing.tools(source, EditSelection(selection.start, selection.end), parsed) }
+    val display = remember(session, parsed) { parsed?.let(session::display) }
+    val selectedStyles = remember(snapshot, selection, display) {
+        val changes = display?.let { session.changesSince(it.revision) }
+        if (display != null && changes != null) display.styles((selection.min - 1).coerceAtLeast(0)..selection.max, changes, source.length) else emptyList()
+    }
+    val tools = remember(snapshot, selection, selectedStyles) {
+        MarkdownEditing.tools(source, EditSelection(selection.start, selection.end), ParsedDocument(source, emptyList(), selectedStyles, emptyList()))
+    }
     val editable = enabled && session.canModify
     val keyboard = LocalSoftwareKeyboardController.current
     val colors = MaterialTheme.colorScheme
@@ -72,7 +80,7 @@ internal fun EditorToolbar(session: EditorSession, enabled: Boolean, parsed: Par
             "高亮" to InlineStyle.HIGHLIGHT, "行内代码" to InlineStyle.CODE,
         ).map { (label, style) ->
             val mark = when (style) { InlineStyle.BOLD -> TextMark.BOLD; InlineStyle.ITALIC -> TextMark.ITALIC; InlineStyle.STRIKE -> TextMark.STRIKE; InlineStyle.HIGHLIGHT -> TextMark.HIGHLIGHT; InlineStyle.CODE -> TextMark.CODE }
-            val selected = parsed?.takeIf { it.source == source }?.styles?.any { it.mark == mark && selection.min >= it.start && selection.max <= it.end } == true
+            val selected = selectedStyles.any { it.mark == mark && selection.min >= it.start && selection.max <= it.end }
             ToolItem(label, { send(MarkdownCommand.Inline(style)) }, selected = selected)
         }
         ToolsPanel.INSERT -> listOf(
@@ -104,7 +112,7 @@ internal fun EditorToolbar(session: EditorSession, enabled: Boolean, parsed: Par
                 TextButton(onClick = session::redo, enabled = editable && session.text.undoState.canRedo, modifier = Modifier.width(48.dp).semantics { contentDescription = "重做" }) { Text("↷") }
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                     // 正文或选区变化会销毁旧手势节点，取消尚未判定的单击。
-                    val target = remember(source, selection, editable) { Any() }
+                    val target = remember(snapshot.revision, selection, editable) { Any() }
                     key(session, target) { HeadingTool(session, editable, tools.heading, onCommand) }
                     TextButton(onClick = { toggle(ToolsPanel.LIST) }, modifier = Modifier.widthIn(min = 48.dp).testTag("tool-list")) { Text("列表") }
                     TextButton(onClick = { toggle(ToolsPanel.FORMAT) }, modifier = Modifier.widthIn(min = 48.dp).testTag("tool-format")) { Text("格式") }

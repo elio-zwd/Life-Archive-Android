@@ -66,26 +66,43 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
             readingOffset = location ?: (repository.readReadingOffset(id) as? NoteResult.Success)?.value ?: 0
             entryOffset = readingOffset
             val newSession = EditorSession(read.value.document.text)
-            if (location != null) newSession.text.edit { selection = TextRange(location.coerceIn(0, length)) }
+            if (location != null) newSession.edit { selection = TextRange(location.coerceIn(0, length)) }
             session = newSession
             persistence = EditorPersistence(sessionRepository, read.value, viewModelScope, draft?.revision ?: 0)
             val pending = draft?.takeIf { it.document != read.value.document }
             if (pending != null) persistence?.blockAutomaticSave()
             mutableState.value = mutableState.value.copy(loading = false, name = read.value.summary.path.value.removeSuffix(".md"), path = read.value.summary.path.value, version = read.value.summary.version.value, mode = if (pending != null) EditorMode.READ else mutableState.value.mode, pendingDraft = pending, draftConflict = pending != null && pending.baseVersion != read.value.summary.version)
+            val contents = snapshotFlow { newSession.content }.stateIn(viewModelScope, SharingStarted.Eagerly, newSession.content)
             launch {
-                snapshotFlow { newSession.text.text.toString() }.collect { text ->
-                    if (mutableState.value.pendingDraft == null) persistence?.changed(text)
+                contents.collect { current ->
+                    if (mutableState.value.pendingDraft == null) persistence?.changed(current.source)
                 }
             }
             launch {
-                combine(snapshotFlow { newSession.text.text.toString() }, prepareHighlight) { text, ready -> text to ready }.collectLatest { (text, ready) ->
+                combine(contents, prepareHighlight) { current, ready -> current to ready }.collectLatest { (current, ready) ->
                     if (!ready) return@collectLatest
                     val captured = ++revision
+                    fun isCurrent() = !retired && captured == revision && newSession.content.revision == current.revision
                     val previous = mutableState.value.projection
-                    val updated = if (previous != null) withContext(Dispatchers.Default) { previous.reparseChangedBlock(text) } else null
-                    if (updated != null && !retired && captured == revision && newSession.text.text.toString() == text) mutableState.value = mutableState.value.copy(projection = EditorRenderProjection(captured, updated))
-                    val parsed = parse(text)
-                    if (!retired && captured == revision && newSession.text.text.toString() == text) mutableState.value = mutableState.value.copy(parsed = parsed, projection = EditorRenderProjection(captured, parsed))
+                    if (previous != null) {
+                        val (updated, display) = withContext(Dispatchers.Default) {
+                            val document = previous.reparseChangedBlock(current.source)
+                            document to EditorDisplaySnapshot(current.revision, document)
+                        }
+                        if (isCurrent()) {
+                            newSession.installDisplay(current, display)
+                            mutableState.value = mutableState.value.copy(projection = EditorRenderProjection(captured, updated))
+                        }
+                        kotlinx.coroutines.delay(200)
+                    }
+                    val parsed = parse(current.source)
+                    val (context, display) = withContext(Dispatchers.Default) {
+                        ContinuationContext.build(current.source) to EditorDisplaySnapshot(current.revision, parsed)
+                    }
+                    if (isCurrent()) {
+                        newSession.installContext(current, context); newSession.installDisplay(current, display)
+                        mutableState.value = mutableState.value.copy(parsed = parsed, projection = EditorRenderProjection(captured, parsed))
+                    }
                 }
             }
         }
@@ -97,7 +114,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         val editor = session ?: return
         dismissInsertion()
         if (mode == EditorMode.READ) { readingOffset = editor.text.selection.start; entryOffset = readingOffset }
-        else if (mutableState.value.mode == EditorMode.READ) editor.text.edit { selection = TextRange(readingOffset.coerceIn(0, length)) }
+        else if (mutableState.value.mode == EditorMode.READ) editor.edit { selection = TextRange(readingOffset.coerceIn(0, length)) }
         mutableState.value = mutableState.value.copy(mode = mode)
         if (mode != EditorMode.READ) prepareHighlight.value = true
         if (mode == EditorMode.READ) viewModelScope.launch { flush() }
@@ -116,14 +133,14 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         if (mutableState.value.draftConflict) return
         val original = snapshot ?: return
         persistence = EditorPersistence(sessionRepository, original, viewModelScope, draft.revision)
-        session?.text?.edit { replace(0, length, draft.document.text); selection = TextRange(0) }
+        session?.edit { replace(0, length, draft.document.text); selection = TextRange(0) }
         persistence?.changed(draft.document.text)
         mutableState.value = mutableState.value.copy(pendingDraft = null, mode = EditorMode.SOURCE, message = "已恢复草稿，继续编辑后自动保存")
         prepareHighlight.value = true
     }
 
     fun copyDraft(onCreated: (NoteId) -> Unit) {
-        val document = mutableState.value.pendingDraft?.document ?: session?.let { RawDocument(it.text.text.toString()) } ?: return
+        val document = mutableState.value.pendingDraft?.document ?: session?.let { RawDocument(it.content.source) } ?: return
         if (retired || mutableState.value.busy) return
         mutableState.value = mutableState.value.copy(busy = true)
         viewModelScope.launch {
@@ -240,7 +257,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         if (state.value.pendingDraft != null) { message("请先处理草稿"); return false }
         val editor = session ?: return false
         if (editor.text.composition != null) { message("请完成当前输入后再修改标签"); return false }
-        editor.text.edit {
+        editor.edit {
             val raw = asCharSequence().toString(); val changed = com.elio.lifearchive.core.document.DocumentAnalyzer.withTags(raw, tags)
             val cursor = selection.start; replace(0, length, changed); selection = TextRange((cursor + changed.length - raw.length).coerceIn(0, length))
         }
@@ -277,12 +294,12 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
             repository.updateReadingOffset(id, readingOffset)
             return true // 尚未确认的草稿保持原样，不用阅读正文覆盖它。
         }
-        persistence?.changed(editor.text.text.toString())
+        persistence?.changed(editor.content.source)
         persistence?.flush()
         val position = repository.updateReadingOffset(id, readingOffset)
         if (position !is NoteResult.Success) message("阅读位置保存失败：${position.explanation()}")
         // 等待磁盘时仍可能收到最后一批 IME 输入，离开前直接核对文本状态。
-        persistence?.changed(editor.text.text.toString())
+        persistence?.changed(editor.content.source)
         if (persistence?.status?.value?.draftProtected != true) persistence?.protectDraft()
         return persistence?.status?.value?.draftProtected == true
     }
@@ -303,6 +320,12 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         session?.close()
         viewModelScope.coroutineContext[kotlinx.coroutines.Job]?.cancelAndJoin()
         return true
+    }
+
+    override fun onCleared() {
+        retired = true
+        session?.close()
+        super.onCleared()
     }
 
     fun setSimulatedFailure(enabled: Boolean) {
