@@ -29,7 +29,9 @@
 
 ## 工程与资料
 
-- [工具栏与回车续写交接](engineering/phase-1-toolbar-handoff.md)：0.2.3 的使用、输入协议回归、APK 与手机验收；最新验证入口。
+- [编辑器输入修复交接](engineering/phase-1-editor-input-handoff.md)：0.2.4 列表／引用交错回车、输入与焦点解耦、高亮索引、电脑性能采样及百度输入法手机验收。
+
+- [工具栏与回车续写交接](engineering/phase-1-toolbar-handoff.md)：0.2.3 的使用、输入协议回归、APK 与手机验收；历史验证入口。
 
 - [阅读打开提速交接](engineering/phase-1-reader-performance-handoff.md)：0.2.2 的首屏调度、缓存接口、性能对比和手机验收。
 

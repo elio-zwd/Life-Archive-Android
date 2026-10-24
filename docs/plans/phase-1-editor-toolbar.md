@@ -2,6 +2,8 @@
 
 日期：2026-10-24。目标版本：0.2.3。需求已确认；实现及检查结果另见[工具栏交接](../engineering/phase-1-toolbar-handoff.md)。本计划沿用临时视觉、源码编辑＋完整阅读，实时预览仍为实验项，不把电脑测试视为小米 14 Ultra 验收。
 
+输入修复补充（2026-10-24，0.2.4）：按容器实际顺序处理列表／引用交错；`1. > 内容` 回车续为 `2. > `，空项只退出最内层。九位编号达到上限、嵌套过深或保护上下文无法安全确认时保留普通换行。正文修订与选区／焦点分离，复用快照与样式区间索引，回车使用会话检查点并最多补扫 8 KiB；完整高亮解析在初次准备后采用 200 ms 防抖，保存仍独立遵循 300/800 ms。高亮未就绪不卸载或阻塞输入控件。源码与实时预览均回归百度输入法常用提交协议，手机验收另记；实现及实际结果见[输入修复交接](../engineering/phase-1-editor-input-handoff.md)。
+
 ## 1. 操作约定
 
 | 操作 | 规则 |
@@ -40,4 +42,4 @@
 
 运行 `verifyPhaseOne`：架构、各模块测试、阅读脚本浏览器测试、七个 Android 模块 Debug Lint、App／仪器测试 APK、Release Kotlin 编译。交付 APK、说明、手机验收表；标题双击手感、输入法、键盘遮挡和滚动由用户在小米 14 Ultra 手动验收，未测项目记录 NOT_VERIFIED。
 
-保持 main；按命令计算、交互接入、测试、文档分类本地提交，不推送、不操作手机，保护原有未提交内容。API 依据：[Compose 手势](https://developer.android.com/develop/ui/compose/touch-input/pointer-input/tap-and-press)、[InputTransformation](https://developer.android.com/reference/kotlin/androidx/compose/foundation/text/input/InputTransformation)。
+保持 main，保护已有未提交内容；0.2.4 按用户后续授权分类本地提交，不推送、不操作手机。0.2.3 当时按命令计算、交互接入、测试、文档分类本地提交的约定仅作历史记录。API 依据：[Compose 手势](https://developer.android.com/develop/ui/compose/touch-input/pointer-input/tap-and-press)、[InputTransformation](https://developer.android.com/reference/kotlin/androidx/compose/foundation/text/input/InputTransformation)。

@@ -1,5 +1,11 @@
 # 当前验证方法
 
+## 0.2.4 编辑器输入修复验证
+
+入口仍为 `verifyPhaseOne`，不连接设备。新增 64 种混合容器、空项退出、编号上限、CRLF、检查点失效与扫描范围、正文快照复用、样式区间查询、输入／回车按键／粘贴协议、初次高亮未就绪仍可输入及 200 ms 防抖回归。既有草稿、保存和全部一期回归继续执行。
+
+`EditorPerformanceTest` 每种 50 KiB／1 MiB UTF-8 合成正文采样 20 次，对比同版本完整扫描／全文投影与索引查询；默认写到系统临时目录 `life-archive-editor-performance/editor-query-samples.json`，可用环境变量 `LIFE_ARCHIVE_EVIDENCE` 指定仓库外目录。它只测 Kotlin 查询，不包含 Android 排版、百度输入法和系统键盘动画。最新结果与小米 14 Ultra 手动验收见[输入修复交接](../engineering/phase-1-editor-input-handoff.md)。
+
 ## 0.2.3 工具栏与回车续写验证
 
 入口仍为 `verifyPhaseOne`，不连接设备。增加纯 Kotlin 命令／模板／续写测试、EditorSession 一步撤销与原文保真、实际 Android InputConnection 组合协议、真实触摸单击／双击／长按、面板焦点、过期链接／附件回调及 Activity 重建表单回归。阅读脚本使用 Kotlin 命令实际生成的模板检查表格、代码、分隔线、Callout、公式、Mermaid 与脚注，不另写一套手工 HTML 充当模板结果。
