@@ -31,6 +31,7 @@ class NotesViewModel(private val repository: NotesRepository, private val librar
 
     fun clearError() { mutableState.value = mutableState.value.copy(error = null) }
     fun query(value: NotesQuery) {
+        if (value == state.value.query) return
         request++
         mutableState.value = mutableState.value.copy(query = value, updating = true)
         queryJob?.cancel(); queryJob = viewModelScope.launch { delay(200); refresh() }

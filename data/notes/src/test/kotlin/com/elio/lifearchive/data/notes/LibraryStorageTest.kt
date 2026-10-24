@@ -23,6 +23,25 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class) @Config(sdk = [28])
 class LibraryStorageTest {
+    @Test fun listRefreshAndSplitFieldSearchPreserveTagsOffsetsAndTrashFiltering() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val raw = "---\ntitle: 独立标题\naliases: [别名]\ntags: [项目/开发]\n---\n正文 MixedCase 关键词"
+            val note = storage.create("本子/文件名.md", raw)
+            val listing = (storage.library.query() as NoteResult.Success).value
+            assertEquals(note.summary.id, listing.notes.single().summary.id)
+            assertEquals(listOf("项目/开发"), listing.notes.single().tags)
+            for (text in listOf("关键词 文件名", "MixedCase 独立标题", "别名 关键词", " 关键词 \n\t文件名 ")) {
+                val result = (storage.library.query(NotesQuery(text = text, folder = "本子", tag = "项目")) as NoteResult.Success).value.notes.single()
+                assertEquals(note.summary.id, result.summary.id)
+                val firstWord = text.trim().split(Regex("\\s+")).first()
+                assertEquals(raw.indexOf(firstWord, ignoreCase = true).coerceAtLeast(0), result.matchOffset)
+            }
+            assertTrue((storage.library.query(NotesQuery(text = "不存在 关键词")) as NoteResult.Success).value.notes.isEmpty())
+            assertTrue(storage.library.trash(note.summary.id, note.summary.version) is NoteResult.Success)
+            assertTrue((storage.library.query() as NoteResult.Success).value.notes.isEmpty())
+            assertEquals(note.summary.id, (storage.library.query(NotesQuery(text = "关键词 文件名", trash = true)) as NoteResult.Success).value.notes.single().summary.id)
+        }
+    }
     @Test fun toolbarLinksResolveSpecialPathsAndDoNotSelectTheRootNamesake() = runBlocking {
         open(temp.newFolder()).use { storage ->
             storage.create("目标(1).md", "根目录")

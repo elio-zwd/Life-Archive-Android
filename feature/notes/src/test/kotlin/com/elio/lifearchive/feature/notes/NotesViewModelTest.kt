@@ -49,6 +49,8 @@ class NotesViewModelTest {
         val repo = FakeNotes(); val model = NotesViewModel(repo, library)
         try {
             runCurrent(); complete(0, NoteResult.Success(listing("初始"))); runCurrent()
+            model.query(NotesQuery()); advanceTimeBy(200); runCurrent()
+            assertEquals(1, pending.size); assertFalse(model.state.value.updating)
             model.query(NotesQuery(folder = "选中")); advanceTimeBy(200); runCurrent()
             complete(1, NoteResult.Success(listing("筛选"))); runCurrent()
             repo.updates.emit(listOf(listing("不应出现").notes.single().summary)); runCurrent()

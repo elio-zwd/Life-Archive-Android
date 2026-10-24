@@ -25,6 +25,7 @@ import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.coroutines.coroutineContext
 
 /** 每个私有库只创建一个实例；数据库、文件路径与实现类型不暴露给 feature。 */
 class NotesStorage private constructor(
@@ -437,20 +439,24 @@ class NotesStorage private constructor(
             analysisCache.keys.retainAll(records.map { "${it.id}:${it.version}" }.toSet())
             val words = query.text.trim().lowercase(Locale.ROOT).split(Regex("\\s+")).filter { it.isNotEmpty() }
             val all = records.map { record ->
+                coroutineContext.ensureActive()
                 val raw = projections[record.id]?.takeIf { it.version == record.version }?.rawText.orEmpty()
                 val key = "${record.id}:${record.version}"
                 val cached = if (projections[record.id]?.version == record.version) analysisCache.getOrPut(key) { DocumentAnalyzer.analyze(raw) to raw.lowercase(Locale.ROOT) }
                     else DocumentAnalyzer.analyze("") to ""
                 val analysis = cached.first
-                val haystack = (record.path + "\n" + analysis.title.orEmpty() + "\n" + analysis.aliases.joinToString(" ") + "\n").lowercase(Locale.ROOT) + cached.second
-                Triple(record, analysis, Pair(haystack, cached.second))
+                Triple(record, analysis, cached.second)
             }
             val matches = all.filter { (record, analysis, text) ->
                 (record.deleted != null) == query.trash &&
                     (query.folder == null || record.path.startsWith(query.folder + "/")) &&
                     (query.tag == null || analysis.tags.any { it.equals(query.tag, true) || it.startsWith(query.tag + "/", true) }) &&
-                    words.all { it in text.first }
-            }.map { (record, analysis, text) -> LibraryNote(record.summary(), record.pinned, record.created, record.modified, record.deleted, analysis.tags, analysis.title, words.firstOrNull()?.let { text.second.indexOf(it).coerceAtLeast(0) } ?: 0, analysis.propertyTags) }
+                    (words.isEmpty() || run {
+                        // 列表刷新／排序不拼接全文；搜索时也不再复制大正文构造 haystack。
+                        val metadata = (record.path + "\n" + analysis.title.orEmpty() + "\n" + analysis.aliases.joinToString(" ")).lowercase(Locale.ROOT)
+                        words.all { it in metadata || it in text }
+                    })
+            }.map { (record, analysis, text) -> LibraryNote(record.summary(), record.pinned, record.created, record.modified, record.deleted, analysis.tags, analysis.title, words.firstOrNull()?.let { text.indexOf(it).coerceAtLeast(0) } ?: 0, analysis.propertyTags) }
             val order = when (query.sort) {
                 NoteSort.MODIFIED_DESC -> compareByDescending<LibraryNote> { it.modified }
                 NoteSort.MODIFIED_ASC -> compareBy { it.modified }
