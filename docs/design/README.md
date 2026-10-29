@@ -15,4 +15,6 @@
 - [克制工具型首页交互样板 HTML](prototypes/home-a-xiaomi14ultra.html)：参考小米 14 Ultra 的手机视口，提供搜索、分类、笔记列表、管理菜单、新建与阅读编辑等浏览器演示交互。
 - **状态：候选视觉样板，未通过小米 14 Ultra 真机验收，也不是 Compose 实际页面。** 浏览器中的演示内容与设置不连接 Android 本地笔记库，不能据此认定功能已实现或通过测试。
 - 2026-10-28 根据 `NotesScreen`、`NoteActions`、`EditorScreen`、`EditorToolbar`、`EditorPersistence` 和 `SettingsScreen` 对齐功能入口，保留最近提交的首页 A 视觉方向。详细范围、操作及验证命令见[样板功能说明](prototypes/home-a-function-alignment.md)。
-- 2026-10-29 用户确认阅读页采用 A「浅灰蓝 · 极简文档」，配套 C「深灰 · 专注阅读」，已落实到 HTML：正文标题、元信息、封面、正文依次排列，底部改为轻量编辑浮钮。阅读页方向已确认，具体 HTML 效果仍待复核；编辑页视觉另行讨论。
+- 2026-10-29 用户确认阅读页采用 A「浅灰蓝 · 极简文档」，配套 C「深灰 · 专注阅读」，已落实到 HTML：正文标题、元信息、封面、正文依次排列，底部改为轻量编辑浮钮。
+- 2026-10-30 用户确认编辑页 A 及更紧凑的单行工具面板，已在同一 HTML 更新：长按按键显示中文名称，阅读／编辑的更多菜单各增加“主题”，共享 A 浅灰蓝／B 暖纸色／C 深石墨三套主题并记住选择，首页外观独立。可用 HTML 的 `#editor` 锚点直接进入第一篇示例笔记编辑。具体交互、桌面键盘示意及验证见[样板功能说明](prototypes/home-a-function-alignment.md)；实际 HTML 效果待用户复核。
+- 2026-10-30 补充[小米 14 Ultra UI 实施交接](xiaomi14ultra-ui-handoff.md)：样板改为 432 × 960 固定逻辑画布，桌面整体缩放，截图为 1440 × 3200 的完整 20:9 屏幕。使用 `reader/capture-design.mjs` 导出 19 张实际 HTML 截图、源文件副本、主题色、区域坐标及交接说明，供后续 AI 移植 Android UI；432 是设计参考宽度，不代表手机实测 dp。

@@ -29,8 +29,8 @@ after(async () => {
   await new Promise(resolve => server?.close(resolve));
   assert.deepEqual(errors, [], '浏览器不应出现未处理异常');
 });
-async function open(t, viewport = { width: 412, height: 915 }) {
-  const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
+async function open(t, viewport = { width: 412, height: 915 }, options = {}) {
+  const context = await browser.newContext({ viewport, reducedMotion: 'reduce', ...options });
   t.after(() => context.close());
   const page = await context.newPage();
   page.on('pageerror', e => errors.push(e.message));
@@ -238,7 +238,7 @@ test('撤销回已保存原文后，不遗留已经放弃的旧草稿', async t 
   await page.reload(); await edit(page);
   assert.equal(await page.locator('#draftMessage').isVisible(), false);
 });
-test('标题单击、双击、长按选择互斥；输入时取消延迟命令', async t => {
+test('标题单击、双击、长按提示互斥；级别选择保留在更多菜单', async t => {
   const page = await open(t); await edit(page);
   await page.locator('#editorText').fill('正文'); await selection(page, 2);
   await page.locator('#headingBtn').click();
@@ -252,9 +252,180 @@ test('标题单击、双击、长按选择互斥；输入时取消延迟命令',
   const box = await page.locator('#headingBtn').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.waitForFunction(() => document.querySelector('#dialogTitle').textContent === '标题级别');
-  await page.mouse.up(); await choice(page, 'H4');
+  await page.waitForFunction(() => !document.querySelector('#toolHint').hidden);
+  assert.equal(await page.locator('#toolHint').innerText(), '标题');
+  await page.mouse.up();
+  assert.equal(await page.locator('#editorText').inputValue(), '正文x');
+  assert.equal(await page.locator('#dialogLayer').evaluate(el => el.classList.contains('show')), false);
+  await page.locator('#editorMore').click(); await page.getByRole('menuitem', { name: '标题级别' }).click();
+  await choice(page, 'H4');
   assert.equal(await page.locator('#editorText').inputValue(), '#### 正文x');
+});
+
+test('图标工具长按显示中文名且不编辑；松手后短按仍保留选区和撤销', async t => {
+  const page = await open(t); await edit(page);
+  await page.locator('#editorText').fill('需要保留的选区'); await selection(page, 0, 7);
+  await page.locator('[data-panel="format"]').click();
+  const button = page.locator('[data-command="bold"]'), box = await button.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+  await page.waitForFunction(() => !document.querySelector('#toolHint').hidden);
+  assert.equal(await page.locator('#toolHint').innerText(), '加粗');
+  const hint = await page.locator('#toolHint').boundingBox(), frame = await page.locator('#editorPanel').boundingBox();
+  assert.ok(hint.x >= frame.x && hint.x + hint.width <= frame.x + frame.width);
+  await page.mouse.up();
+  assert.equal(await page.locator('#editorText').inputValue(), '需要保留的选区');
+  assert.deepEqual(await page.locator('#editorText').evaluate(el => [el.selectionStart, el.selectionEnd]), [0, 7]);
+  assert.equal(await page.locator('#editorText').evaluate(el => document.activeElement === el), true);
+  await button.click();
+  assert.equal(await page.locator('#editorText').inputValue(), '**需要保留的选区**');
+  await page.locator('[data-command="clear"]').click();
+  assert.equal(await page.locator('#editorText').inputValue(), '需要保留的选区');
+  await page.locator('#undoBtn').click();
+  assert.equal(await page.locator('#editorText').inputValue(), '**需要保留的选区**');
+});
+
+test('三类面板均为单行，窄屏可向右查看且键盘示意可收起', async t => {
+  for (const width of [320, 412]) {
+    const page = await open(t, { width, height: 915 }); await edit(page);
+    for (const type of ['list', 'format', 'insert']) {
+      await page.locator(`[data-panel="${type}"]`).click();
+      const panel = await page.locator('#toolPanel').boundingBox();
+      assert.ok(panel.height <= 54);
+      const buttons = await page.locator('#toolPanel [data-command]').evaluateAll(els => els.map(el => el.getBoundingClientRect().y));
+      assert.ok(buttons.every(y => y === buttons[0]));
+      const total = await page.locator('#toolPanel').evaluate(el => el.scrollWidth - el.clientWidth);
+      if (total > 2) {
+        await page.locator('#toolPanelNext').click();
+        await page.waitForFunction(() => document.querySelector('#toolPanel').scrollLeft > 0);
+      }
+    }
+    assert.equal(await page.locator('#keyboardPreview').isVisible(), true);
+    await page.locator('#hideKeyboardBtn').click();
+    assert.equal(await page.locator('#keyboardPreview').isVisible(), false);
+    assert.equal(await page.locator('#toolPanelWrap').isVisible(), false);
+  }
+});
+
+test('触屏滑动可浏览工具且取消长按；长按和短按不丢正文选区', async t => {
+  const page = await open(t, { width: 320, height: 740 }, { hasTouch: true, isMobile: true }); await edit(page);
+  await page.locator('#editorText').fill('触屏选区'); await selection(page, 0, 4);
+  await page.locator('[data-panel="format"]').tap();
+  assert.equal(await page.locator('#keyboardPreview').isVisible(), false);
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+  const box = await page.locator('[data-command="bold"]').boundingBox();
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await touch('touchStart', [point]);
+  await page.waitForFunction(() => !document.querySelector('#toolHint').hidden);
+  assert.equal(await page.locator('#toolHint').innerText(), '加粗');
+  await touch('touchEnd', []);
+  assert.equal(await page.locator('#editorText').inputValue(), '触屏选区');
+  await page.locator('[data-command="bold"]').tap();
+  assert.equal(await page.locator('#editorText').inputValue(), '**触屏选区**');
+  assert.equal(await page.locator('#editorText').evaluate(el => document.activeElement === el), true);
+  await page.locator('[data-panel="insert"]').tap();
+  const panel = await page.locator('#toolPanel').boundingBox();
+  const start = { x: panel.x + panel.width - 60, y: panel.y + panel.height / 2 };
+  await touch('touchStart', [start]);
+  for (let i = 1; i <= 5; i++) await touch('touchMove', [{ x: start.x - i * 34, y: start.y }]);
+  await touch('touchEnd', []);
+  await page.waitForFunction(() => document.querySelector('#toolPanel').scrollLeft > 0);
+  assert.equal(await page.locator('#toolHint').isVisible(), false);
+  assert.equal(await page.locator('#dialogLayer').evaluate(el => el.classList.contains('show')), false);
+  assert.equal(await page.locator('#editorText').inputValue(), '**触屏选区**');
+});
+
+test('阅读编辑共用三主题，切换保留正文选区历史且首页外观独立', async t => {
+  const page = await open(t); await edit(page);
+  const homeColor = await page.locator('.home').evaluate(el => getComputedStyle(el).color);
+  await page.locator('#editorText').fill('保留原文和历史'); await selection(page, 1, 5);
+  const colors = new Set();
+  for (const theme of ['warm', 'graphite', 'blue']) {
+    await page.locator('#editorMore').click(); await page.getByRole('menuitem', { name: '主题', exact: true }).click();
+    assert.equal(await page.locator('.theme-choice').count(), 3);
+    await page.locator(`.theme-choice[data-page-theme="${theme}"]`).click();
+    assert.equal(await page.locator('#device').getAttribute('data-page-theme'), theme);
+    colors.add(await page.locator('#editorPanel').evaluate(el => getComputedStyle(el).backgroundColor));
+    assert.equal(await page.locator('#editorText').inputValue(), '保留原文和历史');
+    assert.deepEqual(await page.locator('#editorText').evaluate(el => [el.selectionStart, el.selectionEnd]), [1, 5]);
+    assert.equal(await page.locator('.home').evaluate(el => getComputedStyle(el).color), homeColor);
+  }
+  assert.equal(colors.size, 3);
+  await page.locator('#undoBtn').click(); assert.notEqual(await page.locator('#editorText').inputValue(), '保留原文和历史');
+  await page.locator('#redoBtn').click(); assert.equal(await page.locator('#editorText').inputValue(), '保留原文和历史');
+  await page.locator('#editorPanel [data-back]').click();
+  await page.locator('#readerMore').click(); await page.getByRole('menuitem', { name: '主题', exact: true }).click();
+  await page.locator('.theme-choice[data-page-theme="warm"]').click();
+  const readerColor = await page.locator('#readerPanel').evaluate(el => getComputedStyle(el).backgroundColor);
+  await page.locator('#readEditBtn').click();
+  assert.equal(await page.locator('#editorPanel').evaluate(el => getComputedStyle(el).backgroundColor), readerColor);
+  await saved(page); await page.reload();
+  assert.equal(await page.locator('#device').getAttribute('data-page-theme'), 'warm');
+  await edit(page); assert.equal(await page.locator('#editorText').inputValue(), '保留原文和历史');
+  await page.locator('#editorPanel [data-back]').click(); await page.locator('#readerPanel [data-back]').click();
+  await page.locator('#navSettings').click(); await page.locator('#themeSelect').selectOption('dark');
+  await page.locator('#settingsPanel [data-back]').click(); await page.locator('[data-note="n1"]').click();
+  assert.equal(await page.locator('#device').getAttribute('data-page-theme'), 'warm');
+  assert.equal(await page.locator('.status').evaluate(el => getComputedStyle(el).backgroundColor), readerColor);
+  await page.locator('#readEditBtn').click();
+  assert.equal(await page.locator('.status').evaluate(el => getComputedStyle(el).backgroundColor), readerColor);
+  assert.equal(await page.locator('#device').getAttribute('data-theme'), 'dark');
+});
+
+test('主题写入失败不假报成功，旧备份可读且拒绝未知主题', async t => {
+  const page = await open(t); await edit(page);
+  await page.evaluate(() => { window.originalSetItem = Storage.prototype.setItem; Storage.prototype.setItem = () => { throw new DOMException('full', 'QuotaExceededError'); }; });
+  await page.locator('#editorMore').click(); await page.getByRole('menuitem', { name: '主题', exact: true }).click();
+  await page.locator('.theme-choice[data-page-theme="warm"]').click();
+  assert.match(await page.locator('#dialogError').innerText(), /保存失败/);
+  assert.equal(await page.locator('#device').getAttribute('data-page-theme'), 'blue');
+  await page.evaluate(() => { Storage.prototype.setItem = window.originalSetItem; });
+  await page.locator('#dialogCancel').click();
+  const state = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), store);
+  delete state.prefs.pageTheme;
+  const backup = { format: 'life-archive-browser-prototype', version: 2, state, drafts: {} };
+  await page.locator('#restoreFile').setInputFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+  await page.waitForFunction(() => document.querySelector('#dialogTitle').textContent === '替换现有示例资料？');
+  await page.locator('#dialogOK').click();
+  backup.state.prefs.pageTheme = 'unknown';
+  await page.locator('#restoreFile').setInputFiles({ name: 'unknown.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+  await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('验证失败'));
+  assert.equal(await page.locator('#device').getAttribute('data-page-theme'), 'blue');
+});
+
+test('小米桌面画布固定 432×960，缩放后菜单和长按提示仍贴合设备', async t => {
+  const page = await open(t, { width: 1280, height: 800 }); await edit(page);
+  const logical = () => page.locator('#device').evaluate(el => [el.clientWidth, el.clientHeight]);
+  assert.deepEqual(await logical(), [432, 960]);
+  const shortFrame = await page.locator('#device').boundingBox();
+  assert.ok(Math.abs(shortFrame.width / shortFrame.height - 9 / 20) < .001);
+  await page.locator('#editorMore').click();
+  const menu = await page.locator('#menu').boundingBox();
+  assert.ok(menu.x >= shortFrame.x && menu.x + menu.width <= shortFrame.x + shortFrame.width + 1);
+  assert.ok(menu.y >= shortFrame.y && menu.y + menu.height <= shortFrame.y + shortFrame.height + 1);
+  await page.keyboard.press('Escape');
+  await page.locator('[data-panel="format"]').click();
+  const button = await page.locator('[data-command="bold"]').boundingBox();
+  await page.mouse.move(button.x + button.width / 2, button.y + button.height / 2); await page.mouse.down();
+  await page.waitForFunction(() => !document.querySelector('#toolHint').hidden);
+  const hint = await page.locator('#toolHint').boundingBox();
+  assert.ok(hint.y < button.y && hint.y + hint.height <= button.y + 1);
+  assert.ok(hint.x >= shortFrame.x && hint.x + hint.width <= shortFrame.x + shortFrame.width);
+  await page.mouse.up();
+  const areaHeight = await page.locator('.editor-area').evaluate(el => el.clientHeight);
+  await page.setViewportSize({ width: 1280, height: 1080 });
+  assert.deepEqual(await logical(), [432, 960]);
+  assert.equal(await page.locator('.editor-area').evaluate(el => el.clientHeight), areaHeight);
+});
+
+test('无框截图模式精确输出小米屏幕 1440×3200，布局与像素规格分离', async t => {
+  const page = await open(t, { width: 432, height: 960 }, { deviceScaleFactor: 10 / 3 });
+  await page.goto(url + '?capture=1#editor');
+  assert.deepEqual(await page.locator('#device').boundingBox(), { x: 0, y: 0, width: 432, height: 960 });
+  assert.equal(await page.locator('.viewer-hint').isVisible(), false);
+  const image = await page.locator('#device').screenshot({ animations: 'disabled', scale: 'device' });
+  assert.deepEqual([image.readUInt32BE(16), image.readUInt32BE(20)], [1440, 3200]);
+  assert.equal(await page.locator('#device').evaluate(el => getComputedStyle(el).borderRadius), '0px');
 });
 test('目录跳转与返回后恢复阅读位置', async t => {
   const page = await open(t); await edit(page);

@@ -47,6 +47,7 @@
 - [工程底座历史交接](engineering/bootstrap-handoff.md)：初始锁定版本、两个模块阶段的构建与启动验证、当时的架构接手边界。
 - [架构入口](architecture/README.md)、[ADR-001：模块化单体架构](architecture/adr-001-android-architecture.md)：已选技术、模块与依赖、数据归属、存储和目标机型基线、实施验收顺序。
 - [设计资料](design/README.md)：设计依据、样板及后续资料归档方式。
+- [小米 14 Ultra UI 实施交接](design/xiaomi14ultra-ui-handoff.md)：固定 20:9 的 HTML、1440 × 3200 截图导出、三主题及 Android UI 移植边界。
 - [验证说明](testing/README.md)：现阶段可执行的检查和未验证范围。
 - [工具说明](../tools/README.md)、[复制来源](../tools/UPSTREAM.md)：辅助脚本入口、来源及使用配置约定。
 

@@ -20,3 +20,5 @@
 稳定性检查另外采样浅深首帧，延迟图表库验证原子展示，检查嵌入链接的来源笔记、旧渲染回执、刷新不清空整页、配置及单资源更新保留其他媒体/Callout 会话，以及普通正文不加载复杂渲染库。
 
 浏览器检查不能代替 Android WebView、目标机媒体编码、系统文件选择器或中文输入验收。最新结果见[稳定性修复交接](../docs/engineering/phase-1-stability-handoff.md)，完整支持状态见[功能交接](../docs/engineering/phase-1-function-handoff.md)。
+
+HTML 视觉样板可用 `node reader/capture-design.mjs --out D:/新的空目录` 在仓库根目录导出小米 14 Ultra UI 交接包。脚本复用这里的 Playwright，固定 432 × 960 逻辑画布，直接渲染 1440 × 3200 PNG，不连接手机；详情见 [UI 实施交接](../docs/design/xiaomi14ultra-ui-handoff.md)。这与 Android 完整阅读器资源、真机验收分别记录。
