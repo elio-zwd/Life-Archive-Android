@@ -2,7 +2,7 @@
 
 面向个人使用的 Android 应用，第一期以本地 Markdown 笔记起步，按 Obsidian 官方内置文档语法规划文件兼容能力。整体功能范围仍在确认，架构须能承接后续选中的任务、生活管理、AI 和出行等能力。
 
-**当前状态：一期功能版及 0.2.5 首页列表性能修复已接入，视觉重做后置，目标机验收待完成。** 包含组织搜索、源码编辑与本地完整阅读、附件、回收站、导入导出、备份恢复及可清理缓存。首页滚动、长标签／笔记本选择与刷新优化见[列表性能修复交接](docs/engineering/phase-1-list-performance-handoff.md)。列表与引用混合回车、正文快照与高亮调度见[输入修复交接](docs/engineering/phase-1-editor-input-handoff.md)；标题手势、格式／插入面板与续写用法见[工具栏交接](docs/engineering/phase-1-toolbar-handoff.md)，首屏优先与按需缓存见[阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整支持清单和迁移见[一期功能交接](docs/engineering/phase-1-function-handoff.md)。电脑检查不等于产品验收。
+**当前状态：一期主要功能、三页 UI 移植及电脑检查已完成，正在收尾验收与交接。** HTML 编辑与阅读设计已认可，首页设计已审定，其他临时页面保留；剩余事项和当前 APK 见[一期完成度核对与接手清单](docs/engineering/phase-1-completion-audit-20261031.md)，实施范围见[UI 优化计划](docs/plans/phase-1-ui-polish.md)。用户已完成部分手动验证，具体项目待按其明确结论补录，历史未验证表不能直接视为当前全部待办。现有功能包含组织搜索、源码编辑与本地完整阅读、附件、回收站、导入导出、备份恢复及可清理缓存。首页滚动、长标签／笔记本选择与刷新优化见[列表性能修复交接](docs/engineering/phase-1-list-performance-handoff.md)。列表与引用混合回车、正文快照与高亮调度见[输入修复交接](docs/engineering/phase-1-editor-input-handoff.md)；标题手势、格式／插入面板与续写用法见[工具栏交接](docs/engineering/phase-1-toolbar-handoff.md)，首屏优先与按需缓存见[阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整支持清单和迁移见[一期功能交接](docs/engineering/phase-1-function-handoff.md)。设计认可、电脑验证和设备验收分别记录。
 
 ## 项目标识与方向
 

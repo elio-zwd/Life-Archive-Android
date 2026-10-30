@@ -1,12 +1,13 @@
 # 文档索引
 
-当前已接入一期功能版，按用户决定先补功能、后重做视觉；目标机交互、性能和最终视觉验收待完成。阶段计划描述产品目标，架构文档描述边界，交接记录描述实现和验证，三者不能互相代替。
+当前一期主要功能、首页与编辑／阅读 UI 移植及电脑检查已完成，其他临时页面保留。剩余事项以[一期完成度核对与接手清单](engineering/phase-1-completion-audit-20261031.md)为入口；用户已完成部分手动验证，先核对其结论再补验缺口。阶段计划描述产品目标，架构文档描述边界，交接记录描述实现和验证，三者不能互相代替。
 
 ## 计划与决策
 
 - [整体功能版图与旧版迁移评估](plans/overall-feature-roadmap.md)：功能分类、既有分期映射及待确认的后期候选，不等于全部获准实现。
 - [第一期：Android 本地 Markdown 笔记](plans/phase-1-local-notes.md)
 - [第一期：编辑器交互与视觉决策](plans/phase-1-editor-visual-decisions.md)
+- [第一期：UI 优化实施计划](plans/phase-1-ui-polish.md)：首页及已认可编辑／阅读视觉的 Android 移植、保护边界和分层验证。
 - [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
 - [第一期：工具栏增强与回车续写](plans/phase-1-editor-toolbar.md)：标题手势、格式／插入面板、选区保护与输入事务约定。
 - [第二期：AI 与共享能力](plans/phase-2-ai-and-shared-capabilities.md)
@@ -28,6 +29,9 @@
 功能细节在计划中维护，README 和 AGENTS 通过链接引用。只在定位、入口或长期规则变化时同步摘要，避免多份完整清单发生冲突。整体架构已由 ADR-001 选定；模块、存储和状态管理按该文实施，编辑器样板和未定产品细节仍须完成各自门槛。
 
 ## 工程与资料
+
+- [一期完成度核对与接手清单](engineering/phase-1-completion-audit-20261031.md)：完整一期与本轮 UI 工作的完成状态、最终电脑检查、APK 身份、尚待确认的手动验收及接手边界。
+- [一期手动验收清单](testing/phase-1-manual-acceptance.md)：供用户后续逐项查看并与新 AI 对齐，已确认项目不默认重测。
 
 - [首页列表性能修复交接](engineering/phase-1-list-performance-handoff.md)：0.2.5 的行数据关联、列表复用与滚动位置、长筛选列表、查询开销及验证边界。
 
