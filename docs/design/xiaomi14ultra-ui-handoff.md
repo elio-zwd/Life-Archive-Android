@@ -2,6 +2,8 @@
 
 日期：2026-10-30。用途：将当前 HTML 视觉与交互移植到 Life Archive Android；本轮没有修改 Android UI，也没有操作手机。
 
+同日首页更新：用户已进入一期 UI 优化，HTML 编辑／阅读设计已认可并冻结，其他页面暂时保留；首页内容层次优化已通过主管审核，供 Android 移植，设备实测待验收。唯一最终目录为 `D:/My_Elio/Life-Archive-Deliveries/home-ui-review-20261030/final-review/`，HTML 原始文件 SHA-256 为 `78ac7001965b3a35b45978509240c27d01a93eceed6f500a1d9352b750185043`。原交接包的 `01-home-light`／`04-home-dark` 已过时，首页请查[最新首页说明](prototypes/home-a-function-alignment.md#首页内容层次优化2026-10-30)及其仓库外前后截图。设计认可不代表 Android 实现或真机验收。
+
 ## 使用顺序与交付内容
 
 先读仓库 `AGENTS.md`、本文件及 [HTML 交互样板](prototypes/home-a-xiaomi14ultra.html)，再按截图检查各页面。HTML 与当前导出的截图共同构成设计参考；交互含义优先查 HTML 与[已确认决策](../plans/phase-1-editor-visual-decisions.md)，不要从静态截图猜测数据或保存行为。
@@ -27,7 +29,7 @@
 
 | 页面／状态 | 主要依据 | 实施要点 |
 | --- | --- | --- |
-| 首页浅／深色 | `01-home-light`、`04-home-dark` | 保留首页 A 的列表、缩略图、标签、筛选和轻量新建浮钮；首页主题与文档主题分开。 |
+| 首页浅／深色 | 最终目录的 `01-home-light`、`04-home-dark`，原包已过时 | 文字优先列表、右侧小图、底部日期／笔记本／属性标签、可换行筛选反馈；首页主题与文档主题分开。主管审核通过，供 Android 移植，设备实测待验收。 |
 | 阅读三主题 | `05-reader-a/b/c` | 文件名居中缩小，正文 H1／元信息／封面／正文顺序不变；无开头 H1 时不合成标题；右下角编辑小浮钮。 |
 | 阅读目录 | `06-reader-outline` | 按正文标题定位，保留阅读位置。目录面板样式可按 Android 语义实现，无需仿制浏览器对话框机制。 |
 | 编辑三主题 | `07-editor-a/b/c-keyboard` | 文件名与保存状态在同一顶栏；正文连续画布；没有常驻字符数／行列栏。键盘示意只用来检视正文高度。 |

@@ -148,6 +148,55 @@ html[data-capture=true] .viewer{display:block;width:432px;height:960px;min-heigh
 html[data-capture=true] .viewer-hint{display:none}
 html[data-capture=true] .device-stage{width:432px;height:960px;--preview-scale:1}
 html[data-capture=true] .device{border-radius:0;box-shadow:none;transform:none}
+/* 2026-10-30：首页文字优先；作用域保护已确认的阅读、编辑和临时设置页。 */
+.home{--muted:#5f6e82;--blue:#145ed7}
+.device[data-theme=dark] .home{--muted:#b3bfcd;--blue:#8ab7ff}
+.home .chip span{opacity:1}
+.home .search-box input::placeholder{color:var(--muted);opacity:1}
+.home .nav-btn{color:var(--muted)}
+.home .nav-btn.active{color:var(--blue)}
+.home .topbar{padding:10px 20px 6px;min-height:66px}
+.home .topbar h1{font-size:25px;font-weight:750;letter-spacing:-.055em}
+.home .top-actions{gap:2px}
+.home .icon-button{width:44px;height:44px}
+.home .search-holder{padding:0 20px 10px}
+.home .search-box{border-radius:14px;background:var(--chip);height:46px;padding:0 12px}
+.home .search-clear{width:36px;height:40px;place-items:center;padding:0}
+.home .tabs-wrap{padding:5px 20px 11px;gap:8px}
+.home .tabs{gap:7px}
+.home .chip{height:36px;padding:0 13px;font-size:13px;font-weight:550;background:var(--chip);color:var(--muted);box-shadow:none}
+.home .chip.active{background:var(--blue-light);color:var(--blue);font-weight:650;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--blue) 18%,transparent)}
+.device[data-theme=dark] .home .chip.active{background:var(--blue-light);color:var(--blue)}
+.home .folder-action{width:36px;height:44px;border-radius:9px}
+.home .filter-summary{align-items:flex-start;gap:10px;padding:4px 20px;border-bottom:0;min-height:44px}
+.home #listSummary{padding:13px 0 9px;white-space:normal;overflow:visible;line-height:1.65;font-size:12px;overflow-wrap:anywhere}
+.home #listSummary strong{color:var(--ink);font-weight:600;white-space:nowrap}
+.home .filter-context{color:var(--muted);white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.home .filter-summary button{min-height:44px;flex:none;font-size:12px;padding:8px 0;color:var(--muted);display:flex;align-items:center;gap:4px}
+.home #listSortBtn .svg{width:15px;height:15px}
+.home #clearFiltersBtn{color:var(--blue)}
+.home .notes-scroller{padding:0 20px 88px}
+.home .note-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;row-gap:8px;min-height:118px;padding:13px 0 10px;align-items:start}
+.home .note-copy{padding:0;grid-column:1;min-width:0}
+.home .note-row:not(:has(.thumb)) .note-copy{grid-column:1 / -1}
+.home .note-title{display:block;white-space:normal;font-size:16px;font-weight:650;line-height:24px;margin:0 0 4px;overflow:hidden}
+.home .note-title .name{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;overflow-wrap:anywhere}
+.home .note-desc{font-size:13px;line-height:20px;letter-spacing:0;color:color-mix(in srgb,var(--ink) 65%,var(--bg));word-break:normal;overflow-wrap:anywhere}
+.home .thumb{grid-column:2;grid-row:1;width:60px;height:66px;border-radius:8px;margin-top:2px}
+.home .note-meta{grid-column:1 / -1;width:auto;min-width:0;min-height:24px;padding:0 44px 0 0;border:0;flex-direction:row;justify-content:flex-start;align-items:center;gap:9px;white-space:nowrap;font-size:11px}
+.home .stamp{margin:0;font-size:11px;color:var(--muted);flex:none}
+.home .note-folder{display:flex;align-items:center;gap:4px;min-width:0;max-width:105px;color:var(--muted)}
+.home .note-folder .svg{width:12px;height:12px}
+.home .note-folder span{overflow:hidden;text-overflow:ellipsis}
+.home .note-tags{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--blue);font-size:11px}
+.home .note-tags span+span{margin-left:6px}
+.home .item-more{position:absolute;right:0;bottom:0;top:auto;width:44px;height:44px;display:grid;place-items:center;padding:11px;border:0;border-radius:10px;color:var(--muted);background:none}
+.home .item-more:hover{background:var(--chip)}
+.home .item-more .svg{width:20px;height:20px}
+.home .pin{display:inline-block;vertical-align:-2px;margin-right:5px;width:13px;height:13px;color:var(--blue);fill:none;stroke:currentColor;transform:none}
+.home .note-title mark,.home .note-desc mark{background:#f9df92;color:#473a1b;border-radius:2px}
+.device[data-theme=dark] .home .note-title mark,.device[data-theme=dark] .home .note-desc mark{background:#695829;color:#fff}
+@media(max-width:365px){.home .topbar,.home .search-holder,.home .tabs-wrap,.home .filter-summary{padding-left:16px;padding-right:16px}.home .notes-scroller{padding-left:16px;padding-right:16px}.home .note-row{column-gap:10px}.home .thumb{width:54px;height:62px}.home .note-folder{max-width:86px}.home .note-meta{gap:7px}.home .topbar h1{font-size:24px}}
 </style>
 </head>
 <body>
@@ -182,7 +231,7 @@ html[data-capture=true] .device{border-radius:0;box-shadow:none;transform:none}
    <header class="topbar"><h1>Life Archive</h1><div class="top-actions"><button class="icon-button" id="backupBtn" aria-label="本地备份" title="本地备份"><svg class="svg"><use href="#i-cloud"/></svg></button><button class="icon-button" id="homeMore" aria-label="更多操作" title="更多操作"><svg class="svg"><use href="#i-dots"/></svg></button></div></header>
    <div class="search-holder"><label class="search-box" for="searchInput"><svg class="svg"><use href="#i-search"/></svg><input id="searchInput" type="search" autocomplete="off" placeholder="搜索文件名、标题与正文"><button class="search-clear" id="searchClear" aria-label="清空搜索" type="button"><svg class="svg" style="width:16px;height:16px"><use href="#i-x"/></svg></button></label></div>
    <div class="tabs-wrap"><nav class="tabs" aria-label="笔记本筛选" id="tabList"></nav><button class="folder-action" id="folderBtn" aria-label="管理笔记本" title="管理笔记本">＋</button></div>
-   <div class="filter-summary"><span id="listSummary"></span><button id="listSortBtn">最近修改</button><button id="clearFiltersBtn" hidden>清除</button></div>
+   <div class="filter-summary"><span id="listSummary" role="status" aria-live="polite"></span><button id="listSortBtn" aria-label="笔记排序">最近修改</button><button id="clearFiltersBtn" hidden>清除</button></div>
    <div class="notes-scroller" id="notesScroll"><div id="notesList"></div></div>
    <button class="fab" id="newBtn" aria-label="新建笔记" title="新建笔记" data-tip="新建笔记"><svg class="svg"><use href="#i-pencil"/></svg><span>新建笔记</span></button>
    <nav class="bottom-nav" aria-label="底部导航"><button class="nav-btn active" id="navNotes" aria-current="page"><svg class="svg"><use href="#i-notes"/></svg><span>笔记</span></button><button class="nav-btn" id="navSettings"><svg class="svg"><use href="#i-settings"/></svg><span>设置</span></button></nav>
@@ -370,12 +419,13 @@ function renderList(){
  const folders=['全部笔记',...state.folders,'未分类'];
  $('#tabList').innerHTML=folders.map(f=>`<button class="chip ${currentCat===f?'active':''}" data-cat="${esc(f)}" aria-pressed="${currentCat===f}">${esc(f)} <span>${state.notes.filter(n=>f==='全部笔记'||n.category===f||n.category.startsWith(f+'/')).length}</span></button>`).join('');
  const list=selectVisible(),q=$('#searchInput').value.trim();
- $('#searchClear').classList.toggle('show',!!q);$('#listSortBtn').textContent=SORTS[state.prefs.sort];
+ $('#searchClear').classList.toggle('show',!!q);$('#listSortBtn').innerHTML=icon('sort')+esc(SORTS[state.prefs.sort]);$('#listSortBtn').setAttribute('aria-label','笔记排序：'+SORTS[state.prefs.sort]);
  $('#clearFiltersBtn').hidden=!q&&currentTag==='全部标签'&&currentCat==='全部笔记';
- $('#listSummary').textContent=`${list.length} 篇${currentCat!=='全部笔记'?' · '+currentCat:''}${currentTag!=='全部标签'?' · #'+currentTag:''}${q?' · 搜索结果':''}`;
+ $('#listSummary').innerHTML=`<strong>${list.length} 篇</strong><span class="filter-context">${esc((currentCat!=='全部笔记'?' · '+currentCat:'')+(currentTag!=='全部标签'?' · #'+currentTag:'')+(q?' · 搜索结果':''))}</span>`;
  $('#notesList').innerHTML=list.length?list.map(n=>{
-  const body=plain(n.content),at=q?body.toLowerCase().indexOf(q.toLowerCase()):-1,excerpt=at>30?'…'+body.slice(at-25,at+110):body.slice(0,150);
-  return `<article class="note-row" tabindex="0" data-note="${esc(n.id)}" aria-label="打开笔记 ${esc(n.title)}">${n.image&&IMAGES[n.image]?`<img class="thumb" alt="" src="${IMAGES[n.image]}">`:`<div class="thumb no-thumb">${icon('notes')}</div>`}<div class="note-copy"><h2 class="note-title">${n.pinned?icon('pin').replace('class="svg"','class="svg pin"'):''}<span class="name">${esc(n.title)}</span></h2><div class="note-desc">${highlightMatch(excerpt||'空白笔记，点击开始记录。',q)}</div></div><div class="note-meta"><button class="item-more" data-more="${esc(n.id)}" aria-label="管理 ${esc(n.title)}">${icon('dots')}</button><span class="stamp">${esc(new Intl.DateTimeFormat('zh-CN',{month:'numeric',day:'numeric'}).format(n.time))}</span><span class="tag" title="${esc(n.category)}">${esc(n.category)}</span></div></article>`;
+  const body=plain(n.content.replace(/^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s*)?/gm,'')),at=q?body.toLowerCase().indexOf(q.toLowerCase()):-1,excerpt=at>30?'…'+body.slice(at-25,at+110):body.slice(0,150);
+  const tags=tagsOf(n),date=new Date(n.time);
+  return `<article class="note-row" tabindex="0" data-note="${esc(n.id)}" aria-label="打开笔记 ${esc(n.title)}"><div class="note-copy"><h2 class="note-title"><span class="name">${n.pinned?icon('pin').replace('class="svg"','class="svg pin" role="img" aria-label="已置顶"'):''}${highlightMatch(n.title,q)}</span></h2><div class="note-desc">${highlightMatch(excerpt||'空白笔记，点击开始记录。',q)}</div></div>${n.image&&IMAGES[n.image]?`<img class="thumb" alt="" src="${IMAGES[n.image]}">`:''}<div class="note-meta"><time class="stamp" datetime="${date.toISOString()}" title="修改于 ${esc(getStamp(n))}">${esc(new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'numeric',day:'numeric'}).format(date))}</time><span class="note-folder" title="笔记本：${esc(n.category)}">${icon('folder')}<span>${esc(n.category)}</span></span>${tags.length?`<span class="note-tags" title="属性标签：${esc(tags.map(t=>'#'+t).join(' '))}">${tags.slice(0,2).map(t=>`<span>#${esc(t)}</span>`).join('')}${tags.length>2?`<span>+${tags.length-2}</span>`:''}</span>`:''}</div><button class="item-more" data-more="${esc(n.id)}" aria-label="管理 ${esc(n.title)}">${icon('dots')}</button></article>`;
  }).join(''):`<div class="empty">${icon(state.notes.length?'search':'notes')}<strong>${state.notes.length?'没有找到笔记':'从一篇笔记开始'}</strong><p>${state.notes.length?'试试其他关键词，或清除笔记本与标签筛选。':'给它一个名字，写下想留下的事。'}</p><button id="${state.notes.length?'emptyReset':'emptyNew'}">${state.notes.length?'清除筛选':'新建笔记'}</button></div>`;
 }
 function clearFilters(){$('#searchInput').value='';currentCat='全部笔记';currentTag='全部标签';renderList()}
