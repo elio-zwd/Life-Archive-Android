@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -32,6 +33,9 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.core.preferences.*
+import com.elio.lifearchive.core.designsystem.DocumentPageTheme
+import com.elio.lifearchive.core.designsystem.DocumentPalette
+import androidx.core.view.WindowCompat
 import com.elio.lifearchive.domain.notes.*
 import com.elio.lifearchive.feature.editor.*
 import com.elio.lifearchive.feature.notes.*
@@ -71,6 +75,19 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
     LaunchedEffect(backStack.toList()) { val keys = backStack.filterIsInstance<NoteDestination>().map { it.entry }.toSet(); editors.keys.retainAll(keys) }
     LaunchedEffect(backStack.toList()) { homes.keys.retainAll(backStack.filterIsInstance<NotesHome>().toSet()) }
     val activity = LocalActivity.current
+    val systemDark = isSystemInDarkTheme()
+    val homeDark = when (values.theme) { ThemeMode.SYSTEM -> systemDark; ThemeMode.DARK -> true; ThemeMode.LIGHT -> false }
+    val documentTheme = values.resolvedDocumentTheme(homeDark)
+    val documentPalette = when (documentTheme) { DocumentTheme.BLUE -> DocumentPalette.BLUE; DocumentTheme.WARM -> DocumentPalette.WARM; DocumentTheme.GRAPHITE -> DocumentPalette.GRAPHITE }
+    val currentDark = if (backStack.lastOrNull() is NoteDestination) documentPalette == DocumentPalette.GRAPHITE else homeDark
+    SideEffect {
+        activity?.window?.let { window ->
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                isAppearanceLightStatusBars = !currentDark
+                isAppearanceLightNavigationBars = !currentDark
+            }
+        }
+    }
     val context = LocalContext.current
     val settings: SettingsViewModel? = if (library != null && remote != null && backup != null) viewModel(factory = remember(library, remote, backup, readerCache) { viewModelFactory { initializer { SettingsViewModel(preferences, backup, notes, library, remote, readerCache) } } }) else null
     if (settings != null) {
@@ -181,6 +198,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                     themeLabel = when (values.theme) { ThemeMode.SYSTEM -> "跟随系统"; ThemeMode.LIGHT -> "浅色"; ThemeMode.DARK -> "深色" },
                     onClearError = model::clearError, sampleBusy = creatingSample, message = message,
                     onQuery = model::query, onSettings = { if (settings != null) backStack.add(SettingsDestination) },
+                    onBackup = { if (settings != null) pickExport("backup") }, loadThumbnail = model::loadThumbnail,
                     onQuick = { model.quick { if (backStack.lastOrNull() == key) backStack.add(NoteDestination(it.value, true)) } }, onManage = { managed = it },
                     onFolder = { folderPrompt = ""; folderText = "" }, onFolderManage = { folderPrompt = state.query.folder; folderText = state.query.folder.orEmpty() }, onRebuild = model::rebuild,
                 )
@@ -189,16 +207,24 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 val factory = remember(notes, library, key) { viewModelFactory { initializer { EditorViewModel(notes, NoteId(key.id), key.editing, key.offset, library = library) } } }
                 val model: EditorViewModel = viewModel(factory = factory)
                 SideEffect { editors[key.entry] = model; if (backStack.lastOrNull() == key) activeEditor = model }
-                EditorRoute(model, values.fontScale, debugControls,
-                    onBack = { if (backStack.lastOrNull() == key) backStack.removeLastOrNull() },
-                    onOpenCopy = { if (backStack.lastOrNull() == key) backStack.add(NoteDestination(it.value, true)) },
-                    services = if (library != null && remote != null) ReaderServices(NoteId(key.id), notes, library, remote, values.remoteLoading == RemoteLoading.AUTOMATIC, model::message, readerCache) { event ->
-                        model.readerLoaded(event)
-                        if (debugControls) android.util.Log.d("LifeArchiveReader", "phase=${event.phase} note=${key.id} entryMs=${model.openElapsedMs()} pageMs=${event.elapsedMs} htmlHit=${event.cacheHit} artifactHits=${event.artifactHits}")
-                    } else null,
-                    onLink = ::openLink, onAttach = { if (model.prepareAttachment()) { attachmentEntry = key.entry; attachmentPicker.launch(arrayOf("*/*")) } },
-                    onManage = { scope.launch { val listing = library?.query(); if (backStack.lastOrNull() == key) managed = (listing as? NoteResult.Success)?.value?.notes?.find { it.summary.id.value == key.id } } },
-                )
+                DocumentPageTheme(documentPalette) {
+                    EditorRoute(model, values.fontScale, debugControls,
+                        onBack = { if (backStack.lastOrNull() == key) backStack.removeLastOrNull() },
+                        onOpenCopy = { if (backStack.lastOrNull() == key) backStack.add(NoteDestination(it.value, true)) },
+                        services = if (library != null && remote != null) ReaderServices(NoteId(key.id), notes, library, remote, values.remoteLoading == RemoteLoading.AUTOMATIC, model::message, readerCache) { event ->
+                            model.readerLoaded(event)
+                            if (debugControls) android.util.Log.d("LifeArchiveReader", "phase=${event.phase} note=${key.id} entryMs=${model.openElapsedMs()} pageMs=${event.elapsedMs} htmlHit=${event.cacheHit} artifactHits=${event.artifactHits}")
+                        } else null,
+                        onLink = ::openLink, onAttach = { if (model.prepareAttachment()) { attachmentEntry = key.entry; attachmentPicker.launch(arrayOf("*/*")) } },
+                        onManage = { scope.launch { val detail = library?.metadata(NoteId(key.id)); if (backStack.lastOrNull() == key) managed = (detail as? NoteResult.Success)?.value } },
+                        documentTheme = documentTheme,
+                        onDocumentTheme = { chosen -> libraryOperation {
+                            try { preferences.setDocumentTheme(chosen) }
+                            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                            catch (e: Exception) { model.message("文档主题保存失败：${e.message}") }
+                        } },
+                    )
+                }
             }
             entry<SettingsDestination> {
                 SideEffect { if (backStack.lastOrNull() == SettingsDestination) activeEditor = null }

@@ -9,9 +9,15 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.elio.lifearchive.core.designsystem.LifeArchiveTheme
+import com.elio.lifearchive.core.designsystem.DocumentPageTheme
+import com.elio.lifearchive.core.designsystem.DocumentPalette
+import com.elio.lifearchive.core.document.DocumentVersion
+import com.elio.lifearchive.core.document.LibraryPath
 import com.elio.lifearchive.domain.notes.*
 import com.elio.lifearchive.feature.editor.*
 import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -35,13 +41,44 @@ class ReaderHostStabilityTest {
         override fun getRequestHeaders() = emptyMap<String, String>()
     }
 
+    @Test fun metadataUpdatesAfterStorageNotificationWithoutReloadingTheReader() {
+        fun detail(version: String, tag: String) = LibraryNote(
+            NoteSummary(NoteId("root"), LibraryPath("生活/笔记.md"), DocumentVersion(version), false),
+            false, 0, 1234, null, listOf(tag), null, propertyTags = listOf(tag),
+        )
+        val value = AtomicReference(detail("old", "旧标签"))
+        val updates = MutableStateFlow(listOf(value.get().summary))
+        @Suppress("UNCHECKED_CAST")
+        val notes = Proxy.newProxyInstance(NotesRepository::class.java.classLoader, arrayOf(NotesRepository::class.java)) { proxy, method, args ->
+            when (method.name) { "observeNotes" -> updates; "equals" -> proxy === args?.firstOrNull(); "hashCode" -> System.identityHashCode(proxy); else -> error(method.name) }
+        } as NotesRepository
+        @Suppress("UNCHECKED_CAST")
+        val library = Proxy.newProxyInstance(LibraryRepository::class.java.classLoader, arrayOf(LibraryRepository::class.java)) { proxy, method, args ->
+            when { method.name.startsWith("metadata") -> NoteResult.Success(value.get()); method.name == "equals" -> proxy === args?.firstOrNull(); method.name == "hashCode" -> System.identityHashCode(proxy); else -> error(method.name) }
+        } as LibraryRepository
+        val services = ReaderServices(NoteId("root"), notes, library, unused(), false, {})
+        val document = ReaderSnapshot("正文", "one", path = "生活/笔记.md", version = "old")
+        compose.setContent { DocumentPageTheme(DocumentPalette.BLUE) { WebReaderRenderer.Content(document, 1f, 0, {}, { null }, {}, services) } }
+        compose.waitForIdle()
+        val view = find(compose.activity.window.decorView)!!
+        val shadow = shadowOf(view)
+        val initialUrl = shadow.lastLoadedUrl
+        compose.waitUntil(15000) { shadow.lastEvaluatedJavascript?.contains("旧标签") == true }
+        value.set(detail("new", "新标签"))
+        updates.value = listOf(value.get().summary)
+        compose.waitUntil(15000) { shadow.lastEvaluatedJavascript?.contains("新标签") == true }
+        assertSame(view, find(compose.activity.window.decorView))
+        assertEquals(initialUrl, shadow.lastLoadedUrl)
+    }
+
     @Test fun scrollAndConfigurationUpdatesDoNotReloadTheWebViewAndStaleCallbacksAreIgnored() {
         var document by mutableStateOf(ReaderSnapshot("正文", "first"))
         var offset by mutableIntStateOf(10)
         var scale by mutableFloatStateOf(1f)
+        var palette by mutableStateOf(DocumentPalette.BLUE)
         val links = mutableListOf<String>()
         val services = ReaderServices(NoteId("root"), unused(), unused(), unused(), false, {})
-        compose.setContent { LifeArchiveTheme { WebReaderRenderer.Content(document, scale, offset, {}, { null }, { links += it }, services) } }
+        compose.setContent { LifeArchiveTheme { DocumentPageTheme(palette) { WebReaderRenderer.Content(document, scale, offset, {}, { null }, { links += it }, services) } } }
         compose.waitForIdle()
         val view = find(compose.activity.window.decorView)!!
         val shadow = shadowOf(view)
@@ -51,6 +88,10 @@ class ReaderHostStabilityTest {
         compose.waitForIdle()
         assertSame(view, find(compose.activity.window.decorView)); assertEquals(initialUrl, shadow.lastLoadedUrl)
         assertTrue(shadow.lastEvaluatedJavascript.contains("readerUpdate")); assertTrue(shadow.lastEvaluatedJavascript.contains("1.2"))
+        compose.runOnIdle { palette = DocumentPalette.WARM }
+        compose.waitForIdle()
+        assertSame(view, find(compose.activity.window.decorView)); assertEquals(initialUrl, shadow.lastLoadedUrl)
+        assertTrue(shadow.lastEvaluatedJavascript.contains("\"theme\":\"warm\""))
         compose.runOnIdle { document = ReaderSnapshot("较新正文", "second") }
         compose.waitForIdle(); assertEquals(initialUrl, shadow.lastLoadedUrl)
         compose.runOnIdle {

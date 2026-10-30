@@ -8,7 +8,16 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.elio.lifearchive.core.designsystem.LifeArchiveTheme
+import com.elio.lifearchive.core.designsystem.DocumentPageTheme
+import com.elio.lifearchive.core.designsystem.DocumentPalette
+import com.elio.lifearchive.core.designsystem.colors
+import com.elio.lifearchive.core.document.DocumentVersion
+import com.elio.lifearchive.core.document.RawDocument
+import com.elio.lifearchive.core.preferences.DocumentTheme
+import com.elio.lifearchive.domain.notes.Draft
+import com.elio.lifearchive.domain.notes.NoteId
 import com.elio.lifearchive.feature.editor.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -21,6 +30,60 @@ import org.robolectric.annotation.Config
 @Config(sdk = [28], qualifiers = "w412dp-h892dp-mdpi")
 class EditorInteractionTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun sourceHeadingUsesDocumentColorAndBodySizeAcrossThemes() {
+        val raw = "# 标题\n\n普通正文"
+        val session = EditorSession(raw)
+        val parsed = MarkdownParser().parse(raw)
+        var palette by mutableStateOf(DocumentPalette.BLUE)
+        compose.setContent {
+            DocumentPageTheme(palette) { ComposeEditorEngine.Content(session, EditorMode.SOURCE, parsed, 1f, false, true) }
+        }
+        for (theme in DocumentPalette.entries) {
+            compose.runOnIdle { palette = theme }
+            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            compose.onNodeWithTag("editor-body").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(results) }
+            val input = results.single().layoutInput
+            val heading = input.text.spanStyles.first { it.start <= raw.indexOf("标题") && it.end >= raw.indexOf("标题") + 2 }
+            assertEquals(theme.colors.accent, heading.item.color)
+            assertEquals(16.sp, input.style.fontSize)
+            assertEquals("源码标题不应被放大", androidx.compose.ui.unit.TextUnit.Unspecified, heading.item.fontSize)
+            assertEquals(raw, session.content.source)
+        }
+    }
+
+    @Test fun pendingDraftDisablesHeadingSelection() {
+        val session = EditorSession("原正文")
+        val draft = Draft(NoteId("draft"), DocumentVersion("version"), 1, RawDocument("草稿"))
+        compose.setContent { DocumentPageTheme(DocumentPalette.BLUE) {
+            EditorScreen(EditorUiState(loading = false, mode = EditorMode.SOURCE, pendingDraft = draft), session, SaveStatus())
+        } }
+        compose.onNodeWithContentDescription("更多").performClick()
+        compose.onNodeWithText("选择标题级别").assertIsNotEnabled()
+        compose.runOnIdle { assertEquals("原正文", session.content.source) }
+    }
+
+    @Test fun changingDocumentThemeKeepsTheSessionAndSelection() {
+        val session = EditorSession("甲乙丙")
+        session.text.edit { selection = TextRange(1, 2) }
+        var theme by mutableStateOf(DocumentTheme.BLUE)
+        compose.setContent {
+            val palette = if (theme == DocumentTheme.WARM) DocumentPalette.WARM else DocumentPalette.BLUE
+            DocumentPageTheme(palette) {
+                EditorScreen(EditorUiState(loading = false, mode = EditorMode.SOURCE), session, SaveStatus(), documentTheme = theme, onDocumentTheme = { theme = it })
+            }
+        }
+        compose.onNodeWithContentDescription("更多").performClick()
+        compose.onNodeWithText("主题", substring = false).performClick()
+        compose.onAllNodesWithText("Aa").assertCountEquals(3)
+        compose.onNodeWithText("温润手记 · 柔和灰绿强调").assertIsDisplayed()
+        compose.onNodeWithText("B · 暖纸色").performClick()
+        compose.runOnIdle {
+            assertEquals(DocumentTheme.WARM, theme)
+            assertEquals("甲乙丙", session.content.source)
+            assertEquals(TextRange(1, 2), session.text.selection)
+        }
+    }
 
     @Test fun inputDoesNotWaitForInitialHighlightOrLoseFocusWhenAnEmptyNoteGetsText() {
         val session = EditorSession("")
