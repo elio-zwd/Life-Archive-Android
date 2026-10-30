@@ -1,5 +1,6 @@
 package com.elio.lifearchive.core.preferences
 
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -23,17 +24,27 @@ import kotlinx.serialization.json.Json
 
 @Serializable enum class ThemeMode { SYSTEM, LIGHT, DARK }
 @Serializable enum class RemoteLoading { MANUAL, AUTOMATIC }
+@Serializable enum class DocumentTheme { BLUE, WARM, GRAPHITE }
 
 @Serializable
-data class UserPreferences(val theme: ThemeMode = ThemeMode.SYSTEM, val fontScale: Float = 1f, val remoteLoading: RemoteLoading = RemoteLoading.MANUAL) {
+data class UserPreferences(
+    val theme: ThemeMode = ThemeMode.SYSTEM,
+    val fontScale: Float = 1f,
+    val remoteLoading: RemoteLoading = RemoteLoading.MANUAL,
+    val documentTheme: DocumentTheme? = null,
+) {
     init { require(fontScale.isFinite() && fontScale in 0.5f..3f) }
 }
+
+fun UserPreferences.resolvedDocumentTheme(dark: Boolean): DocumentTheme =
+    documentTheme ?: if (dark) DocumentTheme.GRAPHITE else DocumentTheme.BLUE
 
 interface PreferencesRepository {
     val preferences: Flow<UserPreferences>
     suspend fun setTheme(theme: ThemeMode)
     suspend fun setFontScale(scale: Float)
     suspend fun setRemoteLoading(mode: RemoteLoading) { error("此设置实现尚未提供远程加载能力") }
+    suspend fun setDocumentTheme(theme: DocumentTheme) { error("此设置实现尚未提供文档主题能力") }
 }
 
 /** 每个文件只允许一个存活实例；关闭实例后须等待 scope 完成再重新打开同一文件。 */
@@ -44,8 +55,25 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
     private val themeKey = stringPreferencesKey("theme")
     private val fontKey = floatPreferencesKey("font_scale")
     private val remoteKey = stringPreferencesKey("remote_loading")
+    private val documentThemeKey = stringPreferencesKey("document_theme")
+    // 旧备份的未选择状态必须跨恢复与后续写入保留。
+    private val unselectedDocumentTheme = "__FOLLOW_GLOBAL__"
     private val values = store.data.map { prefs ->
-        UserPreferences(prefs[themeKey]?.let(ThemeMode::valueOf) ?: ThemeMode.SYSTEM, prefs[fontKey] ?: 1f, prefs[remoteKey]?.let(RemoteLoading::valueOf) ?: RemoteLoading.MANUAL)
+        val documentTheme = when (val stored = prefs[documentThemeKey]) {
+            null -> if (prefs.asMap().isEmpty()) DocumentTheme.BLUE else null
+            unselectedDocumentTheme -> null
+            else -> DocumentTheme.valueOf(stored)
+        }
+        UserPreferences(
+            prefs[themeKey]?.let(ThemeMode::valueOf) ?: ThemeMode.SYSTEM,
+            prefs[fontKey] ?: 1f,
+            prefs[remoteKey]?.let(RemoteLoading::valueOf) ?: RemoteLoading.MANUAL,
+            documentTheme,
+        )
+    }
+
+    private fun MutablePreferences.rememberNewDocumentDefault() {
+        if (asMap().isEmpty()) this[documentThemeKey] = DocumentTheme.BLUE.name
     }
 
     val repository: PreferencesRepository = object : PreferencesRepository {
@@ -53,13 +81,23 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
             gate.access { Unit }
             emitAll(values.map { gate.access { values.first() } })
         }
-        override suspend fun setTheme(theme: ThemeMode) = gate.access { store.edit { it[themeKey] = theme.name }; Unit }
-        override suspend fun setFontScale(scale: Float) = gate.access {
-            UserPreferences(fontScale = scale)
-            store.edit { it[fontKey] = scale }
+        override suspend fun setTheme(theme: ThemeMode) = gate.access {
+            store.edit { it.rememberNewDocumentDefault(); it[themeKey] = theme.name }
             Unit
         }
-        override suspend fun setRemoteLoading(mode: RemoteLoading) = gate.access { store.edit { it[remoteKey] = mode.name }; Unit }
+        override suspend fun setFontScale(scale: Float) = gate.access {
+            UserPreferences(fontScale = scale)
+            store.edit { it.rememberNewDocumentDefault(); it[fontKey] = scale }
+            Unit
+        }
+        override suspend fun setRemoteLoading(mode: RemoteLoading) = gate.access {
+            store.edit { it.rememberNewDocumentDefault(); it[remoteKey] = mode.name }
+            Unit
+        }
+        override suspend fun setDocumentTheme(theme: DocumentTheme) = gate.access {
+            store.edit { it[documentThemeKey] = theme.name }
+            Unit
+        }
     }
 
     @Serializable private data class Snapshot(val format: Int = 1, val preferences: UserPreferences)
@@ -78,7 +116,13 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
         override suspend fun restore(directory: File) {
             validate(directory)
             val value = Json.decodeFromString<Snapshot>(File(directory, "settings.json").readText()).preferences
-            store.edit { it.clear(); it[themeKey] = value.theme.name; it[fontKey] = value.fontScale; it[remoteKey] = value.remoteLoading.name }
+            store.edit {
+                it.clear()
+                it[themeKey] = value.theme.name
+                it[fontKey] = value.fontScale
+                it[remoteKey] = value.remoteLoading.name
+                it[documentThemeKey] = value.documentTheme?.name ?: unselectedDocumentTheme
+            }
         }
     }
 
