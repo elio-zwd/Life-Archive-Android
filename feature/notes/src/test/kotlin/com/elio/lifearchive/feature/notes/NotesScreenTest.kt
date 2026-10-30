@@ -9,7 +9,9 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.elio.lifearchive.core.document.DocumentVersion
 import com.elio.lifearchive.core.document.LibraryPath
+import com.elio.lifearchive.core.document.LinkSyntax
 import com.elio.lifearchive.domain.notes.*
+import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -30,7 +32,7 @@ class NotesScreenTest {
 
     private fun note(index: Int) = LibraryNote(
         NoteSummary(NoteId("note-$index"), LibraryPath("笔记本/笔记$index.md"), DocumentVersion("v1"), false),
-        false, 0, index.toLong(), null, listOf("标签$index"), null,
+        false, 0, index.toLong(), null, listOf("标签$index"), null, propertyTags = listOf("标签$index"),
     )
 
     @Test fun scrollingFiveHundredNotesNeverRescansDetailsAndActionsUseTheCurrentNote() {
@@ -65,17 +67,17 @@ class NotesScreenTest {
         compose.runOnIdle { callbackVersion = 1; ui = ui.copy(progress = LibraryProgress("重建索引", 1, 500)) }
         compose.onNodeWithTag("note:note-250").performClick()
         assertEquals(1, openedVersion)
-        compose.onNode(hasText("管理") and hasAnyAncestor(hasTestTag("note:note-250"))).performClick()
+        compose.onNodeWithTag("note-manage:note-250").performClick()
         assertSame(notes[250], managed)
         assertEquals(1, managedVersion)
         assertEquals(initialReads, details.reads to summaries.reads)
         compose.runOnIdle { ui = ui.copy(updating = true) }
         compose.onNodeWithTag("note:note-250").assertIsNotEnabled()
-        compose.onNode(hasText("管理") and hasAnyAncestor(hasTestTag("note:note-250"))).assertIsNotEnabled()
-        val changed = notes.map { if (it.summary.id == NoteId("note-250")) it.copy(pinned = true, tags = listOf("已更新")) else it }
+        compose.onNodeWithTag("note-manage:note-250").assertIsNotEnabled()
+        val changed = notes.map { if (it.summary.id == NoteId("note-250")) it.copy(pinned = true, tags = listOf("已更新"), propertyTags = listOf("已更新")) else it }
         compose.runOnIdle { ui = ui.copy(updating = false, listing = ui.listing!!.copy(notes = changed)) }
         compose.onNodeWithText("#已更新").assertIsDisplayed()
-        compose.onNodeWithText("已置顶 · 管理").performClick()
+        compose.onNodeWithTag("note-manage:note-250").performClick()
         assertSame(changed[250], managed)
     }
 
@@ -104,14 +106,108 @@ class NotesScreenTest {
         compose.setContent {
             MaterialTheme { NotesScreen(ui, {}, { _, _ -> }, {}, {}, "浅色", {}, onQuery = { ui = ui.copy(query = it) }) }
         }
-        for ((label, target) in listOf("全部标签" to "标签499", "全部笔记本" to "笔记本499")) {
-            compose.onNodeWithText(label).performClick()
-            compose.onNodeWithText(target).assertDoesNotExist()
-            compose.onNodeWithTag("note-filter-choices").performScrollToKey(target)
-            compose.onNodeWithText(target).performClick()
-            compose.onNodeWithTag("note-filter-choices").assertDoesNotExist()
-            compose.onNodeWithText(target).assertIsDisplayed()
-        }
+        compose.onNodeWithTag("home-more").performClick()
+        compose.onNodeWithText("全部标签").performClick()
+        compose.onNodeWithText("标签499").assertDoesNotExist()
+        compose.onNodeWithTag("note-filter-choices").performScrollToKey("标签499")
+        compose.onNodeWithText("标签499").performClick()
+        compose.onNodeWithTag("note-filter-choices").assertDoesNotExist()
+        compose.onNodeWithText("笔记本499").assertDoesNotExist()
+        compose.onNodeWithTag("folder-filters").performScrollToKey("folder:笔记本499")
+        compose.onNodeWithText("笔记本499").performClick()
         compose.runOnIdle { assertEquals("标签499", ui.query.tag); assertEquals("笔记本499", ui.query.folder) }
+    }
+
+    @Test fun visibleNoteShowsRealMetadataAndSearchClearsOnlyTheText() {
+        val entry = note(1).copy(excerpt = "记录中的真实摘要", pinned = true, modified = 1_761_264_000_000L)
+        var ui by mutableStateOf(NotesUiState(notes = listOf(entry.summary), loading = false,
+            listing = LibraryListing(listOf(entry), listOf("笔记本"), listOf("标签1"), 0),
+            query = NotesQuery(text = "记录", folder = "笔记本", tag = "标签1")))
+        compose.setContent {
+            MaterialTheme { NotesScreen(ui, {}, { _, _ -> }, {}, {}, "浅色", {}, onQuery = { ui = ui.copy(query = it) }) }
+        }
+        compose.onNodeWithText("记录中的真实摘要").assertIsDisplayed()
+        compose.onNodeWithText("#标签1").assertIsDisplayed()
+        compose.onNodeWithTag("note-date:note-1", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("note-pin:note-1", useUnmergedTree = true).assertIsDisplayed()
+        compose.onAllNodesWithTag("clear-search").assertCountEquals(1)
+        compose.onNodeWithTag("clear-search").performClick()
+        compose.runOnIdle {
+            assertEquals("", ui.query.text)
+            assertEquals("笔记本", ui.query.folder)
+            assertEquals("标签1", ui.query.tag)
+        }
+    }
+
+    // Robolectric 4.16.1 的 Dialog + TextField 在较宽的 dp qualifier 下可能持续请求布局。
+    // https://github.com/robolectric/robolectric/issues/8460
+    @Test @Config(qualifiers = "w320dp-h892dp-mdpi") fun emptyStateOffersCreationOrClearingTheCurrentFilter() {
+        var ui by mutableStateOf(NotesUiState(loading = false, listing = LibraryListing(emptyList(), emptyList(), emptyList(), 0)))
+        compose.setContent {
+            MaterialTheme { NotesScreen(ui, {}, { _, _ -> }, {}, {}, "浅色", {}, onQuery = { ui = ui.copy(query = it) }) }
+        }
+        compose.onNodeWithText("从一篇笔记开始").assertIsDisplayed()
+        compose.onNodeWithTag("empty-new-note").performClick()
+        compose.onNodeWithTag("note-name").assertIsDisplayed()
+        compose.onNodeWithTag("note-name").performTextInput("空库测试名")
+        compose.onNodeWithText("空库测试名").assertIsDisplayed()
+        compose.onNodeWithText("取消").performClick()
+        compose.runOnIdle { ui = ui.copy(query = ui.query.copy(text = "未找到")) }
+        compose.onNodeWithText("没有找到笔记").assertIsDisplayed()
+        compose.onNodeWithTag("empty-clear-filters").performClick()
+        compose.runOnIdle { assertEquals("", ui.query.text) }
+    }
+
+    @Test fun backupButtonUsesItsOwnAction() {
+        var backups = 0
+        var settings = 0
+        val ui = NotesUiState(loading = false, listing = LibraryListing(emptyList(), emptyList(), emptyList(), 0))
+        compose.setContent {
+            MaterialTheme {
+                NotesScreen(ui, {}, { _, _ -> }, {}, {}, "浅色", {}, onSettings = { settings++ }, onBackup = { backups++ })
+            }
+        }
+        compose.onNodeWithContentDescription("本地备份").performClick()
+        compose.runOnIdle { assertEquals(1, backups); assertEquals(0, settings) }
+        compose.onNodeWithText("设置").performClick()
+        compose.runOnIdle { assertEquals(1, backups); assertEquals(1, settings) }
+    }
+
+    @Test fun longFilterSummaryWrapsAndTheLastManagementButtonClearsTheFab() {
+        val notes = List(30, ::note)
+        val longFolder = "一个很长的笔记本名称".repeat(8)
+        val longTag = "一个很长的标签".repeat(8)
+        val ui = NotesUiState(notes = notes.map { it.summary }, loading = false,
+            listing = LibraryListing(notes, listOf(longFolder), listOf(longTag), 0),
+            query = NotesQuery(folder = longFolder, tag = longTag))
+        compose.setContent { MaterialTheme { NotesScreen(ui, {}, { _, _ -> }, {}, {}, "浅色", {}) } }
+        val summaryBounds = compose.onNodeWithTag("filter-summary").getUnclippedBoundsInRoot()
+        assertTrue(summaryBounds.bottom.value - summaryBounds.top.value > 44f)
+        compose.onNodeWithTag("notes-list").performScrollToKey("note:note-29")
+        compose.onNodeWithTag("notes-list").performTouchInput { swipeUp() }
+        val last = compose.onNodeWithTag("note-manage:note-29").assertIsDisplayed().getUnclippedBoundsInRoot()
+        val fab = compose.onNodeWithTag("new-note").getUnclippedBoundsInRoot()
+        assertTrue(last.bottom <= fab.top)
+    }
+
+    @Test fun thumbnailsLoadOnlyForVisibleNotesAndCancelWhenTheyLeave() {
+        val notes = List(50) { index -> note(index).copy(thumbnail = ThumbnailReference("image-$index.png", LinkSyntax.MARKDOWN)) }
+        val requested = mutableSetOf<NoteId>()
+        val cancelled = mutableSetOf<NoteId>()
+        val ui = NotesUiState(notes = notes.map { it.summary }, loading = false,
+            listing = LibraryListing(notes, emptyList(), emptyList(), 0))
+        compose.setContent {
+            MaterialTheme {
+                NotesScreen(ui, {}, { _, _ -> }, {}, {}, "浅色", {}, loadThumbnail = { id, _, _ ->
+                    requested += id
+                    try { awaitCancellation() } finally { cancelled += id }
+                })
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue(NoteId("note-0") in requested); assertFalse(NoteId("note-49") in requested) }
+        compose.onNodeWithTag("notes-list").performScrollToKey("note:note-49")
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue(NoteId("note-49") in requested); assertTrue(NoteId("note-0") in cancelled) }
     }
 }

@@ -1,6 +1,7 @@
 package com.elio.lifearchive.feature.notes
 
 import androidx.compose.runtime.Immutable
+import com.elio.lifearchive.core.document.LinkSyntax
 import com.elio.lifearchive.domain.notes.LibraryListing
 import com.elio.lifearchive.domain.notes.LibraryNote
 import com.elio.lifearchive.domain.notes.NoteId
@@ -14,6 +15,12 @@ internal data class NoteRowUi(
     val subtitle: String,
     val tags: String,
     val management: String?,
+    val excerpt: String,
+    val folder: String,
+    val modified: Long?,
+    val pinned: Boolean,
+    val thumbnailTarget: String?,
+    val thumbnailSyntax: LinkSyntax?,
 )
 
 internal class NoteListPresentation(
@@ -30,8 +37,14 @@ internal fun noteListPresentation(notes: List<NoteSummary>, listing: LibraryList
             id = note.id.value,
             name = note.path.value.substringAfterLast('/').removeSuffix(".md"),
             subtitle = if (note.indexPending) "正文已保存 · 索引待更新" else note.path.value,
-            tags = detail?.tags?.joinToString(" ") { "#$it" }.orEmpty(),
+            tags = detail?.propertyTags?.joinToString(" ") { "#$it" }.orEmpty(),
             management = detail?.let { if (it.deleted != null) "恢复／永久删除" else if (it.pinned) "已置顶 · 管理" else "管理" },
+            excerpt = detail?.excerpt.orEmpty(),
+            folder = note.path.value.substringBeforeLast('/', ""),
+            modified = detail?.modified,
+            pinned = detail?.pinned == true,
+            thumbnailTarget = detail?.thumbnail?.target,
+            thumbnailSyntax = detail?.thumbnail?.syntax,
         )
     }, details)
 }
