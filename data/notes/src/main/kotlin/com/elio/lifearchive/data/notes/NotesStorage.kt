@@ -50,7 +50,12 @@ class NotesStorage private constructor(
     private val batchJournal = File(root, "operations/batch.json")
     private val changes = MutableStateFlow(0L)
     private val activityProgress = MutableStateFlow<LibraryProgress?>(null)
-    private val analysisCache = mutableMapOf<String, Pair<com.elio.lifearchive.core.document.DocumentAnalysis, String>>()
+    private data class CachedAnalysis(
+        val analysis: com.elio.lifearchive.core.document.DocumentAnalysis,
+        val lowercase: String,
+        var hiddenRanges: List<IntRange>? = null,
+    )
+    private val analysisCache = mutableMapOf<String, CachedAnalysis>()
     private val state = Room.databaseBuilder(context, StateDatabase::class.java, File(root, "state.db").absolutePath)
         .openHelperFactory(PreservingStateOpenHelperFactory()).addMigrations(object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -73,6 +78,22 @@ class NotesStorage private constructor(
     val backupParticipant: BackupParticipant = Participant()
 
     companion object {
+        private val excerptFences = Regex("(?m)^ {0,3}(`{3,}|~{3,})([^\\r\\n]*)").toPattern()
+        private val excerptInlineCode = Regex("(?<!`)(`+)(?!`)([^`]*?)\\1(?!`)").toPattern()
+        private val excerptBackticks = Regex("(?<!`)`+(?!`)").toPattern()
+        private val excerptIndented = Regex("(?m)^(?: {4}|\\t)[^\\r\\n]*").toPattern()
+        private val excerptWikiImage = Regex("!\\[\\[[^]\\r\\n]+]]")
+        private val excerptMarkdownImage = Regex("!\\[[^]\\r\\n]*]\\((?:[^()\\r\\n]|\\([^()\\r\\n]*\\))*\\)")
+        private val excerptWikiLink = Regex("\\[\\[([^]\\r\\n]+)]]")
+        private val excerptMarkdownLink = Regex("\\[([^]\\r\\n]+)]\\((?:[^()\\r\\n]|\\([^()\\r\\n]*\\))*\\)")
+        private val excerptHtml = Regex("<[^>]*>")
+        private val excerptQuote = Regex("(?m)^ {0,3}(?:>[ \\t]*)+")
+        private val excerptLinePrefix = Regex("(?m)^[ \\t]*(?:#{1,6}[ \\t]+|(?:[-+*]|\\d+[.)])[ \\t]+(?:\\[[ xX]](?:[ \\t]+|$))?)")
+        private val excerptFormatting = Regex("\\*\\*|__|~~|==|`|\\*")
+        private val excerptWhitespace = Regex("\\s+")
+        private val imageExtension = Regex("(?i)\\.(?:png|jpe?g|gif|webp|bmp|heic|heif|avif|svg)$")
+        private val linkScheme = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
+
         fun open(context: Context, directory: File, gate: StorageGate): NotesStorage {
             check(directory.isDirectory || directory.mkdirs())
             return NotesStorage(context.applicationContext, directory, gate)
@@ -271,6 +292,8 @@ class NotesStorage private constructor(
                 FileOutputStream(temp).use { out -> input.copyTo(out, 64 * 1024); out.fd.sync() }
                 Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
             } finally { if (temp.exists()) temp.delete() }
+            // 附件集合变化也会改变已有引用的解析结果，通知订阅者刷新派生展示。
+            publish()
             NoteResult.Success(valid)
         }
 
@@ -431,6 +454,215 @@ class NotesStorage private constructor(
     @Serializable private data class ImportManifest(val folder: String, val paths: List<String>, val unresolved: List<String>)
     private fun importDirectory(token: String): File { require(UUID.fromString(token).toString() == token); return File(root, "imports/$token") }
 
+    private data class IndexedLibraryNote(
+        val record: NoteRecord,
+        val raw: String,
+        val cached: CachedAnalysis,
+    ) {
+        val analysis get() = cached.analysis
+        val lowercase get() = cached.lowercase
+    }
+
+    private fun indexedLibraryNote(record: NoteRecord, projection: IndexRecord?): IndexedLibraryNote {
+        val current = projection?.takeIf { it.version == record.version }
+        val raw = current?.rawText.orEmpty()
+        val key = "${record.id}:${record.version}"
+        val cached = if (current != null) analysisCache.getOrPut(key) { CachedAnalysis(DocumentAnalyzer.analyze(raw), raw.lowercase(Locale.ROOT)) }
+            else CachedAnalysis(DocumentAnalyzer.analyze(""), "")
+        return IndexedLibraryNote(record, raw, cached)
+    }
+
+    private fun IndexedLibraryNote.asLibraryNote(words: List<String> = emptyList()): LibraryNote = LibraryNote(
+        summary = record.summary(),
+        pinned = record.pinned,
+        created = record.created,
+        modified = record.modified,
+        deleted = record.deleted,
+        tags = analysis.tags,
+        title = analysis.title,
+        matchOffset = words.firstOrNull()?.let { lowercase.indexOf(it).coerceAtLeast(0) } ?: 0,
+        propertyTags = analysis.propertyTags,
+        excerpt = excerpt(raw, analysis, words, cached),
+        thumbnail = thumbnail(raw, analysis),
+    )
+
+    private fun excerpt(
+        raw: String,
+        analysis: com.elio.lifearchive.core.document.DocumentAnalysis,
+        words: List<String>,
+        cached: CachedAnalysis,
+    ): String {
+        var bodyStart = DocumentAnalyzer.yaml(raw)?.last?.plus(1) ?: if (raw.startsWith('\uFEFF')) 1 else 0
+        val firstHeading = analysis.headings.firstOrNull()
+        if (firstHeading != null && firstHeading.start >= bodyStart && raw.substring(bodyStart, firstHeading.start).isBlank()) {
+            bodyStart = firstHeading.end
+        }
+        while (bodyStart < raw.length) {
+            val lineEnd = raw.indexOf('\n', bodyStart).let { if (it < 0) raw.length else it }
+            if (raw.substring(bodyStart, lineEnd).isNotBlank()) break
+            bodyStart = (lineEnd + 1).coerceAtMost(raw.length)
+        }
+        val hit = words.firstNotNullOfOrNull { word -> raw.indexOf(word, bodyStart, ignoreCase = true).takeIf { it >= 0 } }
+        var start = if (hit == null) bodyStart else (hit - 60).coerceAtLeast(bodyStart)
+        var end = if (hit == null) (bodyStart + 320).coerceAtMost(raw.length) else (hit + 160).coerceAtMost(raw.length)
+        // 子串边界不能拆开代理对，否则摘要中会出现损坏的字符。
+        if (start > 0 && start < raw.length && raw[start].isLowSurrogate() && raw[start - 1].isHighSurrogate()) start--
+        if (end > 0 && end < raw.length && raw[end].isLowSurrogate() && raw[end - 1].isHighSurrogate()) end++
+        val (source, codeParts) = protectExcerptCode(raw, bodyStart, start, end, cached)
+        var text = excerptWikiImage.replace(source, " ")
+        text = excerptMarkdownImage.replace(text, " ")
+        text = excerptWikiLink.replace(text) { it.groupValues[1].substringAfter('|', it.groupValues[1]) }
+        text = excerptMarkdownLink.replace(text) { it.groupValues[1] }
+        text = excerptHtml.replace(text, " ")
+        text = excerptQuote.replace(text, "")
+        text = excerptLinePrefix.replace(text, "")
+        text = excerptFormatting.replace(text, "")
+        codeParts.forEachIndexed { index, value -> text = text.replace("\uE000${index}\uE001", value) }
+        text = excerptWhitespace.replace(text, " ").trim()
+        val limited = text.take(160)
+        return if (limited.lastOrNull()?.isHighSurrogate() == true) limited.dropLast(1) else limited
+    }
+
+    private data class ExcerptSegment(val start: Int, val end: Int, val code: Boolean)
+
+    private fun CachedAnalysis.isHidden(raw: String, position: Int): Boolean {
+        val ranges = hiddenRanges ?: run {
+            // 仅在缩进或跨行代码存在歧义时解析一次；区间随既有分析缓存按版本失效。
+            val masked = DocumentAnalyzer.masked(raw)
+            val found = mutableListOf<IntRange>()
+            var first = -1
+            var last = -1
+            raw.indices.forEach { index ->
+                if (raw[index] != masked[index]) {
+                    if (first < 0) first = index
+                    last = index
+                } else if (!raw[index].isWhitespace() && first >= 0) {
+                    found += first..last
+                    first = -1
+                }
+            }
+            if (first >= 0) found += first..last
+            found.also { hiddenRanges = it }
+        }
+        var low = 0
+        var high = ranges.lastIndex
+        while (low <= high) {
+            val middle = (low + high) ushr 1
+            val range = ranges[middle]
+            when {
+                position < range.first -> high = middle - 1
+                position > range.last -> low = middle + 1
+                else -> return true
+            }
+        }
+        return false
+    }
+
+    private fun protectExcerptCode(raw: String, bodyStart: Int, start: Int, end: Int, cached: CachedAnalysis): Pair<String, List<String>> {
+        val segments = mutableListOf<ExcerptSegment>()
+        fun overlaps(from: Int, to: Int) = segments.any { it.start < to && from < it.end }
+        val fences = excerptFences.matcher(raw).region(bodyStart, end)
+        var marker: String? = null
+        var contentStart = 0
+        while (fences.find()) {
+            val found = requireNotNull(fences.group(1))
+            val activeMarker = marker
+            if (activeMarker == null) {
+                marker = found
+                val nextLine = raw.indexOf('\n', fences.end())
+                contentStart = if (nextLine < 0 || nextLine >= end) end else nextLine + 1
+                segments += ExcerptSegment(fences.start(), contentStart, false)
+            } else if (found[0] == activeMarker[0] && found.length >= activeMarker.length && fences.group(2).orEmpty().isBlank()) {
+                segments += ExcerptSegment(contentStart, fences.start(), true)
+                segments += ExcerptSegment(fences.start(), fences.end(), false)
+                marker = null
+            }
+        }
+        if (marker != null) segments += ExcerptSegment(contentStart, end, true)
+
+        val lineStart = (raw.lastIndexOf('\n', start - 1) + 1).coerceAtLeast(bodyStart)
+        val indented = excerptIndented.matcher(raw).region(lineStart, end)
+        while (indented.find()) {
+            var firstContent = indented.start()
+            while (firstContent < indented.end() && raw[firstContent].isWhitespace()) firstContent++
+            if (firstContent < indented.end() && !overlaps(indented.start(), indented.end()) && cached.isHidden(raw, firstContent)) {
+                segments += ExcerptSegment(indented.start(), indented.end(), true)
+            }
+        }
+
+        // 行内代码可跨行；从当前段落起点而非摘要起点寻找包围标记。
+        var paragraphStart = lineStart
+        while (paragraphStart > bodyStart) {
+            val previousEnd = paragraphStart - 1
+            val previousStart = (raw.lastIndexOf('\n', previousEnd - 1) + 1).coerceAtLeast(bodyStart)
+            if (raw.substring(previousStart, previousEnd).isBlank()) break
+            paragraphStart = previousStart
+        }
+        val fixedSegments = segments.size
+        val inline = excerptInlineCode.matcher(raw).region(paragraphStart, end)
+        while (inline.find()) {
+            if (overlaps(inline.start(), inline.end())) continue
+            if (raw.substring(inline.start(2), inline.end(2)).contains('\n') && !cached.isHidden(raw, inline.start())) continue
+            segments += ExcerptSegment(inline.start(), inline.start(2), false)
+            segments += ExcerptSegment(inline.start(2), inline.end(2), true)
+            segments += ExcerptSegment(inline.end(2), inline.end(), false)
+        }
+
+        // 摘要窗口可能截断行内代码，或代码内部含更短的反引号串。
+        val backticks = excerptBackticks.matcher(raw).region(paragraphStart, end)
+        var needsFallback = false
+        while (backticks.find()) if (!overlaps(backticks.start(), backticks.end())) { needsFallback = true; break }
+        if (needsFallback) {
+            while (segments.size > fixedSegments) segments.removeAt(segments.lastIndex)
+            backticks.reset().region(paragraphStart, end)
+            var opening = -1
+            var openingEnd = -1
+            while (backticks.find()) {
+                if (overlaps(backticks.start(), backticks.end()) || !cached.isHidden(raw, backticks.start())) continue
+                if (opening < 0) {
+                    opening = backticks.start()
+                    openingEnd = backticks.end()
+                } else if (backticks.end() - backticks.start() == openingEnd - opening) {
+                    segments += ExcerptSegment(opening, openingEnd, false)
+                    segments += ExcerptSegment(openingEnd, backticks.start(), true)
+                    segments += ExcerptSegment(backticks.start(), backticks.end(), false)
+                    opening = -1
+                }
+            }
+            if (opening >= 0) {
+                segments += ExcerptSegment(opening, openingEnd, false)
+                segments += ExcerptSegment(openingEnd, end, true)
+            }
+        }
+
+        val codeParts = mutableListOf<String>()
+        val result = StringBuilder()
+        var position = start
+        segments.sortedBy { it.start }.forEach { segment ->
+            val from = segment.start.coerceAtLeast(start)
+            val to = segment.end.coerceAtMost(end)
+            if (from >= to) return@forEach
+            if (position < from) result.append(raw, position, from)
+            if (segment.code) {
+                val index = codeParts.size
+                codeParts += raw.substring(from, to)
+                result.append('\uE000').append(index).append('\uE001')
+            }
+            position = to
+        }
+        if (position < end) result.append(raw, position, end)
+        return result.toString() to codeParts
+    }
+
+    private fun thumbnail(raw: String, analysis: com.elio.lifearchive.core.document.DocumentAnalysis): ThumbnailReference? {
+        val yaml = DocumentAnalyzer.yaml(raw)
+        return analysis.links.firstOrNull { link ->
+            val path = DocumentAnalyzer.decode(link.target.substringBefore('#'))
+            link.embed && (yaml == null || link.start !in yaml) &&
+                !path.startsWith("//") && !path.startsWith("\\\\") && !linkScheme.containsMatchIn(path) && imageExtension.containsMatchIn(path)
+        }?.let { ThumbnailReference(it.target, it.syntax) }
+    }
+
     private inner class Library : LibraryRepository {
         override val progress: Flow<LibraryProgress?> = activityProgress
         override suspend fun query(query: NotesQuery): NoteResult<LibraryListing> = access {
@@ -440,14 +672,10 @@ class NotesStorage private constructor(
             val words = query.text.trim().lowercase(Locale.ROOT).split(Regex("\\s+")).filter { it.isNotEmpty() }
             val all = records.map { record ->
                 coroutineContext.ensureActive()
-                val raw = projections[record.id]?.takeIf { it.version == record.version }?.rawText.orEmpty()
-                val key = "${record.id}:${record.version}"
-                val cached = if (projections[record.id]?.version == record.version) analysisCache.getOrPut(key) { DocumentAnalyzer.analyze(raw) to raw.lowercase(Locale.ROOT) }
-                    else DocumentAnalyzer.analyze("") to ""
-                val analysis = cached.first
-                Triple(record, analysis, cached.second)
+                indexedLibraryNote(record, projections[record.id])
             }
-            val matches = all.filter { (record, analysis, text) ->
+            val matches = all.filter { indexed ->
+                val record = indexed.record; val analysis = indexed.analysis; val text = indexed.lowercase
                 (record.deleted != null) == query.trash &&
                     (query.folder == null || record.path.startsWith(query.folder + "/")) &&
                     (query.tag == null || analysis.tags.any { it.equals(query.tag, true) || it.startsWith(query.tag + "/", true) }) &&
@@ -456,7 +684,7 @@ class NotesStorage private constructor(
                         val metadata = (record.path + "\n" + analysis.title.orEmpty() + "\n" + analysis.aliases.joinToString(" ")).lowercase(Locale.ROOT)
                         words.all { it in metadata || it in text }
                     })
-            }.map { (record, analysis, text) -> LibraryNote(record.summary(), record.pinned, record.created, record.modified, record.deleted, analysis.tags, analysis.title, words.firstOrNull()?.let { text.indexOf(it).coerceAtLeast(0) } ?: 0, analysis.propertyTags) }
+            }.map { it.asLibraryNote(words) }
             val order = when (query.sort) {
                 NoteSort.MODIFIED_DESC -> compareByDescending<LibraryNote> { it.modified }
                 NoteSort.MODIFIED_ASC -> compareBy { it.modified }
@@ -467,7 +695,11 @@ class NotesStorage private constructor(
             val folders = (state.notes().folders().map { it.path } + records.filter { it.deleted == null }.flatMap { record ->
                 val parts = record.path.split('/').dropLast(1); parts.indices.map { parts.take(it + 1).joinToString("/") }
             }).distinct().sorted()
-            NoteResult.Success(LibraryListing(matches.sortedWith(compareByDescending<LibraryNote> { it.pinned }.then(order)), folders, all.flatMap { it.second.tags }.distinct().sorted(), records.count { it.indexPending }))
+            NoteResult.Success(LibraryListing(matches.sortedWith(compareByDescending<LibraryNote> { it.pinned }.then(order)), folders, all.flatMap { it.analysis.tags }.distinct().sorted(), records.count { it.indexPending }))
+        }
+        override suspend fun metadata(id: NoteId): NoteResult<LibraryNote> = access {
+            val record = state.notes().find(id.value) ?: return@access NoteResult.NotFound
+            NoteResult.Success(indexedLibraryNote(record, index.projections().find(id.value)).asLibraryNote())
         }
         override suspend fun createFolder(path: String): NoteResult<Unit> = access {
             if (!LibraryPath.isValid(path)) return@access NoteResult.InvalidPath("非法笔记本名称")

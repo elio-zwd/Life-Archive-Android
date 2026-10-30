@@ -11,8 +11,13 @@ import java.security.MessageDigest
 import java.util.UUID
 import android.database.sqlite.SQLiteDatabase
 import org.json.JSONObject
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -23,6 +28,150 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class) @Config(sdk = [28])
 class LibraryStorageTest {
+    @Test fun excerptsUseIndexedBodyWithoutChangingTheOriginalDocument() = runBlocking {
+        val root = temp.newFolder()
+        open(root).use { storage ->
+            val raw = "\uFEFF---\r\ntitle: YAML标题\r\ntags: [项目]\r\nunknown: 保留\r\n---\r\n# 正文标题\r\n\r\n正文 **重要** [链接](目标.md) `代码`。\r\n"
+            val note = storage.create("本子/文件名.md", raw)
+            val detail = (storage.library.query() as NoteResult.Success).value.notes.single()
+            assertEquals("正文 重要 链接 代码。", detail.excerpt)
+            assertEquals("YAML标题", detail.title)
+            assertEquals(raw, storage.text(note.summary.id))
+            assertTrue(File(root, "documents/本子/文件名.md").renameTo(File(root, "暂存正文.md")))
+            val metadata = (storage.library.metadata(note.summary.id) as NoteResult.Success).value
+            assertEquals(detail, metadata)
+            assertEquals(NoteResult.NotFound, storage.library.metadata(NoteId(UUID.randomUUID().toString())))
+        }
+    }
+
+    @Test fun searchExcerptShowsBodyHitAndKeepsOriginalFirstWordOffset() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val raw = "---\ntitle: 标题\n---\n# 首标题\n" + "甲".repeat(220) + " **关键命中** " + "乙".repeat(220)
+            val note = storage.create("文件名.md", raw)
+            val direct = (storage.library.query(NotesQuery(text = "关键命中")) as NoteResult.Success).value.notes.single()
+            assertEquals(raw.indexOf("关键命中"), direct.matchOffset)
+            assertTrue(direct.excerpt.contains("关键命中"))
+            assertTrue(direct.excerpt.length <= 160)
+            assertFalse(direct.excerpt.contains("首标题"))
+            val split = (storage.library.query(NotesQuery(text = "文件名 关键命中")) as NoteResult.Success).value.notes.single()
+            assertEquals(note.summary.id, split.summary.id)
+            assertEquals(0, split.matchOffset)
+            assertTrue(split.excerpt.contains("关键命中"))
+            assertTrue(split.excerpt.length <= 160)
+        }
+    }
+
+    @Test fun excerptCleansTaskListAndHighlightMarkersWithoutChangingCodeOrOriginal() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val raw = "# 标题\n- [ ] **相机**\n- [x] ==充电==\n1. 线缆\n- 普通\n`==行内代码==`\n```text\n- [ ] 代码里的方框\n==代码里的等号==\n```"
+            val note = storage.create("清单.md", raw)
+            val excerpt = (storage.library.query() as NoteResult.Success).value.notes.single().excerpt
+            assertEquals("相机 充电 线缆 普通 ==行内代码== - [ ] 代码里的方框 ==代码里的等号==", excerpt)
+            assertEquals(raw, storage.text(note.summary.id))
+        }
+    }
+
+    @Test fun searchExcerptKeepsCodeMarkersWhenTheHitIsDeepInsideAFence() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val raw = "# 标题\n```text\n" + "上文".repeat(200) + "\n- [ ] ==关键命中==\n```\n"
+            val note = storage.create("代码.md", raw)
+            val excerpt = (storage.library.query(NotesQuery(text = "关键命中")) as NoteResult.Success).value.notes.single().excerpt
+            assertTrue(excerpt.contains("- [ ] ==关键命中=="))
+            assertEquals(raw, storage.text(note.summary.id))
+        }
+    }
+
+    @Test fun excerptPreservesIndentedAndMultilineCodeButCleansNestedTasks() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val raw = "# 标题\n\n    ==缩进代码== **原样**\n    - [ ] 字面\n\n- 父清单\n    - [ ] ==子任务==\n\n`跨\n==行代码==` 和 `` ==反引号 ` 原样== ``"
+            val note = storage.create("代码与清单.md", raw)
+            val excerpt = (storage.library.query() as NoteResult.Success).value.notes.single().excerpt
+            assertEquals("==缩进代码== **原样** - [ ] 字面 父清单 子任务 跨 ==行代码== 和 ==反引号 ` 原样==", excerpt)
+            assertEquals(raw, storage.text(note.summary.id))
+        }
+    }
+
+    @Test fun searchExcerptProtectsInlineCodeWhoseClosingMarkerIsOutsideTheWindow() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val raw = "前文 `开始\n" + "甲".repeat(180) + "==关键命中==\n" + "乙".repeat(200) + "` 后文"
+            val note = storage.create("跨行代码.md", raw)
+            val excerpt = (storage.library.query(NotesQuery(text = "关键命中")) as NoteResult.Success).value.notes.single().excerpt
+            assertTrue(excerpt.contains("==关键命中=="))
+            assertEquals(raw, storage.text(note.summary.id))
+        }
+    }
+
+    @Test fun thumbnailKeepsLocalReferenceSyntaxAndResolvesRelativeAttachment() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            storage.repository.importAttachment("图 一.PNG", byteArrayOf(1).inputStream())
+            storage.repository.importAttachment("本子/图 一.PNG", byteArrayOf(2).inputStream())
+            val raw = "---\ncover: ![[yaml.png]]\n---\n# 标题\n![远程](https://example.com/remote.png)\n[普通链接](普通.png)\n![[声音.mp3]]\n![本地](../图%20一.PNG)"
+            val note = storage.create("本子/子/引用.md", raw)
+            val candidate = (storage.library.query() as NoteResult.Success).value.notes.single().thumbnail!!
+            assertEquals("../图%20一.PNG", candidate.target)
+            assertEquals(LinkSyntax.MARKDOWN, candidate.syntax)
+            val resolved = (storage.library.resolve(note.summary.id, candidate.target, candidate.syntax) as NoteResult.Success).value
+            assertEquals("本子/图 一.PNG", resolved.attachment!!.value)
+            val opened = storage.library.openResource(resolved.attachment!!) as NoteResult.Success
+            assertArrayEquals(byteArrayOf(2), opened.value.stream.use { it.readBytes() })
+            assertEquals(raw, storage.text(note.summary.id))
+        }
+    }
+
+    @Test fun importingAttachmentsPublishesChangedReferenceResolutionEvenWhenNotesStayTheSame() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val note = storage.create("本子/引用.md", "![[图片.png]]")
+            val snapshots = Channel<List<NoteSummary>>(Channel.UNLIMITED)
+            val observer = launch { storage.repository.observeNotes().collect { snapshots.send(it) } }
+            try {
+                val initial = withTimeout(5_000) { snapshots.receive() }
+                assertTrue((storage.library.resolve(note.summary.id, "图片.png") as NoteResult.Success).value.missing)
+
+                assertTrue(storage.repository.importAttachment("图片.png", byteArrayOf(1).inputStream()) is NoteResult.Success)
+                assertEquals(initial, withTimeout(5_000) { snapshots.receive() })
+                assertEquals("图片.png", (storage.library.resolve(note.summary.id, "图片.png") as NoteResult.Success).value.attachment!!.value)
+
+                assertTrue(storage.repository.importAttachment("其他/图片.png", byteArrayOf(2).inputStream()) is NoteResult.Success)
+                assertEquals(initial, withTimeout(5_000) { snapshots.receive() })
+                val ambiguous = (storage.library.resolve(note.summary.id, "图片.png") as NoteResult.Success).value
+                assertNull(ambiguous.attachment)
+                assertEquals(setOf("图片.png", "其他/图片.png"), ambiguous.ambiguous.toSet())
+            } finally {
+                observer.cancelAndJoin()
+                snapshots.close()
+            }
+        }
+    }
+
+    @Test fun wikiAndHtmlImageCandidatesExcludeRemoteAndYamlReferences() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val wiki = storage.create("wiki.md", "---\ncover: ![[yaml.webp]]\n---\n![[https://example.com/remote.png]]\n![[图片.webp|200]]")
+            val html = storage.create("html.md", "<img src=\"//example.com/remote.png\">\n<img src=\"文件夹/图片.jpg\">")
+            val listing = (storage.library.query() as NoteResult.Success).value.notes.associateBy { it.summary.id }
+            assertEquals(ThumbnailReference("图片.webp", LinkSyntax.WIKI), listing.getValue(wiki.summary.id).thumbnail)
+            assertEquals(ThumbnailReference("文件夹/图片.jpg", LinkSyntax.HTML), listing.getValue(html.summary.id).thumbnail)
+        }
+    }
+
+    @Test fun staleIndexNeverProvidesOldExcerptOrThumbnailAndRebuildRefreshesThem() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val note = storage.create("笔记.md", "# 旧标题\n旧正文 ![[旧.png]]")
+            assertEquals("旧正文", (storage.library.metadata(note.summary.id) as NoteResult.Success).value.excerpt)
+            storage.fault = { if (it == "index") throw IOException("索引故障") }
+            val changed = storage.repository.save(note.summary.id, note.summary.version, RawDocument("# 新标题\n新正文 ![[新.jpg]]")) as NoteResult.Committed
+            assertTrue(changed.indexPending)
+            val pending = (storage.library.metadata(note.summary.id) as NoteResult.Success).value
+            assertTrue(pending.summary.indexPending)
+            assertEquals("", pending.excerpt)
+            assertNull(pending.thumbnail)
+            storage.fault = {}
+            assertTrue(storage.repository.rebuildIndex() is NoteResult.Success)
+            val refreshed = (storage.library.metadata(note.summary.id) as NoteResult.Success).value
+            assertEquals("新正文", refreshed.excerpt)
+            assertEquals(ThumbnailReference("新.jpg", LinkSyntax.WIKI), refreshed.thumbnail)
+        }
+    }
+
     @Test fun listRefreshAndSplitFieldSearchPreserveTagsOffsetsAndTrashFiltering() = runBlocking {
         open(temp.newFolder()).use { storage ->
             val raw = "---\ntitle: 独立标题\naliases: [别名]\ntags: [项目/开发]\n---\n正文 MixedCase 关键词"
