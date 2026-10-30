@@ -38,6 +38,64 @@ internal fun inlineSpans(context: EditingContext): List<InlineSpan> {
     return spans
 }
 
+internal fun clearInlineEdit(context: EditingContext, selection: EditSelection): MarkdownEdit {
+    val source = context.source
+    fun rejected() = MarkdownEdit(emptyList(), selection, "请完整选择单行的简单格式；复杂或不完整的标记保留原样")
+    if (selection.collapsed || source.substring(selection.min, selection.max).any { it == '\n' || it == '\r' }) return rejected()
+
+    val spans = inlineSpans(context).filter { it.start < selection.max && it.end > selection.min }.sortedBy { it.start }
+    if (spans.isEmpty()) return rejected()
+    if (spans.zipWithNext().any { (left, right) -> left.end > right.start }) return rejected()
+
+    val masked = DocumentAnalyzer.masked(source, includeMath = true)
+    val delimiters = mutableListOf<IntRange>()
+    val syntax = "*_~=`\\[]<>\$"
+    for (span in spans) {
+        if (span.style == InlineStyle.CODE || source.substring(span.start, span.end).any { it == '\n' || it == '\r' }) return rejected()
+        val complete = span.start >= selection.min && span.end <= selection.max
+        val adjacent = span.openingEnd == selection.min && span.closingStart == selection.max
+        if (!complete && !adjacent) return rejected()
+        val opening = source.substring(span.start, span.openingEnd)
+        val closing = source.substring(span.closingStart, span.end)
+        if (opening != closing || opening !in setOf("**", "__", "*", "_", "~~", "==")) return rejected()
+        // 移除标记后，紧邻的其他标记可能改变其左右定界规则。
+        if (source.getOrNull(span.start - 1)?.let { it in syntax } == true || source.getOrNull(span.end)?.let { it in syntax } == true) return rejected()
+        if (source.substring(span.start, span.end) != masked.substring(span.start, span.end)) return rejected()
+        val line = editLine(source, span.start)
+        val wikiOpen = source.lastIndexOf("[[", span.start).takeIf { it >= line.start }
+        val wikiClose = source.indexOf("]]", span.end).takeIf { it >= 0 && it < line.end }
+        if (wikiOpen != null && wikiClose != null) return rejected()
+        delimiters += span.start until span.openingEnd
+        delimiters += span.closingStart until span.end
+    }
+
+    var complex = false
+    context.walk { node ->
+        if (node is Code || node is Link || node is Image || node is HtmlInline) {
+            context.range(node)?.let { range ->
+                if (range.first < selection.max && range.last + 1 > selection.min) complex = true
+            }
+        }
+    }
+    if (complex) return rejected()
+    // 未识别的符号可能属于链接、转义或嵌套语法，不猜测它们是否为普通文字。
+    if ((selection.min until selection.max).any { index -> source[index] in syntax && delimiters.none { index in it } }) return rejected()
+    val patches = delimiters.map { SourceEdit(it.first, it.last + 1, "") }
+    val change = result(source, selection, patches)
+    // 例如 **# 标题** 去掉标记后会成为标题；不能让行内命令改变块结构。
+    fun blockShape(root: Node): List<String> = buildList {
+        fun visit(node: Node) {
+            if (node is Block) add("${node.javaClass.name}:${(node as? Heading)?.level}")
+            var child = node.firstChild
+            while (child != null) { visit(child); child = child.next }
+            if (node is Block) add("/")
+        }
+        visit(root)
+    }
+    if (blockShape(context.root) != blockShape(EditingContext(change.apply(source)).root)) return rejected()
+    return change
+}
+
 internal fun inlineEdit(context: EditingContext, selection: EditSelection, style: InlineStyle): MarkdownEdit {
     val source = context.source; val spans = inlineSpans(context)
     fun rejected() = MarkdownEdit(emptyList(), selection, "选区跨越了无法安全拆分的格式标记，请调整选区")

@@ -5,13 +5,18 @@ const rootId = params.get('note');
 let auto = params.get('auto') === 'true';
 let revision = params.get('rev') || 'initial';
 let dark = params.get('dark') === 'true';
+const validTheme = value => ['blue', 'warm', 'graphite'].includes(value);
+let theme = validTheme(params.get('theme')) ? params.get('theme') : (dark ? 'legacy-dark' : 'legacy-light');
+dark = theme === 'graphite' || theme === 'legacy-dark';
 let generation = 0; let controller; let rendering;
 let mermaidPromise; let mathPromise;
 let activeContext; let activeWork; let mathQueue = Promise.resolve(); let diagramQueue = Promise.resolve(); let styleRevision = 0;
+let currentMetadata = null;
 const resourceRecords = new WeakMap();
 const content = document.querySelector('#content');
 const status = document.querySelector('#status');
-document.documentElement.classList.toggle('dark', params.get('dark') === 'true');
+document.documentElement.classList.toggle('dark', dark);
+if (validTheme(theme)) document.documentElement.dataset.pageTheme = theme;
 document.documentElement.style.fontSize = `${17 * (Number(params.get('scale')) || 1)}px`;
 async function diagrams() {
   const mermaid = (await (mermaidPromise ||= import('./mermaid/mermaid.esm.min.mjs'))).default;
@@ -199,7 +204,7 @@ function callouts(root) {
     box.append(title, ...quote.childNodes); quote.replaceWith(box);
   }
 }
-function environment() { return `reading-2|${dark}|${getComputedStyle(document.documentElement).fontSize}|${getComputedStyle(content).fontFamily}|${devicePixelRatio}|${Math.round(content.getBoundingClientRect().width)}`; }
+function environment() { return `reading-3|${theme}|${getComputedStyle(document.documentElement).fontSize}|${getComputedStyle(content).fontFamily}|${devicePixelRatio}|${Math.round(content.getBoundingClientRect().width)}`; }
 function serial(kind, context, producer) {
   const next = (kind === 'FORMULA' ? mathQueue : diagramQueue).catch(() => {}).then(() => {
     if (!context.current()) throw new DOMException('过期阅读任务', 'AbortError');
@@ -321,12 +326,44 @@ window.readerOffset = () => {
     let node = document.elementFromPoint(Math.max(1, Math.min(innerWidth - 1, rect.left + rect.width / 2)), y);
     const embed = node?.closest('.embedded-note'); if (embed) node = embed.parentElement;
     const footnote = node?.closest('.footnotes'); if (footnote) node = footnote;
-    const source = node?.closest('[data-source]');
+    const source = node?.closest('.properties') ? null : node?.closest('[data-source]');
     if (source && content.contains(source) && source.getBoundingClientRect().top >= -20) return Number(source.dataset.source) || 0;
   }
-  const nodes = [...content.querySelectorAll('[data-source]')].filter(n => !n.closest('.embedded-note') && !n.parentElement.closest('.footnotes') && n.getBoundingClientRect().bottom >= 0);
-  return Number(nodes.find(n => n.getBoundingClientRect().top >= -20)?.dataset.source || nodes[0]?.dataset.source || 0);
+  const all = [...content.querySelectorAll('[data-source]')].filter(n => !n.closest('.embedded-note,.properties') && !n.parentElement.closest('.footnotes'));
+  const visible = all.filter(n => n.getBoundingClientRect().bottom >= 0);
+  const previous = [...all].reverse().find(n => n.getBoundingClientRect().bottom < 0);
+  // 属性移至正文末尾；进入长属性区时沿用最近正文偏移，不能退回文首。
+  return Number(visible.find(n => n.getBoundingClientRect().top >= -20)?.dataset.source || visible[0]?.dataset.source || previous?.dataset.source || 0);
 };
+// 目录只读取当前根文档标题，定位使用投影携带的原文偏移。
+window.readerOutline = () => [...content.querySelectorAll('h1[data-source],h2[data-source],h3[data-source],h4[data-source],h5[data-source],h6[data-source]')]
+  .filter(node => !node.closest('.embedded-note'))
+  .map(node => ({ title: node.textContent.trim().slice(0, 256), level: Number(node.tagName.slice(1)), offset: Number(node.dataset.source) }))
+  .filter(item => item.title && Number.isSafeInteger(item.offset) && item.offset >= 0).slice(0, 2000);
+window.readerJump = offset => {
+  if (!Number.isSafeInteger(offset) || offset < 0) return false;
+  const target = [...content.querySelectorAll('h1[data-source],h2[data-source],h3[data-source],h4[data-source],h5[data-source],h6[data-source]')]
+    .find(node => !node.closest('.embedded-note') && Number(node.dataset.source) === offset);
+  if (!target) return false;
+  target.scrollIntoView({ block: 'start' }); return true;
+};
+function addDocumentMetadata(staging, data) {
+  staging.querySelector(':scope > .reader-meta')?.remove();
+  // 属性仍保留完整原文入口，但移到正文之后以保持首屏标题和元信息顺序。
+  for (const properties of [...staging.children].filter(node => node.classList.contains('properties'))) staging.append(properties);
+  const first = [...staging.children].find(node => !node.classList.contains('properties'));
+  if (first?.tagName === 'H1') first.classList.add('reader-opening-heading');
+  const meta = data.metadata;
+  if (!meta) return;
+  const entries = [];
+  if (typeof meta.folder === 'string' && meta.folder) entries.push(['reader-meta-folder', meta.folder]);
+  if (Number.isFinite(meta.modified) && meta.modified > 0) entries.push(['reader-meta-date', `${new Date(meta.modified).toLocaleDateString('zh-CN')} 更新`]);
+  if (Array.isArray(meta.tags)) entries.push(...meta.tags.filter(tag => typeof tag === 'string' && tag).map(tag => ['reader-meta-tag', `#${tag}`]));
+  if (!entries.length) return;
+  const row = element('div', null, 'reader-meta');
+  for (const [kind, value] of entries) row.append(element('span', value, kind));
+  if (first?.tagName === 'H1') first.after(row); else if (first) first.before(row); else staging.append(row);
+}
 window.readerReload = async () => {
   const captured = ++generation; const capturedRevision = revision;
   activeWork?.dispose(); activeContext?.disposers.forEach(dispose => { try { dispose(); } catch {} });
@@ -353,6 +390,7 @@ window.readerReload = async () => {
     context.namespace = data.cacheNamespace; context.projectionKey = data.projectionKey;
     context.metrics = { cacheHit: !!data.cacheHit, body: performance.now(), layoutWidth: Math.round(content.getBoundingClientRect().width) }; window.readerMetrics = context.metrics;
     staging.dataset.note = rootId; staging.innerHTML = safeContent(data.html);
+    addDocumentMetadata(staging, { metadata: currentMetadata || data.metadata });
     phase(context, 'BODY');
     if (context.projectionKey && staging.querySelector('.math,.embed,img,audio,video,pre>code.language-mermaid')) {
       context.layoutKey = await cacheKey(`layout|${context.projectionKey}|${environment()}`);
@@ -391,14 +429,24 @@ let lastWidth = Math.round(content.getBoundingClientRect().width);
 window.addEventListener('resize', () => { const width = Math.round(content.getBoundingClientRect().width); if (width !== lastWidth) { lastWidth = width; refreshDisplay(); } });
 window.readerUpdate = async config => {
   const changed = config.revision && config.revision !== revision;
-  const themeChanged = dark !== !!config.dark;
+  const nextTheme = validTheme(config.theme) ? config.theme : (config.dark ? 'legacy-dark' : 'legacy-light');
+  const themeChanged = theme !== nextTheme;
   const autoChanged = auto !== !!config.auto;
   const fontChanged = document.documentElement.style.fontSize !== `${17 * (Number(config.scale) || 1)}px`;
+  const metadataChanged = JSON.stringify(currentMetadata) !== JSON.stringify(config.metadata || null);
+  if (metadataChanged) currentMetadata = config.metadata || null;
   if (changed) revision = config.revision;
-  dark = !!config.dark; auto = !!config.auto;
+  theme = nextTheme; dark = theme === 'graphite' || theme === 'legacy-dark'; auto = !!config.auto;
+  if (validTheme(theme)) document.documentElement.dataset.pageTheme = theme; else delete document.documentElement.dataset.pageTheme;
   document.documentElement.classList.toggle('dark', dark);
   document.documentElement.style.fontSize = `${17 * (Number(config.scale) || 1)}px`;
   if (changed) { rendering = window.readerReload(); return rendering; }
+  if (metadataChanged && window.readerReady) {
+    const anchor = [...content.querySelectorAll('[data-source]')].find(node => !node.closest('.properties,.embedded-note') && node.getBoundingClientRect().bottom >= 0);
+    const before = anchor?.getBoundingClientRect().top;
+    addDocumentMetadata(content, { metadata: currentMetadata });
+    if (anchor && before != null) window.scrollBy(0, anchor.getBoundingClientRect().top - before);
+  }
   if (themeChanged || fontChanged) await refreshDisplay();
   if (autoChanged && auto) for (const box of content.querySelectorAll('[data-resource-url]')) {
     const record = resourceRecords.get(box); if (record) window.readerResourceUpdated(record.url, record.page);

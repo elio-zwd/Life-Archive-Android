@@ -10,6 +10,15 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class) @Config(sdk = [28])
 class EditorCommandSessionTest {
+    @Test fun clearingSeveralInlineMarksIsOneUndoStep() {
+        val session = EditorSession("**甲** *乙*")
+        session.text.edit { selection = TextRange(0, length) }
+        assertNull(session.command(MarkdownCommand.ClearInline))
+        assertEquals("甲 乙", session.text.text.toString())
+        session.undo(); assertEquals("**甲** *乙*", session.text.text.toString())
+        session.redo(); assertEquals("甲 乙", session.text.text.toString())
+    }
+
     @Test fun commandsAreOneUndoStepAndDoNotEraseOlderHistory() {
         val session = EditorSession("原文")
         session.insert("前缀")

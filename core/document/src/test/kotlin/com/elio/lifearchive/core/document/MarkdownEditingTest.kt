@@ -92,6 +92,63 @@ class MarkdownEditingTest {
         assertEquals("**", empty); assertEquals(EditSelection(1), caret.selection)
     }
 
+    @Test fun clearInlineRemovesCompleteSimpleMarksAndKeepsReversedSelection() {
+        val raw = "前 **甲🙂** *乙* ~~丙~~ ==丁== 后"
+        val start = raw.indexOf("**"); val end = raw.indexOf(" 后")
+        val (changed, result) = edit(raw, MarkdownCommand.ClearInline, end, start)
+        assertEquals("前 甲🙂 乙 丙 丁 后", changed)
+        assertEquals("甲🙂 乙 丙 丁", changed.substring(result.selection.min, result.selection.max))
+        assertTrue(result.selection.start > result.selection.end)
+    }
+
+    @Test fun clearInlineRecognizesCompleteTextAdjacentToTheSameOuterMarks() {
+        val raw = "前 **甲乙** 后"
+        val (changed, result) = edit(raw, MarkdownCommand.ClearInline, raw.indexOf('甲'), raw.indexOf('乙') + 1)
+        assertEquals("前 甲乙 后", changed)
+        assertEquals("甲乙", changed.substring(result.selection.min, result.selection.max))
+    }
+
+    @Test fun clearInlineRejectsPartialNestedCodeAndMultilineSelectionsWithoutChangingSource() {
+        val cases = listOf(
+            Triple("**甲乙丙**", 3, 4),
+            Triple("**甲*乙*丙**", 0, 9),
+            Triple("`代码`", 0, 4),
+            Triple("**甲**\n*乙*", 0, 9),
+            Triple("[**甲**](https://example.com)", 1, 6),
+            Triple("**甲**", 2, 2),
+        )
+        cases.forEach { (raw, start, end) ->
+            val change = MarkdownEditing.calculate(raw, EditSelection(start, end), MarkdownCommand.ClearInline)
+            assertNotNull(raw, change.error)
+            assertEquals(raw, change.apply(raw))
+        }
+    }
+
+    @Test fun clearInlineCannotCreateBlockSyntaxOrChangeAnAdjacentDelimiter() {
+        val cases = listOf(
+            "**# 标题**", "**- 列表**", "**1. 列表**", "**> 引用**", "**---**", "段落\n**---**",
+        )
+        cases.forEach { raw ->
+            val start = raw.indexOf("**")
+            val change = MarkdownEditing.calculate(raw, EditSelection(start, raw.length), MarkdownCommand.ClearInline)
+            assertNotNull(raw, change.error)
+            assertEquals(raw, change.apply(raw))
+        }
+        val adjacent = "_甲_**乙**"
+        val change = MarkdownEditing.calculate(adjacent, EditSelection(adjacent.indexOf("**"), adjacent.length), MarkdownCommand.ClearInline)
+        assertNotNull(change.error)
+        assertEquals(adjacent, change.apply(adjacent))
+    }
+
+    @Test fun clearInlinePreservesExistingHeadingAndListContainers() {
+        for (raw in listOf("# **标题**", "- **条目**")) {
+            val start = raw.indexOf("**")
+            val change = MarkdownEditing.calculate(raw, EditSelection(start, raw.length), MarkdownCommand.ClearInline)
+            assertNull(raw, change.error)
+            assertEquals(raw.replace("**", ""), change.apply(raw))
+        }
+    }
+
     @Test fun partialRemovalLeavesFormattingOutsideTheSelection() {
         val raw = "**甲乙丙**"
         val (changed, result) = edit(raw, MarkdownCommand.Inline(InlineStyle.BOLD), 3, 4)

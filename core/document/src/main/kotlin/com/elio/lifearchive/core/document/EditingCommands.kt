@@ -34,6 +34,7 @@ sealed interface MarkdownCommand {
     data object ToggleTask : MarkdownCommand
     data object Quote : MarkdownCommand
     data class Inline(val style: InlineStyle) : MarkdownCommand
+    data object ClearInline : MarkdownCommand
     data class Template(val template: InsertTemplate, val parameter: String = "") : MarkdownCommand
     data class InsertLink(val markup: String) : MarkdownCommand
 }
@@ -71,6 +72,7 @@ object MarkdownEditing {
         }
         return when (command) {
             is MarkdownCommand.Inline -> inlineEdit(context, selection, command.style)
+            MarkdownCommand.ClearInline -> clearInlineEdit(context, selection)
             is MarkdownCommand.Template -> templateEdit(source, selection, command.template, command.parameter)
             is MarkdownCommand.InsertLink -> result(source, selection, listOf(SourceEdit(selection.min, selection.max, command.markup)), EditSelection(selection.min + command.markup.length))
             else -> blockEdit(context, selection, command)

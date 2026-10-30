@@ -44,7 +44,7 @@ const server = http.createServer(async (request, response) => {
       if (revision === 'slow') await new Promise(resolve => setTimeout(resolve, 180));
       const projection = revision === 'toolbar' ? fixtures.toolbarGenerated : html;
       const projectionKey = createHash('sha256').update(projection).digest('hex'); const cacheHit = documentKeys.has(projectionKey); documentKeys.add(projectionKey);
-      return reply({ id: note, revision, path: '验收.md', html: revision === 'resource-failure' ? '<h1 data-source="0">附件失败可重试</h1><img src="https://failure.example/image.png">' : revision === 'concurrency' ? '<h1 data-source="0">附件并发检查</h1><p data-source="10"><img alt="10x10" src="a.png"><img alt="10x10" src="b.png"><img alt="10x10" src="c.png"></p>' : revision === 'old-size' ? '<h1 data-source="0">尺寸缓存校验</h1><p data-source="10"><img src="图片.png"></p>' : projection, blocks: [], projectionKey, cacheNamespace, cacheHit });
+      return reply({ id: note, revision, path: '验收.md', html: revision === 'long-properties' ? `<details class="properties" data-source="0"><summary>属性</summary><pre>${'自定义字段\n'.repeat(200)}</pre></details><h1 data-source="10">真实标题</h1><p data-source="50">最后正文</p>` : revision === 'polish' ? '<details class="properties" data-source="0"><summary>属性</summary><pre>未知属性</pre></details><h1 data-source="0">真实标题</h1><p data-source="20">正文</p><h2 data-source="40">下一节</h2><p data-source="50">尾文</p>' : revision === 'resource-failure' ? '<h1 data-source="0">附件失败可重试</h1><img src="https://failure.example/image.png">' : revision === 'concurrency' ? '<h1 data-source="0">附件并发检查</h1><p data-source="10"><img alt="10x10" src="a.png"><img alt="10x10" src="b.png"><img alt="10x10" src="c.png"></p>' : revision === 'old-size' ? '<h1 data-source="0">尺寸缓存校验</h1><p data-source="10"><img src="图片.png"></p>' : projection, metadata: revision === 'polish' ? {folder: '生活', modified: 1761350400000, tags: ['日常']} : null, blocks: [], projectionKey, cacheNamespace, cacheHit });
     }
     if (url.pathname === '/reader/resolve') {
       const target = url.searchParams.get('target');
@@ -107,6 +107,30 @@ page.on('pageerror', error => errors.push(error.message));
 page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1:') && !request.url().startsWith('blob:') && !request.url().startsWith('data:')) remoteRequests.push(request.url()); });
 const checks = [];
 try {
+  await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=polish&theme=blue&dark=true`);
+  await page.waitForFunction(() => window.readerReady === true);
+  assert.equal(await page.locator('#content > h1').count(), 1);
+  assert.ok((await page.locator('.reader-meta').innerText()).includes('生活'));
+  assert.equal(await page.locator('#content > :first-child').evaluate(node => node.tagName), 'H1');
+  assert.equal(await page.locator('#content > :last-child').getAttribute('class'), 'properties');
+  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('dark')), false);
+  assert.equal(await page.locator('.reader-meta .reader-meta-tag').innerText(), '#日常');
+  assert.deepEqual(await page.evaluate(() => window.readerOutline()), [{title: '真实标题', level: 1, offset: 0}, {title: '下一节', level: 2, offset: 40}]);
+  assert.equal(await page.evaluate(() => window.readerJump(40)), true);
+  const readsBeforeTheme = rootReads;
+  await page.evaluate(() => window.readerUpdate({ revision: 'polish', theme: 'warm', scale: 1, auto: false, metadata: {folder: '工作', modified: 1761350400000, tags: ['真实标签']} }));
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(250, 247, 239)');
+  assert.ok((await page.locator('.reader-meta').innerText()).includes('工作'));
+  assert.equal(await page.locator('.reader-meta .reader-meta-tag').innerText(), '#真实标签');
+  assert.equal(rootReads, readsBeforeTheme); checks.push('三主题切换、真实元信息与目录定位');
+  await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=plain&theme=blue`);
+  await page.waitForFunction(() => window.readerReady === true);
+  assert.equal(await page.locator('#content h1').count(), 0); checks.push('无开头 H1 不合成标题');
+  await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=long-properties&theme=blue`);
+  await page.waitForFunction(() => window.readerReady === true);
+  await page.locator('.properties > summary').click();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  assert.equal(await page.evaluate(() => window.readerOffset()), 50); checks.push('滚入长属性时保留最后正文位置');
   for (const dark of [false, true]) {
     await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&dark=${dark}&offset=0&auto=false`);
     await page.waitForFunction(() => window.readerReady === true, { timeout: 45000 });

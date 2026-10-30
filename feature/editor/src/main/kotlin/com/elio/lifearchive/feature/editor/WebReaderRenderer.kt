@@ -16,12 +16,14 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.elio.lifearchive.core.document.*
 import com.elio.lifearchive.domain.notes.*
+import com.elio.lifearchive.core.designsystem.LocalDocumentTheme
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class ReaderServices(val id: NoteId, val notes: NotesRepository, val library: LibraryRepository, val remote: RemoteCacheRepository, val automatic: Boolean, val message: (String) -> Unit, val cache: ReaderCacheRepository? = null, val onLoad: (ReaderLoadEvent) -> Unit = {})
+data class ReaderServices(val id: NoteId, val notes: NotesRepository, val library: LibraryRepository, val remote: RemoteCacheRepository, val automatic: Boolean, val message: (String) -> Unit, val cache: ReaderCacheRepository? = null, val navigation: ReaderNavigation? = null, val onLoad: (ReaderLoadEvent) -> Unit = {})
 
 object WebReaderRenderer : ReaderRenderer {
     @Composable override fun Content(document: ReaderSnapshot, fontScale: Float, initialOffset: Int, onOffset: (Int) -> Unit, loadImage: suspend (String) -> ByteArray?, onLink: (String) -> Unit, services: ReaderServices?) {
@@ -33,13 +35,48 @@ object WebReaderRenderer : ReaderRenderer {
         val currentLoad by rememberUpdatedState(services.onLoad)
         val documentLoader = remember(services.id, services.notes, services.cache) { ReaderDocumentLoader(services.notes, services.cache, scope) }
         val background = androidx.compose.material3.MaterialTheme.colorScheme.background
-        val darkTheme = androidx.compose.material3.MaterialTheme.colorScheme.onBackground.red > background.red
+        val pageTheme = LocalDocumentTheme.current.name.lowercase(java.util.Locale.ROOT)
+        val darkTheme = pageTheme == "graphite"
+        // 元信息独立于首屏加载；索引不可用或读取失败时正文仍可阅读。
+        val metadata by produceState<LibraryNote?>(null, services.id, services.notes, services.library) {
+            try {
+                // 保存可能在切回阅读之后完成；随后按通知刷新单篇元信息，不阻塞首屏。
+                services.notes.observeNotes().collectLatest {
+                    value = try { withContext(Dispatchers.IO) { (services.library.metadata(services.id) as? NoteResult.Success)?.value } }
+                    catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+                }
+            } catch (e: CancellationException) { throw e } catch (_: Exception) { value = null }
+        }
+        val metadataJson = metadata?.let { detail ->
+            JSONObject().put("folder", detail.summary.path.value.substringBeforeLast('/', ""))
+                .put("modified", detail.modified).put("tags", JSONArray(detail.propertyTags))
+        }
         val initial = remember(services.id) { initialOffset }
         var readyRevision by remember(services.id) { mutableStateOf<String?>(null) }
         var revealed by remember(services.id) { mutableStateOf(false) }
-        val configuration = JSONObject().put("revision", document.revision).put("scale", fontScale).put("dark", darkTheme).put("auto", services.automatic).toString()
+        val configuration = JSONObject().put("revision", document.revision).put("scale", fontScale).put("dark", darkTheme).put("theme", pageTheme).put("auto", services.automatic).put("metadata", metadataJson ?: JSONObject.NULL).toString()
         val currentConfiguration by rememberUpdatedState(configuration)
-        val url = "https://appassets.androidplatform.net/reader/index.html?note=${services.id.value}&offset=$initial&scale=$fontScale&dark=${darkTheme}&auto=${services.automatic}&rev=${document.revision}"
+        val url = "https://appassets.androidplatform.net/reader/index.html?note=${services.id.value}&offset=$initial&scale=$fontScale&dark=${darkTheme}&theme=$pageTheme&auto=${services.automatic}&rev=${document.revision}"
+        val navigation = services.navigation
+        fun bindNavigation(view: WebView) {
+            navigation?.request = {
+                val captured = currentDocument.revision
+                view.evaluateJavascript("window.readerOutline?.() ?? []") { result ->
+                    if (view.tag != null && captured == currentDocument.revision) {
+                        navigation.headings = runCatching {
+                            val array = JSONArray(result)
+                            (0 until array.length()).mapNotNull { i ->
+                                val item = array.optJSONObject(i) ?: return@mapNotNull null
+                                val offset = item.optInt("offset", -1); val level = item.optInt("level")
+                                val title = item.optString("title").take(256)
+                                if (offset < 0 || level !in 1..6 || title.isBlank()) null else ReaderHeading(title, level, offset)
+                            }
+                        }.getOrDefault(emptyList())
+                    }
+                }
+            }
+            navigation?.jump = { offset -> if (offset >= 0 && view.tag != null) view.evaluateJavascript("window.readerJump?.($offset)", null) }
+        }
         Box(Modifier.fillMaxSize().background(background)) {
         AndroidView(modifier = Modifier.fillMaxSize(), factory = { context ->
             WebView(context).apply {
@@ -162,12 +199,14 @@ object WebReaderRenderer : ReaderRenderer {
                     }
                 }
                 tag = configuration
+                bindNavigation(this)
                 loadUrl(url)
             }
         }, update = { view ->
+            bindNavigation(view)
             view.setBackgroundColor(background.toArgb())
             if (view.tag != configuration) { view.tag = configuration; view.evaluateJavascript("window.readerUpdate?.($configuration)", null) }
-        }, onRelease = { it.tag = null; it.stopLoading(); it.webViewClient = WebViewClient(); it.destroy() })
+        }, onRelease = { it.tag = null; navigation?.request = null; navigation?.jump = null; it.stopLoading(); it.webViewClient = WebViewClient(); it.destroy() })
         if (!revealed) LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }
