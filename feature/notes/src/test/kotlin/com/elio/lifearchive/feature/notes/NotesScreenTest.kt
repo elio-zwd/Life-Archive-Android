@@ -191,7 +191,7 @@ class NotesScreenTest {
     }
 
     @Test fun thumbnailsLoadOnlyForVisibleNotesAndCancelWhenTheyLeave() {
-        val notes = List(50) { index -> note(index).copy(thumbnail = ThumbnailReference("image-$index.png", LinkSyntax.MARKDOWN)) }
+        val notes = List(50) { index -> note(index).copy(cover = NoteCover.Attachment(LibraryPath("image-$index.png"))) }
         val requested = mutableSetOf<NoteId>()
         val cancelled = mutableSetOf<NoteId>()
         val ui = NotesUiState(notes = notes.map { it.summary }, loading = false,

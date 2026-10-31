@@ -2,6 +2,8 @@ package com.elio.lifearchive.feature.notes
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -10,6 +12,7 @@ import com.elio.lifearchive.domain.notes.LibraryRepository
 import com.elio.lifearchive.domain.notes.NoteId
 import com.elio.lifearchive.domain.notes.NoteResult
 import java.io.ByteArrayOutputStream
+import java.io.ByteArrayInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -20,14 +23,14 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /** 仅缓存可丢弃的缩略图；附件只能经笔记库公开接口访问。 */
-internal class HomeThumbnailLoader(private val library: LibraryRepository) {
+internal class HomeThumbnailLoader(private val library: LibraryRepository, private val maxDimension: Int = 256, cacheBytes: Int = 4 * 1024 * 1024) {
     private data class Key(val note: NoteId, val target: String, val syntax: LinkSyntax)
 
     private val permits = Semaphore(2)
     private val lock = Any()
     private var generation = 0L
     private var retired = false
-    private val cache = object : LruCache<Key, Bitmap>(4 * 1024 * 1024) {
+    private val cache = object : LruCache<Key, Bitmap>(cacheBytes) {
         override fun sizeOf(key: Key, value: Bitmap): Int = value.allocationByteCount
     }
 
@@ -87,9 +90,23 @@ internal class HomeThumbnailLoader(private val library: LibraryRepository) {
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
                     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withPermit null
                     var sample = 1
-                    while (bounds.outWidth / sample > MAX_DIMENSION || bounds.outHeight / sample > MAX_DIMENSION) sample *= 2
+                    while (bounds.outWidth / sample > maxDimension || bounds.outHeight / sample > maxDimension) sample *= 2
                     val options = BitmapFactory.Options().apply { inSampleSize = sample }
-                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return@withPermit null
+                    val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return@withPermit null
+                    // 相机照片的方向存于 EXIF；与 WebView 默认的 from-image 显示保持一致。
+                    val orientation = runCatching { ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+                    val matrix = Matrix().apply {
+                        when (orientation) {
+                            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> postScale(-1f, 1f)
+                            ExifInterface.ORIENTATION_ROTATE_180 -> postRotate(180f)
+                            ExifInterface.ORIENTATION_FLIP_VERTICAL -> postScale(1f, -1f)
+                            ExifInterface.ORIENTATION_TRANSPOSE -> { postRotate(90f); postScale(-1f, 1f) }
+                            ExifInterface.ORIENTATION_ROTATE_90 -> postRotate(90f)
+                            ExifInterface.ORIENTATION_TRANSVERSE -> { postRotate(90f); postScale(1f, -1f) }
+                            ExifInterface.ORIENTATION_ROTATE_270 -> postRotate(270f)
+                        }
+                    }
+                    val bitmap = if (matrix.isIdentity) decoded else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).also { if (it !== decoded) decoded.recycle() }
                     currentCoroutineContext().ensureActive()
                     synchronized(lock) {
                         if (currentGeneration != generation) return@withPermit null
@@ -109,6 +126,5 @@ internal class HomeThumbnailLoader(private val library: LibraryRepository) {
 
     private companion object {
         const val MAX_ENCODED_BYTES = 8 * 1024 * 1024
-        const val MAX_DIMENSION = 256
     }
 }

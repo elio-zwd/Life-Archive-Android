@@ -21,6 +21,7 @@ internal data class NoteRowUi(
     val pinned: Boolean,
     val thumbnailTarget: String?,
     val thumbnailSyntax: LinkSyntax?,
+    val cover: com.elio.lifearchive.domain.notes.NoteCover,
 )
 
 internal class NoteListPresentation(
@@ -45,6 +46,7 @@ internal fun noteListPresentation(notes: List<NoteSummary>, listing: LibraryList
             pinned = detail?.pinned == true,
             thumbnailTarget = detail?.thumbnail?.target,
             thumbnailSyntax = detail?.thumbnail?.syntax,
+            cover = detail?.cover ?: com.elio.lifearchive.domain.notes.NoteCover.Preset(),
         )
     }, details)
 }

@@ -1,7 +1,6 @@
 package com.elio.lifearchive.feature.notes
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,7 +29,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,6 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.elio.lifearchive.core.document.LinkSyntax
+import com.elio.lifearchive.core.document.DocumentAnalyzer
+import com.elio.lifearchive.core.designsystem.CoverArtwork
 import com.elio.lifearchive.domain.notes.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -336,16 +336,17 @@ private fun NoteRow(
     onOpen: (NoteId) -> Unit, onManage: (NoteId) -> Unit,
 ) {
     val currentLoader by rememberUpdatedState(loadThumbnail)
-    var image by remember(row.id, row.thumbnailTarget, row.thumbnailSyntax) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(row.id, row.thumbnailTarget, row.thumbnailSyntax, row.modified, thumbnailEpoch, visible) {
+    var image by remember(row.id, row.cover) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(row.id, row.cover, row.modified, thumbnailEpoch, visible) {
         image = null
-        val target = row.thumbnailTarget
-        val syntax = row.thumbnailSyntax
-        if (visible && target != null && syntax != null) image = currentLoader(NoteId(row.id), target, syntax)
+        val attachment = row.cover as? NoteCover.Attachment
+        if (visible && attachment != null) image = currentLoader(NoteId(row.id), "/" + DocumentAnalyzer.encode(attachment.path.value), LinkSyntax.WIKI)
     }
     val date = remember(row.modified) { row.modified?.let { SimpleDateFormat("yyyy/M/d", Locale.CHINA).format(Date(it)) } }
     Column(Modifier.fillMaxWidth().testTag("note:${row.id}").clickable(enabled = enabled) { onOpen(NoteId(row.id)) }) {
         Row(Modifier.fillMaxWidth().padding(top = 13.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+            CoverArtwork(preset = (row.cover as? NoteCover.Preset)?.preset?.key ?: "mountain", image = image, enabled = visible,
+                modifier = Modifier.padding(top = 2.dp).size(width = 60.dp, height = 66.dp).clip(RoundedCornerShape(8.dp)).testTag("note-thumbnail:${row.id}"))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Top) {
                     if (row.pinned) HomeIcon("pin", colors.blue, Modifier.padding(top = 4.dp, end = 5.dp).size(13.dp).testTag("note-pin:${row.id}"))
@@ -354,10 +355,6 @@ private fun NoteRow(
                 Spacer(Modifier.height(4.dp))
                 Text(row.excerpt.ifBlank { "点击查看笔记。" }, color = colors.muted, fontSize = 13.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (row.subtitle == "正文已保存 · 索引待更新") Text(row.subtitle, color = colors.muted, fontSize = 11.sp, maxLines = 1)
-            }
-            image?.let {
-                Image(it, contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.padding(top = 2.dp).size(width = 60.dp, height = 66.dp).clip(RoundedCornerShape(8.dp)).testTag("note-thumbnail:${row.id}"))
             }
         }
         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

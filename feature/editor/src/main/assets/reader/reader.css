@@ -12,6 +12,8 @@
 :root[data-page-theme] .reader-meta span+span{border-left:1px solid var(--line);padding-left:10px}
 :root[data-page-theme] .reader-meta-folder:before{content:'';display:inline-block;width:11px;height:8px;border:1px solid currentColor;border-radius:2px;box-shadow:0 -2px 0 -1px currentColor}
 :root[data-page-theme] .reader-meta .reader-meta-tag{color:var(--link)}
+.reader-cover{width:100%;aspect-ratio:2.4;overflow:hidden;border-radius:12px;background:var(--surface);margin:0 0 24px}
+.reader-cover>img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}
 :root[data-page-theme] blockquote:not(.callout){background:transparent;border-left:2px solid var(--link);padding:2px 0 2px 17px;color:var(--muted)}
 :root[data-page-theme] .task-item input{appearance:none;vertical-align:middle;width:16px;height:16px;border:1.4px solid var(--muted);border-radius:3px;background:transparent;margin:0 10px 2px 0;opacity:1;position:relative}
 :root[data-page-theme] .task-item input:checked{background:var(--link);border-color:var(--link)}

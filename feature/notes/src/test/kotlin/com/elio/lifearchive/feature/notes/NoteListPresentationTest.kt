@@ -25,6 +25,7 @@ class NoteListPresentationTest {
         assertEquals("#标签 #项目", row.tags)
         assertEquals("../图%20一.png", row.thumbnailTarget)
         assertEquals(LinkSyntax.MARKDOWN, row.thumbnailSyntax)
+        assertEquals(NoteCover.Preset(), row.cover)
         assertSame(detail, presentation.details[summary.id])
     }
 }

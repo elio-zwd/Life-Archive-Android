@@ -349,11 +349,24 @@ window.readerJump = offset => {
 };
 function addDocumentMetadata(staging, data) {
   staging.querySelector(':scope > .reader-meta')?.remove();
+  staging.querySelector(':scope > .reader-cover')?.remove();
   // 属性仍保留完整原文入口，但移到正文之后以保持首屏标题和元信息顺序。
   for (const properties of [...staging.children].filter(node => node.classList.contains('properties'))) staging.append(properties);
   const first = [...staging.children].find(node => !node.classList.contains('properties'));
   if (first?.tagName === 'H1') first.classList.add('reader-opening-heading');
   const meta = data.metadata;
+  const cover = meta?.cover;
+  const presets = ['mountain', 'lake', 'forest', 'paper'];
+  const preset = presets.includes(cover?.preset) ? cover.preset : 'mountain';
+  const banner = element('div', null, 'reader-cover');
+  banner.setAttribute('aria-label', '笔记封面');
+  const image = element('img'); image.alt = '笔记封面'; image.dataset.prepared = 'true';
+  image.decoding = 'async';
+  const fallback = `/covers/${preset}.png`;
+  image.addEventListener('error', () => { if (image.getAttribute('src') !== fallback) image.src = fallback; });
+  image.src = typeof cover?.attachment === 'string' && cover.attachment ? localResource(cover.attachment) : fallback;
+  banner.append(image);
+  if (first?.tagName === 'H1') first.after(banner); else if (first) first.before(banner); else staging.append(banner);
   if (!meta) return;
   const entries = [];
   if (typeof meta.folder === 'string' && meta.folder) entries.push(['reader-meta-folder', meta.folder]);
@@ -362,7 +375,7 @@ function addDocumentMetadata(staging, data) {
   if (!entries.length) return;
   const row = element('div', null, 'reader-meta');
   for (const [kind, value] of entries) row.append(element('span', value, kind));
-  if (first?.tagName === 'H1') first.after(row); else if (first) first.before(row); else staging.append(row);
+  banner.before(row);
 }
 window.readerReload = async () => {
   const captured = ++generation; const capturedRevision = revision;

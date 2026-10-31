@@ -50,6 +50,10 @@ object WebReaderRenderer : ReaderRenderer {
         val metadataJson = metadata?.let { detail ->
             JSONObject().put("folder", detail.summary.path.value.substringBeforeLast('/', ""))
                 .put("modified", detail.modified).put("tags", JSONArray(detail.propertyTags))
+                .put("cover", when (val cover = detail.cover) {
+                    is NoteCover.Preset -> JSONObject().put("preset", cover.preset.key)
+                    is NoteCover.Attachment -> JSONObject().put("attachment", cover.path.value)
+                })
         }
         val initial = remember(services.id) { initialOffset }
         var readyRevision by remember(services.id) { mutableStateOf<String?>(null) }

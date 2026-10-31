@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fixtures = JSON.parse(await fs.readFile(path.join(root, 'core/document/build/reader-fixtures.json'), 'utf8'));
-const assetRoots = [path.join(root, 'feature/editor/src/main/assets'), path.join(root, 'feature/editor/build/generated/readerAssets')];
+const assetRoots = [path.join(root, 'feature/editor/src/main/assets'), path.join(root, 'feature/editor/build/generated/readerAssets'), path.join(root, 'core/designsystem/src/main/assets')];
 const pdfPadding = 50 * 1024 * 1024;
 const pdfObjects = [
   '<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>',
@@ -73,6 +73,7 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === '/reader/action') { actions.push(Object.fromEntries(url.searchParams)); response.writeHead(204); return response.end(); }
     if (url.pathname === '/reader/resource') {
       const resourcePath = url.searchParams.get('path');
+      if (resourcePath === 'broken-cover.png') { response.setHeader('Content-Type', 'image/png'); response.end('invalid image'); return; }
       if (/^[abc]\.png$/.test(resourcePath)) { imageActive++; imagePeak = Math.max(imagePeak, imageActive); response.on('finish', () => imageActive--); if (holdImages) await new Promise(resolve => imageReleases.push(resolve)); }
       const data = resourcePath === '文档.pdf' ? pdf : resourcePath === '声音.wav' ? wav : resourcePath === '视频.mp4' ? video : png;
       response.setHeader('Content-Type', data === pdf ? 'application/pdf' : data === wav ? 'audio/wav' : data === video ? 'video/mp4' : 'image/png'); response.setHeader('Accept-Ranges', 'bytes'); response.setHeader('Content-Length', data.length);
@@ -115,6 +116,9 @@ try {
   assert.equal(await page.locator('#content > :last-child').getAttribute('class'), 'properties');
   assert.equal(await page.evaluate(() => document.documentElement.classList.contains('dark')), false);
   assert.equal(await page.locator('.reader-meta .reader-meta-tag').innerText(), '#日常');
+  assert.deepEqual(await page.locator('#content').evaluate(node => [...node.children].slice(0, 4).map(n => n.className || n.tagName)), ['reader-opening-heading', 'reader-meta', 'reader-cover', 'P']);
+  assert.ok(Math.abs(await page.locator('.reader-cover').evaluate(node => node.clientWidth / node.clientHeight) - 2.4) < 0.05);
+  await page.waitForFunction(() => document.querySelector('.reader-cover img').naturalWidth > 0);
   assert.deepEqual(await page.evaluate(() => window.readerOutline()), [{title: '真实标题', level: 1, offset: 0}, {title: '下一节', level: 2, offset: 40}]);
   assert.equal(await page.evaluate(() => window.readerJump(40)), true);
   const readsBeforeTheme = rootReads;
@@ -123,6 +127,18 @@ try {
   assert.ok((await page.locator('.reader-meta').innerText()).includes('工作'));
   assert.equal(await page.locator('.reader-meta .reader-meta-tag').innerText(), '#真实标签');
   assert.equal(rootReads, readsBeforeTheme); checks.push('三主题切换、真实元信息与目录定位');
+  const coverReads = rootReads;
+  await page.evaluate(() => window.readerUpdate({ revision: 'polish', theme: 'warm', scale: 1, auto: false, metadata: { tags: [], cover: { attachment: '图片.png' } } }));
+  assert.equal(await page.locator('.reader-cover img').getAttribute('src'), '/reader/resource?path=%E5%9B%BE%E7%89%87.png');
+  const beforeCoverAnchor = await page.locator('h2').evaluate(node => node.getBoundingClientRect().top);
+  await page.evaluate(() => window.readerUpdate({ revision: 'polish', theme: 'graphite', scale: 1, auto: false, metadata: { tags: [], cover: { preset: 'forest' } } }));
+  assert.equal(await page.locator('.reader-cover img').getAttribute('src'), '/covers/forest.png');
+  assert.ok(Math.abs(await page.locator('h2').evaluate(node => node.getBoundingClientRect().top) - beforeCoverAnchor) < 2);
+  assert.equal(await page.locator('.reader-cover').count(), 1);
+  assert.equal(rootReads, coverReads); checks.push('标题下独立封面、附件与预设切换保持阅读锚点及正文缓存');
+  await page.evaluate(() => window.readerUpdate({ revision: 'polish', theme: 'graphite', scale: 1, auto: false, metadata: { cover: { attachment: 'broken-cover.png' } } }));
+  await page.waitForFunction(() => document.querySelector('.reader-cover img').getAttribute('src') === '/covers/mountain.png' && document.querySelector('.reader-cover img').naturalWidth > 0);
+  assert.equal(await page.locator('#content > h1').count(), 1); checks.push('损坏封面回退默认预设且正文保持可读');
   await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=plain&theme=blue`);
   await page.waitForFunction(() => window.readerReady === true);
   assert.equal(await page.locator('#content h1').count(), 0); checks.push('无开头 H1 不合成标题');
@@ -230,7 +246,7 @@ try {
   for (let i = 0; i < 100 && imageReleases.length < 2; i++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(imageReleases.length, 2); await page.waitForTimeout(50); assert.equal(imageReleases.length, 2);
   holdImages = false; imageReleases.forEach(release => release()); await page.evaluate(() => window.readerDrain());
-  assert.ok(imagePeak <= 2); assert.equal(await page.locator('img').evaluateAll(nodes => nodes.filter(n => n.complete && n.naturalWidth > 0).length), 3); checks.push('附件读取和解码准备最多两个并发槽');
+  assert.ok(imagePeak <= 2); assert.equal(await page.locator('img:not(.reader-cover img)').evaluateAll(nodes => nodes.filter(n => n.complete && n.naturalWidth > 0).length), 3); checks.push('附件读取和解码准备最多两个并发槽');
   changedNested = true;
   artifacts.set(`GEOMETRY:${createHash('sha256').update('image-size|图片.png').digest('hex')}`, JSON.stringify({ width: 999, height: 500 }));
   await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&dark=true&offset=0&auto=false`);
@@ -238,7 +254,7 @@ try {
   assert.ok((await page.locator('.embedded-note').innerText()).includes('嵌入正文已更新')); checks.push('主笔记缓存不会掩盖嵌入目标更新');
   await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=old-size&dark=true&offset=0&auto=false`);
   await page.waitForFunction(() => window.readerReady === true); await page.evaluate(() => window.readerDrain());
-  assert.equal(await page.locator('img').evaluate(node => node.style.aspectRatio), '1 / 1'); checks.push('旧附件尺寸缓存不能覆盖实际解码尺寸');
+  assert.equal(await page.locator('img:not(.reader-cover img)').evaluate(node => node.style.aspectRatio), '1 / 1'); checks.push('旧附件尺寸缓存不能覆盖实际解码尺寸');
   assert.deepEqual(JSON.parse(artifacts.get(`GEOMETRY:${createHash('sha256').update('image-size|图片.png').digest('hex')}`)), { width: 1, height: 1 });
   await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=toolbar&dark=true&offset=0&auto=false`);
   await page.waitForFunction(() => window.readerReady === true); await page.evaluate(() => window.readerDrain());

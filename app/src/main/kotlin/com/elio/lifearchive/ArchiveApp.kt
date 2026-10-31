@@ -95,6 +95,38 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
         LaunchedEffect(transferState.message) { transferState.message?.let { message = it; activeEditor?.message(it) } }
     }
     var managed by remember { mutableStateOf<LibraryNote?>(null) }
+    var coverNote by remember { mutableStateOf<LibraryNote?>(null) }
+    var coverSession by rememberSaveable { mutableStateOf<String?>(null) }
+    var coverPickerRequest by rememberSaveable { mutableStateOf<String?>(null) }
+    var importedCover by remember { mutableStateOf<CoverImage?>(null) }
+    var coverBusy by remember { mutableStateOf(false) }
+    var coverError by remember { mutableStateOf<String?>(null) }
+    fun openCover(note: LibraryNote) {
+        coverNote = note; coverSession = UUID.randomUUID().toString(); importedCover = null; coverError = null
+    }
+    LaunchedEffect(backStack.toList()) { coverNote = null; coverSession = null }
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val requested = coverPickerRequest
+        coverPickerRequest = null
+        if (uri != null && requested != null && requested == coverSession && coverNote != null) {
+            coverBusy = true; coverError = null
+            libraryOperation {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        val name = displayName(context, uri)
+                        val input = context.contentResolver.openInputStream(uri) ?: error("无法打开图片")
+                        importCoverImage(notes, input, name)
+                    }
+                    if (coverSession == requested) when (result) {
+                        is NoteResult.Success -> importedCover = result.value
+                        else -> coverError = result.failureMessage()
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) { if (coverSession == requested) coverError = "图片导入失败：${e.message}" }
+                finally { coverBusy = false }
+            }
+        } else if (uri != null) message = "笔记会话已变化，请重新选择封面"
+    }
     var folderPrompt by remember { mutableStateOf<String?>(null) }
     var folderText by remember { mutableStateOf("") }
     var deleteFolder by remember { mutableStateOf<String?>(null) }
@@ -218,6 +250,10 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                         onLink = ::openLink, onAttach = { if (model.prepareAttachment()) { attachmentEntry = key.entry; attachmentPicker.launch(arrayOf("*/*")) } },
                         onManage = { scope.launch { val detail = library?.metadata(NoteId(key.id)); if (backStack.lastOrNull() == key) managed = (detail as? NoteResult.Success)?.value } },
                         documentTheme = documentTheme,
+                        onCover = { scope.launch {
+                            val detail = withContext(Dispatchers.IO) { library?.metadata(NoteId(key.id)) }
+                            if (backStack.lastOrNull() == key) (detail as? NoteResult.Success)?.value?.let(::openCover)
+                        } },
                         onDocumentTheme = { chosen -> libraryOperation {
                             try { preferences.setDocumentTheme(chosen) }
                             catch (e: kotlinx.coroutines.CancellationException) { throw e }
@@ -255,7 +291,9 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
     managed?.let { note -> NoteActions(note, onDismiss = { managed = null }) { action, text ->
         val origin = backStack.lastOrNull()
         val current = activeEditor?.takeIf { it.id == note.summary.id }
-        if (action == NoteAction.MARKDOWN || action == NoteAction.ZIP) {
+        if (action == NoteAction.COVER) {
+            managed = null; openCover(note)
+        } else if (action == NoteAction.MARKDOWN || action == NoteAction.ZIP) {
             val choose = { managed = null; pickExport(if (action == NoteAction.MARKDOWN) "markdown" else "zip", note.summary.id.value) }
             if (current != null) libraryOperation {
                 if (current.flush() && current.persistence?.fullyCommitted == true) { if (backStack.lastOrNull() == origin) choose() }
@@ -291,6 +329,29 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
     } }
     folderPrompt?.let { old -> AlertDialog(onDismissRequest = { folderPrompt = null }, title = { Text(if (old.isEmpty()) "新建笔记本" else "重命名／移动笔记本") }, text = { Column { OutlinedTextField(folderText, { folderText = it }, label = { Text("库内目录路径") }); if (old.isNotEmpty()) TextButton(onClick = { deleteFolder = old; folderPrompt = null }) { Text("删除此笔记本…") } } }, confirmButton = { TextButton(onClick = { libraryOperation { val result = if (old.isEmpty()) library?.createFolder(folderText) else library?.relocateFolder(old, folderText); message = if (result is NoteResult.Success) "笔记本操作完成" else result?.failureMessage(); if (result is NoteResult.Success) folderPrompt = null } }) { Text("确认") } }, dismissButton = { TextButton(onClick = { folderPrompt = null }) { Text("取消") } }) }
     deleteFolder?.let { folder -> AlertDialog(onDismissRequest = { deleteFolder = null }, title = { Text("删除笔记本？") }, text = { Text("$folder 内的笔记进入回收站，可逐篇恢复；共享附件保留。") }, confirmButton = { TextButton(onClick = { libraryOperation { val result = library?.trashFolder(folder); message = result?.failureMessage(); if (result is NoteResult.Success) deleteFolder = null } }) { Text("移入回收站") } }, dismissButton = { TextButton(onClick = { deleteFolder = null }) { Text("取消") } }) }
+    coverNote?.let { note -> if (library != null) {
+        val picker: @Composable () -> Unit = {
+            NoteCoverPicker(note, library, importedCover, coverBusy, coverError, notes = notes,
+                onPickImage = { coverPickerRequest = coverSession; coverPicker.launch(arrayOf("image/*")) },
+                onDismiss = { coverNote = null; coverSession = null },
+                onSave = { selected ->
+                    val requested = coverSession
+                    coverBusy = true; coverError = null
+                    libraryOperation {
+                        try {
+                            val result = withContext(Dispatchers.IO) { library.setCover(note.summary.id, selected) }
+                            if (coverSession == requested) {
+                                if (result is NoteResult.Success) { coverNote = null; coverSession = null; message = "封面已保存" }
+                                else coverError = result.failureMessage()
+                            }
+                        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                        catch (e: Exception) { if (coverSession == requested) coverError = "封面保存失败：${e.message}" }
+                        finally { coverBusy = false }
+                    }
+                })
+        }
+        if (backStack.lastOrNull() is NoteDestination) DocumentPageTheme(documentPalette, picker) else picker()
+    } }
     if (settings != null && backStack.lastOrNull() != SettingsDestination) {
         val state by settings.state.collectAsStateWithLifecycle()
         state.message?.let { value -> if (state.busy) AlertDialog(onDismissRequest = {}, title = { Text("正在处理资料") }, text = { Text(value) }, confirmButton = {}) }
