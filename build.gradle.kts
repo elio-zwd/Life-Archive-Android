@@ -18,7 +18,7 @@ val allowedModules = mapOf(
     ":core:preferences" to setOf(":core:backup"),
     ":domain:notes" to setOf(":core:document"),
     ":data:notes" to setOf(":domain:notes", ":core:document", ":core:backup"),
-    ":feature:notes" to setOf(":domain:notes", ":core:designsystem"),
+    ":feature:notes" to setOf(":domain:notes", ":core:designsystem", ":core:preferences"),
     ":feature:editor" to setOf(":domain:notes", ":core:document", ":core:designsystem", ":core:preferences"),
     ":feature:settings" to setOf(":domain:notes", ":core:preferences", ":core:backup", ":core:designsystem"),
 )

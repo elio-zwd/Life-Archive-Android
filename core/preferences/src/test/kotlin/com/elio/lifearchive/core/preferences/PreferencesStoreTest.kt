@@ -67,7 +67,7 @@ class PreferencesStoreTest {
         finally { third.closeAndJoin() }
     }
 
-    @Test fun allDocumentThemesRoundTripThroughFormatOneBackup() = runBlocking {
+    @Test fun allDocumentThemesRoundTripThroughCurrentBackup() = runBlocking {
         val file = File(temp.newFolder(), "settings.preferences_pb")
         val store = PreferencesStore(file, StorageGate())
         val directory = temp.newFolder()
@@ -136,19 +136,21 @@ class PreferencesStoreTest {
         finally { store.closeAndJoin() }
     }
 
-    @Test fun failedThemeWriteKeepsPreviousPreferences() = runBlocking {
+    @Test fun failedThemeAndPromptWritesKeepPreviousPreferences() = runBlocking {
         val directory = temp.newFolder()
         val file = File(directory, "settings.preferences_pb")
         val saved = File(directory, "saved.preferences_pb")
         val store = PreferencesStore(file, StorageGate())
         try {
             store.repository.setDocumentTheme(DocumentTheme.WARM)
+            store.repository.setVideoPrompt(VideoPromptType.GENERAL, "之前保存的提示词")
             val original = store.repository.preferences.first()
             check(file.renameTo(saved))
             check(file.mkdir())
             File(file, "block").writeText("block")
             try {
                 assertTrue(runCatching { store.repository.setDocumentTheme(DocumentTheme.GRAPHITE) }.isFailure)
+                assertTrue(runCatching { store.repository.setVideoPrompt(VideoPromptType.GENERAL, "不应落盘") }.isFailure)
                 assertEquals(original, store.repository.preferences.first())
             } finally {
                 check(file.deleteRecursively())
@@ -157,7 +159,10 @@ class PreferencesStoreTest {
         } finally { store.closeAndJoin() }
 
         val reopened = PreferencesStore(file, StorageGate())
-        try { assertEquals(DocumentTheme.WARM, reopened.repository.preferences.first().documentTheme) }
+        try {
+            assertEquals(DocumentTheme.WARM, reopened.repository.preferences.first().documentTheme)
+            assertEquals("之前保存的提示词", reopened.repository.preferences.first().videoPrompts[VideoPromptType.GENERAL])
+        }
         finally { reopened.closeAndJoin() }
     }
 
@@ -170,5 +175,56 @@ class PreferencesStoreTest {
                 if (documentTheme != null) it[stringPreferencesKey("document_theme")] = documentTheme
             }
         } finally { job.cancelAndJoin() }
+    }
+
+    @Test fun fourVideoPromptsPersistAndRoundTripWithIndependentReset() = runBlocking {
+        val file = File(temp.newFolder(), "settings.preferences_pb")
+        val directory = temp.newFolder()
+        val original = VideoPromptType.entries.associateWith { "${it.name}：中文提示词\r\n保留条件与步骤 😀" }
+        val first = PreferencesStore(file, StorageGate())
+        try { original.forEach { (type, text) -> first.repository.setVideoPrompt(type, text) } }
+        finally { first.closeAndJoin() }
+        val second = PreferencesStore(file, StorageGate())
+        try {
+            assertEquals(original, second.repository.preferences.first().videoPrompts)
+            assertEquals(DocumentTheme.BLUE, second.repository.preferences.first().documentTheme)
+            second.backupParticipant.snapshot(directory)
+            assertTrue(File(directory, "settings.json").readText().contains("\"format\":2"))
+            second.repository.setVideoPrompt(VideoPromptType.HOW_TO, null)
+            assertEquals(original - VideoPromptType.HOW_TO, second.repository.preferences.first().videoPrompts)
+            second.backupParticipant.validate(directory)
+            second.backupParticipant.restore(directory)
+            assertEquals(original, second.repository.preferences.first().videoPrompts)
+            for (legacy in listOf("\"format\":1,", "")) {
+                File(directory, "settings.json").writeText("""{${legacy}"preferences":{"theme":"DARK"}}""")
+                second.backupParticipant.restore(directory)
+                assertTrue(second.repository.preferences.first().videoPrompts.isEmpty())
+                assertNull(second.repository.preferences.first().documentTheme)
+            }
+        } finally { second.closeAndJoin() }
+    }
+
+    @Test fun maximumEscapedVideoPromptsFitBackupAndInvalidPromptsDoNotChangeSettings() = runBlocking {
+        val store = PreferencesStore(File(temp.newFolder(), "settings.preferences_pb"), StorageGate())
+        val directory = temp.newFolder()
+        try {
+            // 控制字符的 JSON 转义体积大于普通中文，覆盖原 64 KiB 上限失效的情况。
+            val text = "中" + "\u0001".repeat(MAX_VIDEO_PROMPT_LENGTH - 1)
+            VideoPromptType.entries.forEach { store.repository.setVideoPrompt(it, text) }
+            val original = store.repository.preferences.first()
+            store.backupParticipant.snapshot(directory)
+            assertTrue(File(directory, "settings.json").length() > 65536)
+            store.backupParticipant.validate(directory)
+            store.repository.setVideoPrompt(VideoPromptType.GENERAL, null)
+            store.backupParticipant.restore(directory)
+            assertEquals(original, store.repository.preferences.first())
+            for (invalid in listOf("", " \n", "中".repeat(MAX_VIDEO_PROMPT_LENGTH + 1))) {
+                assertTrue(runCatching { store.repository.setVideoPrompt(VideoPromptType.GENERAL, invalid) }.isFailure)
+                assertEquals(original, store.repository.preferences.first())
+            }
+            File(directory, "settings.json").writeText("""{"format":2,"preferences":{"videoPrompts":{"UNKNOWN":"非法类型"}}}""")
+            assertTrue(runCatching { store.backupParticipant.restore(directory) }.isFailure)
+            assertEquals(original, store.repository.preferences.first())
+        } finally { store.closeAndJoin() }
     }
 }

@@ -10,6 +10,19 @@
 
 一期状态与证据入口：[完成度核对与接手清单](../engineering/phase-1-completion-audit-20261031.md)、[用户手动验收清单](phase-1-manual-acceptance.md)。用户已确认一期验证完成；以下带版本的数字保留历史含义，已确认项目不默认重测。
 
+## 0.2.6 视频摘记补充验证
+
+这是一期完成后的新增需求，检查范围与设备待验收项见[视频摘记交接](../engineering/phase-1-video-notes-handoff-20261101.md)，不重新打开历史未填验收表。
+
+```powershell
+.\gradlew.bat :core:preferences:testDebugUnitTest :feature:notes:testDebugUnitTest :app:testDebugUnitTest --console=plain
+.\gradlew.bat verifyPhaseOne --console=plain
+```
+
+设置回归覆盖四类提示词持久化、逐类恢复默认、真实写入失败、format=2 往返、format=1／省略版本号的旧快照及最大转义体积。App 真实运行实例验证完整备份恢复提示词、笔记与附件；导航回归覆盖四类系统剪贴板复制、主动粘贴／替换确认、未保存返回确认、Activity 重建、目标笔记本、同名不覆盖及保存后打开编辑器。ViewModel 另外检查异常、失败重试和重复点击。
+
+`VideoNotesScreenTest` 生成浅深色正式 Compose 预览，默认保存在仓库外 `D:/Temp/life-archive-video-notes-20261101/`，可通过 `LIFE_ARCHIVE_VIDEO_PREVIEW` 指定目录；预览和 Robolectric 剪贴板不等于真实手机、输入法或点点总结效果验收。
+
 ## 0.2.5 首页列表性能修复验证
 
 入口仍为 `verifyPhaseOne`，不连接设备。`NotesScreenTest` 用 500 篇合成笔记检查上下滚动不再扫描详情列表、提示增删及排序后保留可见笔记和偏移、点击与管理使用正确资料；500 项标签／笔记本选择检查屏外选项按需组合并可选到末项。数据测试覆盖无搜索词列表、跨文件名／标题／别名／正文搜索、匹配偏移、目录／标签和回收站过滤；ViewModel 检查重复查询不再触发刷新。

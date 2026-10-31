@@ -6,6 +6,7 @@
 
 - [整体功能版图与旧版迁移评估](plans/overall-feature-roadmap.md)：功能分类、既有分期映射及待确认的后期候选，不等于全部获准实现。
 - [第一期：Android 本地 Markdown 笔记](plans/phase-1-local-notes.md)
+- [一期补充：视频摘记助手](plans/phase-1-video-notes.md)：四类可修改提示词、剪贴板收录、来源保留与备份兼容。
 - [第一期：编辑器交互与视觉决策](plans/phase-1-editor-visual-decisions.md)
 - [第一期：UI 优化实施计划](plans/phase-1-ui-polish.md)：首页及已认可编辑／阅读视觉的 Android 移植、保护边界和分层验证。
 - [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
@@ -29,6 +30,8 @@
 功能细节在计划中维护，README 和 AGENTS 通过链接引用。只在定位、入口或长期规则变化时同步摘要，避免多份完整清单发生冲突。整体架构已由 ADR-001 选定；模块、存储和状态管理按该文实施，编辑器样板和未定产品细节仍须完成各自门槛。
 
 ## 工程与资料
+
+- [视频摘记实现与验证](engineering/phase-1-video-notes-handoff-20261101.md)：0.2.6 的操作入口、设置快照兼容、电脑回归及手机待验收项。
 
 - [核心流程扩展排查与修复](engineering/phase-1-core-resilience-handoff-20261031.md)：WebView 能力降级、缓存结构与异常隔离、渲染库及 PDF 重试、初始化时序和保存竞争回归；设备结果另验。
 

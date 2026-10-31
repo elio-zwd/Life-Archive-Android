@@ -72,6 +72,7 @@ fun NotesScreen(
     onManage: (LibraryNote) -> Unit = {}, onFolder: () -> Unit = {}, onRebuild: () -> Unit = {}, onFolderManage: () -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     loadThumbnail: suspend (NoteId, String, LinkSyntax) -> ImageBitmap? = { _, _, _ -> null },
+    onVideoNotes: () -> Unit = {},
 ) {
     var naming by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -118,6 +119,7 @@ fun NotesScreen(
                         HomeIconButton("更多操作", "more", colors.ink, { more = true }, Modifier.testTag("home-more"))
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                             DropdownMenuItem(text = { Text("快速记录") }, enabled = !state.query.trash && !state.creating, onClick = { more = false; onQuick() })
+                            DropdownMenuItem(text = { Text("视频摘记") }, enabled = !state.query.trash, onClick = { more = false; onVideoNotes() })
                             DropdownMenuItem(text = { Text("新建笔记本") }, onClick = { more = false; onFolder() })
                             if (state.query.folder != null) DropdownMenuItem(text = { Text("移动笔记本") }, onClick = { more = false; onFolderManage() })
                             DropdownMenuItem(text = { Column { Text("标签筛选"); Text(state.query.tag ?: "全部标签", style = MaterialTheme.typography.bodySmall) } }, onClick = { more = false; tagPicker = true })

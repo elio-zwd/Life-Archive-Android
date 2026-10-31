@@ -54,6 +54,7 @@ import kotlinx.serialization.Serializable
 @Serializable internal data class NotesHome(val generation: String = UUID.randomUUID().toString()) : NavKey
 @Serializable internal data class NoteDestination(val id: String, val editing: Boolean = false, val offset: Int? = null, val entry: String = UUID.randomUUID().toString()) : NavKey
 @Serializable internal data object SettingsDestination : NavKey
+@Serializable internal data class VideoNotesDestination(val folder: String?, val entry: String = UUID.randomUUID().toString()) : NavKey
 @Serializable internal data class OnlineDestination(val url: String) : NavKey
 
 @Composable
@@ -232,6 +233,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                     onQuery = model::query, onSettings = { if (settings != null) backStack.add(SettingsDestination) },
                     onBackup = { if (settings != null) pickExport("backup") }, loadThumbnail = model::loadThumbnail,
                     onQuick = { model.quick { if (backStack.lastOrNull() == key) backStack.add(NoteDestination(it.value, true)) } }, onManage = { managed = it },
+                    onVideoNotes = { if (backStack.lastOrNull() == key) backStack.add(VideoNotesDestination(state.query.folder)) },
                     onFolder = { folderPrompt = ""; folderText = "" }, onFolderManage = { folderPrompt = state.query.folder; folderText = state.query.folder.orEmpty() }, onRebuild = model::rebuild,
                 )
             }
@@ -261,6 +263,18 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                         } },
                     )
                 }
+            }
+            entry<VideoNotesDestination> { key ->
+                SideEffect { if (backStack.lastOrNull() == key) activeEditor = null }
+                val factory = remember(notes, preferences, key) { viewModelFactory { initializer { VideoNotesViewModel(notes, preferences, key.folder) } } }
+                val model: VideoNotesViewModel = viewModel(factory = factory)
+                VideoNotesRoute(model, active = backStack.lastOrNull() == key,
+                    onBack = { if (backStack.lastOrNull() == key) backStack.removeLastOrNull() },
+                    onCreated = { id -> if (backStack.lastOrNull() == key) {
+                        model.noteOpened()
+                        backStack.add(NoteDestination(id.value, editing = true))
+                    } },
+                )
             }
             entry<SettingsDestination> {
                 SideEffect { if (backStack.lastOrNull() == SettingsDestination) activeEditor = null }

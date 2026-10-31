@@ -1,5 +1,7 @@
 # 架构入口与实施边界
 
+2026-11-01 视频摘记补充沿用十个模块：`feature:notes` 通过 `core:preferences` 保存四类提示词覆盖值，preferences 备份快照升级为 format=2 并兼容历史 format=1；Markdown 正文、notes 快照与外层备份格式不变。交互及边界见[视频摘记计划](../plans/phase-1-video-notes.md)。
+
 2026-10-31 独立笔记封面已接入现有笔记域，当前状态库升级到 v3（显式 v2→v3 迁移），notes 快照 format=3 兼容旧备份，外层备份维持 v1。下文 v2 描述保留其历史版本含义，当前封面数据归属及验证见[封面交接](../engineering/phase-1-note-cover-handoff-20261031.md)。
 
 0.2.2 新增首屏优先调度和 ReaderCacheRepository 派生缓存接口，仍沿用十个模块、状态库 v2 和备份外层 v1。缓存通过领域接口调用，阅读结果不能回写正文；当前入口见[阅读提速交接](../engineering/phase-1-reader-performance-handoff.md)。

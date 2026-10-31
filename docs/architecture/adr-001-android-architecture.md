@@ -12,6 +12,8 @@
 
 ## 1. 选型结论与比较
 
+2026-11-01 视频摘记补充：不新增模块。`feature:notes` 增加对 `core:preferences` 的依赖，用于固定四类视频提示词的覆盖值；正文仍经 NotesRepository 创建普通 Markdown 笔记。提示词属于用户设置，沿用 preferences 备份参与者，新设置快照 format=2 兼容 format=1（含省略版本字段的历史快照），外层备份与 notes 快照格式不变。
+
 2026-10-31 封面实现补充：笔记独立封面属于应用状态，保存在 Room 状态库 v3，显式迁移 v2→v3；旧库默认山野预设。自定义图片沿用私有附件目录及公开资源接口，notes 参与者快照 format=3 兼容读取 1／2，外层备份仍为 v1。封面不写入正文／YAML，不改变正文版本、草稿和索引权威来源；说明与验证见[封面交接](../engineering/phase-1-note-cover-handoff-20261031.md)。上文 v2 为原实现历史状态。
 
 采用 **Kotlin + Jetpack Compose 的模块化单体架构**：一个 Android 安装包，以 Gradle 模块隔离主要职责；按业务域组织功能，界面采用 ViewModel + 单向数据流（UDF），业务通过 Repository 接口访问数据，复杂操作使用 Use Case。借用 Clean Architecture 的依赖方向与可测试性，不要求每次调用都套三层转发。
@@ -61,7 +63,7 @@ MVVM/UDF 描述界面状态流，模块化描述工程边界，Repository/Use Ca
 | `:core:backup` | 简单备份包读写、恢复流程及数据参与接口 | 无 feature/data/notes 依赖 |
 | `:domain:notes` | 纯 Kotlin 笔记模型、Repository 接口、必要 Use Case | `core:document` |
 | `:data:notes` | Repository 实现，文件、附件、草稿、Room、索引与恢复协调；提供笔记备份参与实现 | `domain:notes`、`core:document`；接备份后依赖 `core:backup` |
-| `:feature:notes` | 笔记列表、目录/标签、本地搜索的 Route、ViewModel、Screen | `domain:notes`、`core:designsystem` |
+| `:feature:notes` | 笔记列表、目录/标签、本地搜索、视频摘记的 Route、ViewModel、Screen | `domain:notes`、`core:designsystem`、`core:preferences` |
 | `:feature:editor` | 阅读、源码/实时预览编辑、输入与渲染适配、保存 UI 状态 | `domain:notes`、`core:document`、`core:designsystem`、`core:preferences` |
 | `:feature:settings` | 外观、导入导出、备份恢复的设置入口与流程 UI | `core:preferences`、`core:backup`、`core:designsystem`、`domain:notes` |
 

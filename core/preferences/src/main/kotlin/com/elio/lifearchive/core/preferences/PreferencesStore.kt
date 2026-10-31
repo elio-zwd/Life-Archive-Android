@@ -25,6 +25,10 @@ import kotlinx.serialization.json.Json
 @Serializable enum class ThemeMode { SYSTEM, LIGHT, DARK }
 @Serializable enum class RemoteLoading { MANUAL, AUTOMATIC }
 @Serializable enum class DocumentTheme { BLUE, WARM, GRAPHITE }
+@Serializable enum class VideoPromptType { GENERAL, HOW_TO, EXPLANATION, CHOOSING }
+
+// 四份提示词即使包含需 JSON 转义的字符，也必须能装入设置备份。
+const val MAX_VIDEO_PROMPT_LENGTH = 16_000
 
 @Serializable
 data class UserPreferences(
@@ -32,8 +36,12 @@ data class UserPreferences(
     val fontScale: Float = 1f,
     val remoteLoading: RemoteLoading = RemoteLoading.MANUAL,
     val documentTheme: DocumentTheme? = null,
+    val videoPrompts: Map<VideoPromptType, String> = emptyMap(),
 ) {
-    init { require(fontScale.isFinite() && fontScale in 0.5f..3f) }
+    init {
+        require(fontScale.isFinite() && fontScale in 0.5f..3f)
+        require(videoPrompts.values.all { it.isNotBlank() && it.length <= MAX_VIDEO_PROMPT_LENGTH }) { "提示词不能为空，且不能超过 $MAX_VIDEO_PROMPT_LENGTH 个字符" }
+    }
 }
 
 fun UserPreferences.resolvedDocumentTheme(dark: Boolean): DocumentTheme =
@@ -45,6 +53,8 @@ interface PreferencesRepository {
     suspend fun setFontScale(scale: Float)
     suspend fun setRemoteLoading(mode: RemoteLoading) { error("此设置实现尚未提供远程加载能力") }
     suspend fun setDocumentTheme(theme: DocumentTheme) { error("此设置实现尚未提供文档主题能力") }
+    /** null 表示移除用户覆盖值，使用应用内置模板。 */
+    suspend fun setVideoPrompt(type: VideoPromptType, text: String?) { error("此设置实现尚未提供视频提示词能力") }
 }
 
 /** 每个文件只允许一个存活实例；关闭实例后须等待 scope 完成再重新打开同一文件。 */
@@ -56,6 +66,7 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
     private val fontKey = floatPreferencesKey("font_scale")
     private val remoteKey = stringPreferencesKey("remote_loading")
     private val documentThemeKey = stringPreferencesKey("document_theme")
+    private val videoPromptsKey = stringPreferencesKey("video_prompts")
     // 旧备份的未选择状态必须跨恢复与后续写入保留。
     private val unselectedDocumentTheme = "__FOLLOW_GLOBAL__"
     private val values = store.data.map { prefs ->
@@ -69,6 +80,7 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
             prefs[fontKey] ?: 1f,
             prefs[remoteKey]?.let(RemoteLoading::valueOf) ?: RemoteLoading.MANUAL,
             documentTheme,
+            prefs[videoPromptsKey]?.let { Json.decodeFromString<Map<VideoPromptType, String>>(it) }.orEmpty(),
         )
     }
 
@@ -98,20 +110,31 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
             store.edit { it[documentThemeKey] = theme.name }
             Unit
         }
+        override suspend fun setVideoPrompt(type: VideoPromptType, text: String?) = gate.access {
+            if (text != null) UserPreferences(videoPrompts = mapOf(type to text))
+            store.edit {
+                val prompts = it[videoPromptsKey]?.let { raw -> Json.decodeFromString<Map<VideoPromptType, String>>(raw) }.orEmpty().toMutableMap()
+                if (text == null) prompts.remove(type) else prompts[type] = text
+                it.rememberNewDocumentDefault()
+                if (prompts.isEmpty()) it.remove(videoPromptsKey) else it[videoPromptsKey] = Json.encodeToString(prompts)
+            }
+            Unit
+        }
     }
 
+    // 历史 format=1 快照可能省略默认字段；新快照显式写入 format=2。
     @Serializable private data class Snapshot(val format: Int = 1, val preferences: UserPreferences)
 
     val backupParticipant: BackupParticipant = object : BackupParticipant {
         override val id = "preferences"
         override suspend fun snapshot(directory: File) {
-            atomicWrite(File(directory, "settings.json"), Json.encodeToString(Snapshot(preferences = values.first())).toByteArray())
+            atomicWrite(File(directory, "settings.json"), Json.encodeToString(Snapshot(format = 2, preferences = values.first())).toByteArray())
         }
         override suspend fun validate(directory: File) {
             require(directory.list()?.toSet() == setOf("settings.json"))
             val file = File(directory, "settings.json")
-            require(file.length() in 1..65536)
-            require(Json.decodeFromString<Snapshot>(file.readText()).format == 1)
+            require(file.length() in 1..524288)
+            require(Json.decodeFromString<Snapshot>(file.readText()).format in 1..2)
         }
         override suspend fun restore(directory: File) {
             validate(directory)
@@ -122,6 +145,7 @@ class PreferencesStore(file: File, private val gate: StorageGate) : AutoCloseabl
                 it[fontKey] = value.fontScale
                 it[remoteKey] = value.remoteLoading.name
                 it[documentThemeKey] = value.documentTheme?.name ?: unselectedDocumentTheme
+                if (value.videoPrompts.isNotEmpty()) it[videoPromptsKey] = Json.encodeToString(value.videoPrompts)
             }
         }
     }

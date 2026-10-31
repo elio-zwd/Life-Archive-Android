@@ -10,6 +10,7 @@ import com.elio.lifearchive.core.backup.StorageGate
 import com.elio.lifearchive.core.preferences.PreferencesStore
 import com.elio.lifearchive.data.notes.NotesStorage
 import com.elio.lifearchive.core.preferences.ThemeMode
+import com.elio.lifearchive.core.preferences.VideoPromptType
 import com.elio.lifearchive.domain.notes.Draft
 import com.elio.lifearchive.domain.notes.NoteResult
 import java.io.ByteArrayInputStream
@@ -40,11 +41,14 @@ class FoundationRuntimeTest {
         runtime.notes.updateReadingOffset(id, 24)
         runtime.preferences.setTheme(ThemeMode.DARK)
         runtime.preferences.setFontScale(1.3f)
+        val prompts = VideoPromptType.entries.associateWith { "${it.name}：自定义总结提示词\n保留步骤和条件" }
+        prompts.forEach { (type, text) -> runtime.preferences.setVideoPrompt(type, text) }
         val bytes = ByteArray(2 * 1024 * 1024) { (it % 251).toByte() }
         val path = (runtime.notes.importAttachment("资料.bin", ByteArrayInputStream(bytes)) as NoteResult.Success).value
         val archive = ByteArrayOutputStream().also { runtime.backup.export(it) }.toByteArray()
         runtime.notes.save(id, original.summary.version, RawDocument("更改后的正文"))
         runtime.preferences.setTheme(ThemeMode.LIGHT)
+        runtime.preferences.setVideoPrompt(VideoPromptType.HOW_TO, null)
         val prepared = runtime.backup.prepare(ByteArrayInputStream(archive))
         assertEquals(ThemeMode.LIGHT, runtime.preferences.preferences.first().theme)
         runtime.backup.commit(prepared)
@@ -57,6 +61,7 @@ class FoundationRuntimeTest {
             assertEquals(24, (reopened.notes.readReadingOffset(id) as NoteResult.Success).value)
             assertEquals(ThemeMode.DARK, reopened.preferences.preferences.first().theme)
             assertEquals(1.3f, reopened.preferences.preferences.first().fontScale)
+            assertEquals(prompts, reopened.preferences.preferences.first().videoPrompts)
             val out = ByteArrayOutputStream()
             reopened.notes.copyAttachment(path, out)
             assertArrayEquals(bytes, out.toByteArray())
