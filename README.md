@@ -48,6 +48,8 @@
 
 ## 当前使用方式
 
+2026-11-01 启动图标已替换为确认的紫蓝书页／档案图形，接入普通／圆形自适应与单色主题版本；[图标设计和接入记录](docs/design/brand/life-archive-app-icon-v1.md)包含新 APK 与验证边界。
+
 0.2.6 增加首页“更多 → 视频摘记”：四类提示词可复制、修改保存和恢复默认；“收录总结”主动读取剪贴板，填写笔记名和可选来源后保存为普通笔记。自定义提示词进入完整备份。总结由用户在小红书点点中完成；App 不接入 AI。范围见[视频摘记计划](docs/plans/phase-1-video-notes.md)，检查与手机待验收项见[实现交接](docs/engineering/phase-1-video-notes-handoff-20261101.md)。
 
 2026-10-31 阅读重开及核心流程兼容／恢复修复，问题表、电脑验证和修复 APK 见[核心流程修复交接](docs/engineering/phase-1-core-resilience-handoff-20261031.md)；该包的设备结果需定向复验。

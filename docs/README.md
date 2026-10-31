@@ -31,6 +31,8 @@
 
 ## 工程与资料
 
+- [Life Archive 图标图片 v1](design/brand/life-archive-app-icon-v1.md)：已确认的书页／档案图形、原始 PNG、完整提示词、Android 图标接入及定向检查；手机效果待实测。
+
 - [视频摘记实现与验证](engineering/phase-1-video-notes-handoff-20261101.md)：0.2.6 的操作入口、设置快照兼容、电脑回归及手机待验收项。
 
 - [核心流程扩展排查与修复](engineering/phase-1-core-resilience-handoff-20261031.md)：WebView 能力降级、缓存结构与异常隔离、渲染库及 PDF 重试、初始化时序和保存竞争回归；设备结果另验。

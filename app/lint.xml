@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- 此 PNG 是含浅灰底的已确认原图；图标外形由 adaptive-icon 遮罩处理，不在原图预裁圆角。 -->
+    <issue id="IconLauncherShape">
+        <ignore path="src/main/res/drawable-nodpi/ic_launcher_art.png" />
+    </issue>
+</lint>

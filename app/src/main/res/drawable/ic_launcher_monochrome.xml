@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1254"
+    android:viewportHeight="1254">
+    <!-- 只保留三片书页轮廓；与彩色前景使用相同的相对内缩。 -->
+    <group
+        android:scaleX="0.83333333"
+        android:scaleY="0.83333333"
+        android:translateX="104.5"
+        android:translateY="104.5">
+        <path android:fillColor="#FF000000" android:pathData="M243,384 C243,343 273,320 313,333 L491,408 C534,426 559,450 559,490 L559,881 C559,905 550,915 529,905 L294,809 C261,795 243,779 243,746 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M1012,383 C1012,341 981,316 941,332 L764,405 C719,424 694,448 694,489 L694,880 C694,905 702,915 724,905 L962,807 C996,791 1012,772 1012,744 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M578,492 C578,473 591,467 606,478 L647,503 C668,516 677,534 677,559 L677,905 C677,926 668,932 652,924 L609,897 C587,883 578,862 578,837 Z" />
+    </group>
+</vector>

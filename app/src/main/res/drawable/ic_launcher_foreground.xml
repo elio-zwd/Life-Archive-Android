@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 百分比内缩在不同图标尺寸下保持留白；彩色图直接使用已确认的原图。 -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="8.333333%">
+    <bitmap
+        android:src="@drawable/ic_launcher_art"
+        android:gravity="fill"
+        android:filter="true" />
+</inset>
