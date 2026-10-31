@@ -25,6 +25,8 @@ internal data class NoteRecord(
     val created: Long = 0,
     val modified: Long = 0,
     val deleted: Long? = null,
+    @androidx.room.ColumnInfo(defaultValue = "'mountain'") val coverPreset: String = "mountain",
+    val coverAttachment: String? = null,
 )
 
 @Serializable
@@ -45,7 +47,7 @@ internal interface StateDao {
     @Transaction suspend fun replace(records: List<NoteRecord>) { clear(); records.forEach { put(it.copy(indexPending = true)) } }
 }
 
-@Database(entities = [NoteRecord::class, FolderRecord::class], version = 2, exportSchema = true)
+@Database(entities = [NoteRecord::class, FolderRecord::class], version = 3, exportSchema = true)
 internal abstract class StateDatabase : RoomDatabase() { abstract fun notes(): StateDao }
 
 @Entity(tableName = "projections")

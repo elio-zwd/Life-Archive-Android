@@ -64,6 +64,11 @@ class NotesStorage private constructor(
                 db.execSQL("ALTER TABLE notes ADD COLUMN deleted INTEGER")
                 db.execSQL("CREATE TABLE IF NOT EXISTS folders (path TEXT NOT NULL PRIMARY KEY)")
             }
+        }, object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN coverPreset TEXT NOT NULL DEFAULT 'mountain'")
+                db.execSQL("ALTER TABLE notes ADD COLUMN coverAttachment TEXT")
+            }
         }).build()
     private var index = newIndex()
     internal var fault: (String) -> Unit = {}
@@ -78,6 +83,7 @@ class NotesStorage private constructor(
     val backupParticipant: BackupParticipant = Participant()
 
     companion object {
+        private const val MAX_COVER_BYTES = 8L * 1024 * 1024
         private val excerptFences = Regex("(?m)^ {0,3}(`{3,}|~{3,})([^\\r\\n]*)").toPattern()
         private val excerptInlineCode = Regex("(?<!`)(`+)(?!`)([^`]*?)\\1(?!`)").toPattern()
         private val excerptBackticks = Regex("(?<!`)`+(?!`)").toPattern()
@@ -444,6 +450,10 @@ class NotesStorage private constructor(
                 check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs())
                 Files.move(file.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
             }
+            // 封面使用库内绝对路径；附件随文件夹移动时同步维护，包括回收站笔记。
+            state.notes().all().forEach { record ->
+                record.coverAttachment?.let { old -> mapping[old]?.let { state.notes().put(record.copy(coverAttachment = it)) } }
+            }
             if (folderMap != null) {
                 val folders = state.notes().folders(); state.notes().clearFolders()
                 folders.forEach { state.notes().putFolder(FolderRecord(folderMap(it.path))) }
@@ -484,6 +494,8 @@ class NotesStorage private constructor(
         propertyTags = analysis.propertyTags,
         excerpt = excerpt(raw, analysis, words, cached),
         thumbnail = thumbnail(raw, analysis),
+        cover = record.coverAttachment?.let { NoteCover.Attachment(LibraryPath(it)) }
+            ?: NoteCover.Preset(CoverPreset.entries.firstOrNull { it.key == record.coverPreset } ?: CoverPreset.MOUNTAIN),
     )
 
     private fun excerpt(
@@ -664,6 +676,43 @@ class NotesStorage private constructor(
     }
 
     private inner class Library : LibraryRepository {
+        override suspend fun setCover(id: NoteId, cover: NoteCover): NoteResult<Unit> = access {
+            val record = state.notes().find(id.value)?.takeIf { it.deleted == null } ?: return@access NoteResult.NotFound
+            if (cover is NoteCover.Attachment) {
+                val file = safeFile(attachments, cover.path)
+                require(file.isFile && file.length() in 1..MAX_COVER_BYTES) { "封面图片不存在或超过 8 MiB" }
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath, bounds)
+                require(bounds.outWidth > 0 && bounds.outHeight > 0) { "无法解码这张封面图片" }
+                var sample = 1
+                while (bounds.outWidth / sample > 512 || bounds.outHeight / sample > 512) sample *= 2
+                val bitmap = android.graphics.BitmapFactory.decodeFile(file.absolutePath, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+                require(bitmap != null) { "无法解码这张封面图片" }
+                bitmap.recycle()
+            }
+            fault("cover-write")
+            state.notes().put(record.copy(
+                coverPreset = (cover as? NoteCover.Preset)?.preset?.key ?: "mountain",
+                coverAttachment = (cover as? NoteCover.Attachment)?.path?.value,
+            ))
+            publish()
+            NoteResult.Success(Unit)
+        }
+
+        override suspend fun coverImages(id: NoteId): NoteResult<List<CoverImage>> = access {
+            val record = state.notes().find(id.value)?.takeIf { it.deleted == null } ?: return@access NoteResult.NotFound
+            val raw = RawDocument.fromUtf8(documentFile(record).readBytes()).text
+            val yaml = DocumentAnalyzer.yaml(raw)
+            val paths = attachmentPaths()
+            val images = DocumentAnalyzer.analyze(raw).links.filter { link ->
+                link.embed && (yaml == null || link.start !in yaml) && imageExtension.containsMatchIn(DocumentAnalyzer.decode(link.target.substringBefore('#')))
+            }.mapNotNull { link ->
+                val path = resolvePath(record.path, link.target, paths, link.syntax).singleOrNull() ?: return@mapNotNull null
+                CoverImage(LibraryPath(path), path.substringAfterLast('/'))
+            }.distinctBy { it.path }
+            NoteResult.Success(images)
+        }
+
         override val progress: Flow<LibraryProgress?> = activityProgress
         override suspend fun query(query: NotesQuery): NoteResult<LibraryListing> = access {
             val projections = index.projections().all().associateBy { it.id }
@@ -905,7 +954,7 @@ class NotesStorage private constructor(
         override suspend fun snapshot(directory: File) {
             recover()
             val records = state.notes().all()
-            atomicWrite(File(directory, "state.json"), json.encodeToString(SnapshotState(format = 2, notes = records, folders = state.notes().folders())).toByteArray())
+            atomicWrite(File(directory, "state.json"), json.encodeToString(SnapshotState(format = 3, notes = records, folders = state.notes().folders())).toByteArray())
             val docDest = File(directory, "documents").also { check(it.mkdirs()) }
             val draftDest = File(directory, "drafts").also { check(it.mkdirs()) }
             // 只导出已登记正文和草稿；提交前退出遗留的暂存文件不是用户内容。
@@ -927,12 +976,14 @@ class NotesStorage private constructor(
             val stateFile = File(directory, "state.json")
             require(stateFile.length() in 1..(16 * 1024 * 1024))
             val content = json.decodeFromString<SnapshotState>(stateFile.readText())
-            require(content.format in 1..2)
+            require(content.format in 1..3)
             content.folders.forEach { require(LibraryPath.isValid(it.path)) }
             require(content.notes.map { it.id }.distinct().size == content.notes.size)
             require(content.notes.map { it.pathKey }.distinct().size == content.notes.size)
             val checkedPaths = mutableListOf<String>()
             content.notes.forEach { record ->
+                require(CoverPreset.entries.any { it.key == record.coverPreset }) { "未知预设封面" }
+                record.coverAttachment?.let { require(LibraryPath.isValid(it)) { "封面附件路径无效" } }
                 require(UUID.fromString(record.id).toString() == record.id)
                 require(UUID.fromString(record.version).toString() == record.version)
                 val path = LibraryPath(record.path)

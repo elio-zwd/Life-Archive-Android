@@ -318,7 +318,7 @@ class LibraryStorageTest {
         open(root).use { storage ->
             val old = storage.create("原笔记.md", "旧原文")
             val legacy = temp.newFolder(); storage.backupParticipant.snapshot(legacy)
-            val stateFile = File(legacy, "state.json"); val json = JSONObject(stateFile.readText()); assertEquals(2, json.getInt("format")); json.remove("format"); json.remove("folders")
+            val stateFile = File(legacy, "state.json"); val json = JSONObject(stateFile.readText()); assertEquals(3, json.getInt("format")); json.remove("format"); json.remove("folders")
             val record = json.getJSONArray("notes").getJSONObject(0); record.remove("created"); record.remove("modified"); record.remove("deleted"); stateFile.writeText(json.toString())
             storage.repository.save(old.summary.id, old.summary.version, RawDocument("修改后"))
             storage.backupParticipant.restore(legacy)

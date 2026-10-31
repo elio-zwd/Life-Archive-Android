@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.flowOf
 enum class NoteSort { MODIFIED_DESC, MODIFIED_ASC, CREATED_DESC, CREATED_ASC, NAME }
 data class NotesQuery(val text: String = "", val folder: String? = null, val tag: String? = null, val sort: NoteSort = NoteSort.MODIFIED_DESC, val trash: Boolean = false)
 data class ThumbnailReference(val target: String, val syntax: LinkSyntax)
-data class LibraryNote(val summary: NoteSummary, val pinned: Boolean, val created: Long, val modified: Long, val deleted: Long?, val tags: List<String>, val title: String?, val matchOffset: Int = 0, val propertyTags: List<String> = emptyList(), val excerpt: String = "", val thumbnail: ThumbnailReference? = null)
+data class LibraryNote(val summary: NoteSummary, val pinned: Boolean, val created: Long, val modified: Long, val deleted: Long?, val tags: List<String>, val title: String?, val matchOffset: Int = 0, val propertyTags: List<String> = emptyList(), val excerpt: String = "", val thumbnail: ThumbnailReference? = null, val cover: NoteCover = NoteCover.Preset())
 data class LibraryListing(val notes: List<LibraryNote>, val folders: List<String>, val tags: List<String>, val pendingIndex: Int)
 data class ResolvedLink(val note: NoteId? = null, val attachment: LibraryPath? = null, val location: DocumentLocation = DocumentLocation(), val missing: Boolean = false, val ambiguous: List<String> = emptyList())
 data class ResourceInfo(val path: LibraryPath, val length: Long, val mime: String)
@@ -37,6 +37,8 @@ interface LibraryRepository {
     suspend fun relocateFolder(from: String, to: String): NoteResult<Unit>
     suspend fun trashFolder(path: String): NoteResult<Unit>
     suspend fun setPinned(id: NoteId, pinned: Boolean): NoteResult<Unit>
+    suspend fun setCover(id: NoteId, cover: NoteCover): NoteResult<Unit> = NoteResult.StorageFailure("当前笔记库不支持封面设置")
+    suspend fun coverImages(id: NoteId): NoteResult<List<CoverImage>> = NoteResult.Success(emptyList())
     suspend fun setTags(id: NoteId, expected: DocumentVersion, tags: List<String>): NoteResult<Unit>
     suspend fun relocate(id: NoteId, expected: DocumentVersion, path: String): NoteResult<Unit>
     suspend fun trash(id: NoteId, expected: DocumentVersion): NoteResult<Unit>
