@@ -80,3 +80,13 @@ git diff --check
 - 阅读收紧顶距、标题／元信息／封面／段落间距与行高，保留封面比例和目录原文定位；排版环境换代，避免复用旧几何缓存。
 - 阅读／编辑共享 56 dp 顶栏，源码／实时预览正文缩短内边距与行高，展开工具面板改为 48 dp；保留原文字号、系统 Insets 与输入会话。
 - 独立导出三页前后对比及三主题、键盘占位／收起预览，复用现有功能回归验证。结果和包身份见[紧凑布局交接](../engineering/phase-1-compact-layout-handoff-20261031.md)。
+
+## 8. 首页极简信息（2026-11-01）
+
+- 用户选择第二轮概念图中的 A：元信息仍位于摘要下方，与标题左对齐，保持紧凑单行。
+- 根目录笔记省略默认“未分类”及文件夹图标，显示为“日期 · #标签”；有实际目录的笔记保留目录名称，以圆点分隔。缺失字段不产生多余分隔符。
+- 日期、目录和标签统一使用主题适配的低强调灰蓝文字，无胶囊、底色或边框；目录限宽、标签单行省略，保留右侧独立管理按钮。
+- 只调整 `NotesScreen.kt` 的展示，不改变目录、标签、筛选、正文、封面或存储。
+- 本轮执行 `checkArchitecture :feature:notes:testDebugUnitTest :feature:notes:lintDebug :app:assembleDebug :app:testDebugUnitTest --tests com.elio.lifearchive.NoteCoverPreviewTest -x :feature:editor:installReader --console=plain` 通过，耗时 2m 10s；笔记模块 20 项测试与 1 项 App 封面预览测试均无失败、错误或跳过，notes Lint 无错误、2 项警告。没有运行完整 `verifyPhaseOne`。
+- 已回读正式 Compose 浅深色电脑预览，使用隔离真实库中的两篇有目录笔记；本轮预览不包含根目录笔记，也不代表设备视觉验收。APK、`home-light.png`、`home-dark.png` 和构建日志固定在 `D:/My_Elio/Life-Archive-Deliveries/minimal-metadata-20261101/`。
+- APK 为 `Life-Archive-minimal-metadata-debug.apk`，SHA-256：`2231689508492bb00178817f9f98426ef7ec1d930b43a2d2344aab3c4e595ec6`。本轮未操作模拟器或手机，未安装、卸载或清库；未提交或推送 Git。

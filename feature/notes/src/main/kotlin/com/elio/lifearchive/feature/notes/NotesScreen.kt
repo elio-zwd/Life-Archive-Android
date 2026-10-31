@@ -358,12 +358,14 @@ private fun NoteRow(
                 Spacer(Modifier.height(4.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (date != null) Text(date, Modifier.testTag("note-date:${row.id}"), color = colors.muted, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 1)
-                    Row(Modifier.widthIn(max = 85.dp), verticalAlignment = Alignment.CenterVertically) {
-                        HomeIcon("folder", colors.muted, Modifier.size(11.dp))
-                        Spacer(Modifier.width(3.dp))
-                        Text(row.folder.ifBlank { "未分类" }, color = colors.muted, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (row.folder.isNotBlank()) {
+                        if (date != null) Text("·", color = colors.muted, fontSize = 11.sp, lineHeight = 16.sp)
+                        Text(row.folder, Modifier.widthIn(max = 72.dp), color = colors.muted, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    if (row.tags.isNotEmpty()) Text(row.tags, Modifier.weight(1f), color = colors.blue, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (row.tags.isNotEmpty()) {
+                        if (date != null || row.folder.isNotBlank()) Text("·", color = colors.muted, fontSize = 11.sp, lineHeight = 16.sp)
+                        Text(row.tags, Modifier.weight(1f), color = colors.muted, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
             if (row.management != null) HomeIconButton(row.management, "more", colors.muted, { onManage(NoteId(row.id)) },
