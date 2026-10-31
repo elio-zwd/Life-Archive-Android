@@ -204,7 +204,7 @@ function callouts(root) {
     box.append(title, ...quote.childNodes); quote.replaceWith(box);
   }
 }
-function environment() { return `reading-3|${theme}|${getComputedStyle(document.documentElement).fontSize}|${getComputedStyle(content).fontFamily}|${devicePixelRatio}|${Math.round(content.getBoundingClientRect().width)}`; }
+function environment() { return `reading-4|${theme}|${getComputedStyle(document.documentElement).fontSize}|${getComputedStyle(content).fontFamily}|${devicePixelRatio}|${Math.round(content.getBoundingClientRect().width)}`; }
 function serial(kind, context, producer) {
   const next = (kind === 'FORMULA' ? mathQueue : diagramQueue).catch(() => {}).then(() => {
     if (!context.current()) throw new DOMException('过期阅读任务', 'AbortError');

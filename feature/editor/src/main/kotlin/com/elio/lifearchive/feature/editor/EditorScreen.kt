@@ -86,6 +86,7 @@ fun EditorScreen(
         topBar = {
             Column {
                 CenterAlignedTopAppBar(
+                    expandedHeight = 56.dp,
                     navigationIcon = { HeaderButton("返回", HeaderGlyph.BACK, onBack, enabled = !state.busy) },
                     title = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.heightIn(min = 48.dp).clickable(onClick = onManage)) {

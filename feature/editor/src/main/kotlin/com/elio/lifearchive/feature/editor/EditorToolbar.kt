@@ -132,9 +132,9 @@ internal fun EditorToolbar(session: EditorSession, enabled: Boolean, parsed: Par
             HorizontalDivider(color = colors.line)
             if (panel != null) key(panel) {
                 val scroll = rememberLazyListState()
-                Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                     LazyRow(
-                        modifier = Modifier.weight(1f).height(52.dp).testTag("editor-tool-panel"),
+                        modifier = Modifier.weight(1f).height(48.dp).testTag("editor-tool-panel"),
                         state = scroll,
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -145,7 +145,7 @@ internal fun EditorToolbar(session: EditorSession, enabled: Boolean, parsed: Par
                     }
                     if (scroll.canScrollForward) {
                         Canvas(
-                            Modifier.width(18.dp).height(52.dp).testTag("editor-tool-overflow").clearAndSetSemantics {
+                            Modifier.width(18.dp).height(48.dp).testTag("editor-tool-overflow").clearAndSetSemantics {
                                 contentDescription = "向右滑动查看更多工具"
                             }
                         ) {

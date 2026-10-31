@@ -39,21 +39,24 @@ class PrototypeVisualTest {
 
     @Test @Config(qualifiers = "w432dp-h960dp-mdpi")
     fun renderSourceThemesAndThemePickerOnDesktop() {
-        val output = File(System.getenv("TEMP"), "life-archive-ui-polish-preview-20261030")
+        val output = System.getenv("LIFE_ARCHIVE_COMPACT_PREVIEW")?.let(::File)
+            ?: File(System.getenv("TEMP"), "life-archive-ui-polish-preview-20261030")
         output.mkdirs()
         val raw = "# 周末计划\n\n去西湖徒步，拍一些照片，整理上周的笔记，晚上看一部电影。\n\n## 需要准备\n- [ ] 相机和移动电源\n- [ ] 简单的水和零食\n- [ ] 提前查看天气\n\n> 记录当下，构建更好的自己。"
         val session = EditorSession(raw)
         val parsed = MarkdownParser().parse(raw)
         var palette by mutableStateOf(DocumentPalette.BLUE)
         var selected by mutableStateOf(DocumentTheme.BLUE)
+        var showKeyboard by mutableStateOf(true)
+        var mode by mutableStateOf(EditorMode.SOURCE)
         compose.setContent {
             DocumentPageTheme(palette) {
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f)) {
-                        EditorScreen(EditorUiState(loading = false, name = "周末计划", mode = EditorMode.SOURCE, parsed = parsed), session, SaveStatus(), documentTheme = selected, onDocumentTheme = { selected = it })
+                        EditorScreen(EditorUiState(loading = false, name = "周末计划", mode = mode, parsed = parsed), session, SaveStatus(), documentTheme = selected, onDocumentTheme = { selected = it })
                     }
                     // 仅占位，以便比较可用写作区域；不模拟系统输入法。
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                    if (showKeyboard) Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest) {
                         Box(Modifier.fillMaxWidth().height(260.dp).padding(22.dp)) { Text("键盘占位 · 真机输入待验收", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
@@ -71,6 +74,13 @@ class PrototypeVisualTest {
             compose.runOnIdle { palette = value; selected = DocumentTheme.valueOf(value.name) }
             compose.waitForIdle()
             compose.runOnIdle { save(compose.activity.findViewById(android.R.id.content), "source-${value.name.lowercase()}.png") }
+            compose.runOnIdle { showKeyboard = false }
+            compose.waitForIdle()
+            compose.runOnIdle { save(compose.activity.findViewById(android.R.id.content), "source-${value.name.lowercase()}-no-keyboard.png") }
+            compose.runOnIdle { mode = EditorMode.LIVE }
+            compose.waitForIdle()
+            compose.runOnIdle { save(compose.activity.findViewById(android.R.id.content), "live-${value.name.lowercase()}-no-keyboard.png") }
+            compose.runOnIdle { mode = EditorMode.SOURCE; showKeyboard = true }
         }
         compose.runOnIdle { palette = DocumentPalette.BLUE; selected = DocumentTheme.BLUE }
         compose.onNodeWithContentDescription("更多").performClick()

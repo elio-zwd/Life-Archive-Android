@@ -80,9 +80,9 @@ object ComposeEditorEngine : EditorEngine {
         BasicTextField(
             state = session.text,
             enabled = enabled && session.active,
-            modifier = Modifier.fillMaxSize().testTag("editor-body").focusRequester(focus).padding(horizontal = if (mode == EditorMode.SOURCE) 20.dp else 22.dp, vertical = if (mode == EditorMode.SOURCE) 20.dp else 16.dp),
+            modifier = Modifier.fillMaxSize().testTag("editor-body").focusRequester(focus).padding(horizontal = 20.dp, vertical = 10.dp),
             textStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = colors.onSurface, fontSize = ((if (mode == EditorMode.SOURCE) 16f else 17f) * fontScale).sp, lineHeight = ((if (mode == EditorMode.SOURCE) 30.4f else 29f) * fontScale).sp,
+                color = colors.onSurface, fontSize = ((if (mode == EditorMode.SOURCE) 16f else 17f) * fontScale).sp, lineHeight = ((if (mode == EditorMode.SOURCE) 26f else 27.2f) * fontScale).sp,
                 fontFamily = FontFamily.Default,
             ),
             cursorBrush = SolidColor(colors.primary), inputTransformation = session.continuation, outputTransformation = transformation, scrollState = session.scroll,

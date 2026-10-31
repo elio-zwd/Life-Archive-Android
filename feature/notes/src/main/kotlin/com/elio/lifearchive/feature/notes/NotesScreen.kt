@@ -109,7 +109,7 @@ fun NotesScreen(
         topBar = {
             Column(Modifier.fillMaxWidth().background(colors.background).statusBarsPadding()) {
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(start = 20.dp, end = 12.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 20.dp, end = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Life Archive", Modifier.weight(1f), color = colors.ink, fontSize = 25.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp)
@@ -129,7 +129,7 @@ fun NotesScreen(
                 }
                 SearchBox(state.query.text, colors, { onQuery(state.query.copy(text = it)) })
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 5.dp, bottom = 11.dp),
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     LazyRow(
@@ -173,7 +173,7 @@ fun NotesScreen(
             FilterSummary(state, colors, clearFilters, onQuery)
             LazyColumn(
                 Modifier.fillMaxSize().testTag("notes-list"), state = listState,
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 104.dp),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 80.dp),
             ) {
                 if (state.loading) item(key = "loading", contentType = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                 if (state.updating && !state.loading) item(key = "updating", contentType = "status") { Text("正在更新列表…", Modifier.padding(vertical = 8.dp), color = colors.muted, style = MaterialTheme.typography.labelSmall) }
@@ -226,8 +226,8 @@ fun NotesScreen(
 @Composable
 private fun SearchBox(value: String, colors: HomeColors, onChange: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
-            .height(46.dp).clip(RoundedCornerShape(14.dp)).background(colors.chip).padding(start = 12.dp),
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 6.dp)
+            .height(44.dp).clip(RoundedCornerShape(12.dp)).background(colors.chip).padding(start = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         HomeIcon("search", colors.muted, Modifier.size(20.dp))
@@ -317,7 +317,7 @@ private fun FilterPicker(title: String, choices: List<String>, onDismiss: () -> 
 
 @Composable
 private fun EmptyNotes(colors: HomeColors, filtered: Boolean, trash: Boolean, onAction: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         HomeIcon(if (filtered) "search" else "notes", colors.muted, Modifier.size(28.dp))
         Spacer(Modifier.height(12.dp))
         Text(if (filtered) "没有找到笔记" else if (trash) "回收站为空" else "从一篇笔记开始", color = colors.ink, fontWeight = FontWeight.SemiBold)
@@ -344,28 +344,28 @@ private fun NoteRow(
     }
     val date = remember(row.modified) { row.modified?.let { SimpleDateFormat("yyyy/M/d", Locale.CHINA).format(Date(it)) } }
     Column(Modifier.fillMaxWidth().testTag("note:${row.id}").clickable(enabled = enabled) { onOpen(NoteId(row.id)) }) {
-        Row(Modifier.fillMaxWidth().padding(top = 13.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             CoverArtwork(preset = (row.cover as? NoteCover.Preset)?.preset?.key ?: "mountain", image = image, enabled = visible,
-                modifier = Modifier.padding(top = 2.dp).size(width = 60.dp, height = 66.dp).clip(RoundedCornerShape(8.dp)).testTag("note-thumbnail:${row.id}"))
+                modifier = Modifier.size(width = 60.dp, height = 66.dp).clip(RoundedCornerShape(8.dp)).testTag("note-thumbnail:${row.id}"))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Top) {
                     if (row.pinned) HomeIcon("pin", colors.blue, Modifier.padding(top = 4.dp, end = 5.dp).size(13.dp).testTag("note-pin:${row.id}"))
-                    Text(row.name, color = colors.ink, fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(row.name, color = colors.ink, fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(row.excerpt.ifBlank { "点击查看笔记。" }, color = colors.muted, fontSize = 13.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(2.dp))
+                Text(row.excerpt.ifBlank { "点击查看笔记。" }, color = colors.muted, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (row.subtitle == "正文已保存 · 索引待更新") Text(row.subtitle, color = colors.muted, fontSize = 11.sp, maxLines = 1)
+                Spacer(Modifier.height(4.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (date != null) Text(date, Modifier.testTag("note-date:${row.id}"), color = colors.muted, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 1)
+                    Row(Modifier.widthIn(max = 85.dp), verticalAlignment = Alignment.CenterVertically) {
+                        HomeIcon("folder", colors.muted, Modifier.size(11.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text(row.folder.ifBlank { "未分类" }, color = colors.muted, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (row.tags.isNotEmpty()) Text(row.tags, Modifier.weight(1f), color = colors.blue, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
-        }
-        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (date != null) Text(date, Modifier.testTag("note-date:${row.id}"), color = colors.muted, fontSize = 11.sp, maxLines = 1)
-            Row(Modifier.widthIn(max = 105.dp), verticalAlignment = Alignment.CenterVertically) {
-                HomeIcon("folder", colors.muted, Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(row.folder.ifBlank { "未分类" }, color = colors.muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (row.tags.isNotEmpty()) Text(row.tags, Modifier.weight(1f), color = colors.blue, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            else Spacer(Modifier.weight(1f))
             if (row.management != null) HomeIconButton(row.management, "more", colors.muted, { onManage(NoteId(row.id)) },
                 Modifier.testTag("note-manage:${row.id}"), enabled = enabled)
         }
@@ -377,7 +377,7 @@ private fun NoteRow(
 private fun HomeBottomBar(colors: HomeColors, onSettings: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(colors.surface)) {
         HorizontalDivider(color = colors.line)
-        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(70.dp)) {
+        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(56.dp)) {
             HomeTab("笔记", "notes", colors.blue, Modifier.weight(1f)) {}
             HomeTab("设置", "settings", colors.muted, Modifier.weight(1f), onSettings)
         }
@@ -388,7 +388,7 @@ private fun HomeBottomBar(colors: HomeColors, onSettings: () -> Unit) {
 private fun HomeTab(label: String, icon: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
     Column(modifier.fillMaxHeight().clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         HomeIcon(icon, color, Modifier.size(23.dp))
-        Spacer(Modifier.height(5.dp))
+        Spacer(Modifier.height(2.dp))
         Text(label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
