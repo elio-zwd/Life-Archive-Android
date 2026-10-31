@@ -30,6 +30,11 @@
 
 ## 工程与资料
 
+- [三页紧凑布局交接](engineering/phase-1-compact-layout-handoff-20261031.md)：首页、阅读与编辑上下间距优化、前后对比、三主题与键盘占位／收起预览及最新包身份。
+
+- [独立封面功能交接](engineering/phase-1-note-cover-handoff-20261031.md)：首页左图、预设／自定义、阅读横幅、状态库 v3 与备份兼容、真实示例及电脑预览。
+- [笔记封面设计](design/note-cover-design.md)：生成图片参考、四张插画资源、完整提示词与交互约定。
+
 - [一期完成度核对与接手清单](engineering/phase-1-completion-audit-20261031.md)：完整一期与本轮 UI 工作的完成状态、最终电脑检查、APK 身份、尚待确认的手动验收及接手边界。
 - [一期手动验收清单](testing/phase-1-manual-acceptance.md)：供用户后续逐项查看并与新 AI 对齐，已确认项目不默认重测。
 

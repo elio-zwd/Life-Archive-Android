@@ -1,5 +1,7 @@
 # 小米 14 Ultra UI 实施交接
 
+2026-10-31 更新：用户已确认[独立封面设计](note-cover-design.md)，首页改为左侧封面，阅读增加真实封面状态驱动的横幅。本页与历史截图中的右侧首图／演示封面描述保留其原版本含义，新实现与验收见[封面交接](../engineering/phase-1-note-cover-handoff-20261031.md)。
+
 日期：2026-10-30。用途：将当前 HTML 视觉与交互移植到 Life Archive Android；本轮没有修改 Android UI，也没有操作手机。
 
 同日首页更新：用户已进入一期 UI 优化，HTML 编辑／阅读设计已认可并冻结，其他页面暂时保留；首页内容层次优化已通过主管审核，供 Android 移植，设备实测待验收。唯一最终目录为 `D:/My_Elio/Life-Archive-Deliveries/home-ui-review-20261030/final-review/`，HTML 原始文件 SHA-256 为 `78ac7001965b3a35b45978509240c27d01a93eceed6f500a1d9352b750185043`。原交接包的 `01-home-light`／`04-home-dark` 已过时，首页请查[最新首页说明](prototypes/home-a-function-alignment.md#首页内容层次优化2026-10-30)及其仓库外前后截图。设计认可不代表 Android 实现或真机验收。

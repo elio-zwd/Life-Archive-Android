@@ -12,6 +12,8 @@
 
 ## 1. 选型结论与比较
 
+2026-10-31 封面实现补充：笔记独立封面属于应用状态，保存在 Room 状态库 v3，显式迁移 v2→v3；旧库默认山野预设。自定义图片沿用私有附件目录及公开资源接口，notes 参与者快照 format=3 兼容读取 1／2，外层备份仍为 v1。封面不写入正文／YAML，不改变正文版本、草稿和索引权威来源；说明与验证见[封面交接](../engineering/phase-1-note-cover-handoff-20261031.md)。上文 v2 为原实现历史状态。
+
 采用 **Kotlin + Jetpack Compose 的模块化单体架构**：一个 Android 安装包，以 Gradle 模块隔离主要职责；按业务域组织功能，界面采用 ViewModel + 单向数据流（UDF），业务通过 Repository 接口访问数据，复杂操作使用 Use Case。借用 Clean Architecture 的依赖方向与可测试性，不要求每次调用都套三层转发。
 
 | 方案 | 优点 | 本项目取舍 |

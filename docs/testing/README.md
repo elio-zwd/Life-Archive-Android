@@ -1,5 +1,9 @@
 # 当前验证方法
 
+三页上下间距调整的前后对比、三主题／键盘占位与收起预览、当前完整验证及最新包身份见[紧凑布局交接](../engineering/phase-1-compact-layout-handoff-20261031.md)。
+
+独立封面的真实存储示例、Compose／阅读资源预览及复现命令见[封面功能交接](../engineering/phase-1-note-cover-handoff-20261031.md)。封面回归接入既有数据、首页、App 与阅读浏览器检查入口；不操作设备。
+
 一期收尾入口：[完成度核对与接手清单](../engineering/phase-1-completion-audit-20261031.md)、[用户手动验收清单](phase-1-manual-acceptance.md)。本轮 UI 完整电脑检查已通过；以下带版本的数字保留历史含义，手动结果由用户后续与新 AI 对齐，不默认重测已确认项目。
 
 ## 0.2.5 首页列表性能修复验证

@@ -24,6 +24,7 @@
 ## 3. 产品与架构边界
 
 - Markdown 文件是正文事实来源，Room 不维护另一套独立正文；未知 YAML 属性及文档原文应保留。
+- 独立笔记封面属于应用状态，状态库 v3 与 notes 备份快照 format=3 保留选择；自定义图片沿用附件公开接口，不写入 Markdown／YAML。首页左侧与阅读横幅共用封面，见[封面交接](docs/engineering/phase-1-note-cover-handoff-20261031.md)。
 - 文件名、正文标题和 YAML `title` 独立，不隐式同步。文件命名与链接维护按已确认计划实施。
 - 已选模块化单体架构，工程任务必须阅读 [ADR-001](docs/architecture/adr-001-android-architecture.md)。一个 APK，按真实职责建立 Gradle 模块；feature 不依赖 data 实现或其他 feature，纯 Kotlin domain 不依赖 Android。此前单 app 模块参考已被本决策替代。
 - 已接入 Compose + Material 3、ViewModel + UDF、Navigation 3、Hilt/KSP、Room 与 DataStore。版本集中固定到 `gradle/libs.versions.toml`；具体编辑/渲染库仍遵循样板门槛，不把未验证方案写成已兼容。
