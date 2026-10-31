@@ -10,6 +10,24 @@
 
 一期状态与证据入口：[完成度核对与接手清单](../engineering/phase-1-completion-audit-20261031.md)、[用户手动验收清单](phase-1-manual-acceptance.md)。用户已确认一期验证完成；以下带版本的数字保留历史含义，已确认项目不默认重测。
 
+## 根目录构建／安装脚本验证
+
+2026-11-01 新增 `build.ps1`，来源及本项目适配见[工具来源](../../tools/UPSTREAM.md#2026-11-01根目录构建脚本适配)。PowerShell 7 下执行：
+
+```powershell
+pwsh.exe -NoProfile -File .\build.ps1 -Help
+pwsh.exe -NoProfile -File .\build.ps1 -VersionName 0.2.7 -Install -WhatIf -NoPause
+pwsh.exe -NoProfile -File .\install.ps1 -Help
+pwsh.exe -NoProfile -File .\install.ps1 -WhatIf -NoPause
+pwsh.exe -NoProfile -File .\tools\tests\Run-BuildScriptTests.ps1
+```
+
+无设备回归 **63 项断言 PASS**：默认保留版本，参数／交互修改，显示版本变化时内部版本递增，UTF-8 BOM／CRLF／其他改动保留，帮助／预演无写入，Gradle 错误码保留，缺失／错误包名／旧版本产物拒绝；已存在 APK 且源码变化但版本未变时仍调用 Gradle，安装新产物，唯一设备／显式目标、多设备及未授权门禁，未签名 Release 拒绝安装，安装失败／安装后状态不符不报成功。新增独立 `install.ps1` 入口验证帮助、预演、设备参数转发、不改版本及保留安装失败退出码。
+
+本机实际运行 `build.ps1 -OutputDir D:/Temp/life-archive-build-script-20261101 -NoPause` **PASS**，Gradle 用时约 7 秒、177 个任务全部 UP-TO-DATE；APK 哈希和修改时间、`app/build.gradle.kts` 哈希均保持不变。导出 `Life-Archive-0.2.6-debug.apk`，SHA-256 为 `13c5fbf3e67e0944f2121f85f53f97d0df758f17cfbfb88626927e6bbdee9218`。测试与实际构建日志分别保存在仓库外 `%TEMP%/life-archive-build-script-tests.log`、`%TEMP%/life-archive-build-script-smoke.log`。
+
+未操作真实设备，真实 ADB 覆盖安装与设备行为仍为 **NOT_VERIFIED**；脚本变更未修改 Android 业务源码，不重复既有完整一期验收。
+
 ## 0.2.6 视频摘记补充验证
 
 这是一期完成后的新增需求，检查范围与设备待验收项见[视频摘记交接](../engineering/phase-1-video-notes-handoff-20261101.md)，不重新打开历史未填验收表。

@@ -66,6 +66,21 @@
 
 本机需要 JDK 17、Android SDK 36、Node.js 24/npm，浏览器测试使用 Windows Chrome/Edge。设置 `JAVA_HOME`，通过 `ANDROID_HOME` 或被忽略的 `local.properties` 指定 SDK。仓库根目录使用 PowerShell 7：
 
+快速构建并导出 APK 到系统“图片”目录，或检查最新产物后覆盖安装到唯一在线设备：
+
+```powershell
+pwsh.exe -NoProfile -File .\build.ps1 -NoPause
+pwsh.exe -NoProfile -File .\build.ps1 -Install -NoPause
+```
+
+独立的手机安装入口为 `pwsh.exe -NoProfile -File .\install.ps1`，等效于构建脚本的 `-Install`，支持 `-DeviceSerial`、`-AdbPath`、`-JavaHome`、`-OutputDir`、`-Release`、`-NoPause` 和 `-WhatIf`；`-Help` 查看帮助。
+
+脚本每次通过 Gradle 的增量检查判断产物是否对应当前源码，已有 APK 最新时直接复用；不单凭版本号、文件时间或 Git 提交判断。多台在线设备用 `-DeviceSerial YOUR_SERIAL` 指定，安装使用 `adb install -r` 保留数据，并核对设备上的包名及版本，不自动启动应用。
+
+默认不改版本号。使用 `-EditVersion` 交互修改，或传入 `-VersionName 0.2.7 -VersionCode 9`；仅改变显示版本时，内部版本默认加一。`-WhatIf` 预演，不改源码、不构建、不操作设备。其他参数：`-OutputDir`、`-JavaHome`、`-Release`、`-AdbPath`；完整帮助为 `pwsh.exe -NoProfile -File .\build.ps1 -Help`。未签名 Release 仅导出并标注 `unsigned`，不能安装。版本修改在构建失败后仍保留，方便修复后重试。
+
+完整一期验证仍使用底层 Gradle 入口：
+
 ```powershell
 .\gradlew.bat verifyPhaseOne --console=plain
 ```
