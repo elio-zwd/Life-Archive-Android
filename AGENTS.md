@@ -6,7 +6,7 @@
 
 - 使用简体中文沟通、编写文档和必要注释；注释解释约束与原因。
 - 面向 Windows 10 x64，Windows 命令使用 `pwsh.exe`（PowerShell 7）。
-- 当前为一期 UI 收尾，HTML 编辑与阅读设计已认可，首页设计已审定，三页 Android 移植及电脑检查已完成，其他临时页面保留；设备验收与交付边界见 [一期完成度核对与接手清单](docs/engineering/phase-1-completion-audit-20261031.md)和 [UI 优化计划](docs/plans/phase-1-ui-polish.md)。默认源码编辑与完整阅读，源码/实时预览均保留高亮，实时预览仍为实验项；阅读首屏优先并使用可丢弃的按需缓存。本轮按用户确认规格的模拟器检查布局，真实手机输入、系统交互与性能仍单独验收；用户已手动验证的项目按其明确结论记录，不因历史未验证表而要求全部重测。输入约束见 [编辑器输入修复交接](docs/engineering/phase-1-editor-input-handoff.md)，工具用法见 [工具栏与回车续写交接](docs/engineering/phase-1-toolbar-handoff.md)，阅读机制见 [阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整范围及底层从 [一期功能交接](docs/engineering/phase-1-function-handoff.md)按需读取。
+- 当前一期开发及验证已按用户确认完成，进入使用反馈与维护阶段；HTML 编辑与阅读设计已认可，首页已按最新确认更新，其他临时页面保留。阶段结论与交付证据见 [一期完成度核对与接手清单](docs/engineering/phase-1-completion-audit-20261031.md)和 [UI 优化计划](docs/plans/phase-1-ui-polish.md)。默认源码编辑与完整阅读，源码/实时预览均保留高亮，实时预览仍为实验项；阅读首屏优先并使用可丢弃的按需缓存。用户确认完成的项目不因历史未验证表要求全部重测；模拟器与真实手机的实测结果分别记录，后续按实际问题定向验证。输入约束见 [编辑器输入修复交接](docs/engineering/phase-1-editor-input-handoff.md)，工具用法见 [工具栏与回车续写交接](docs/engineering/phase-1-toolbar-handoff.md)，阅读机制见 [阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整范围及底层从 [一期功能交接](docs/engineering/phase-1-function-handoff.md)按需读取。
 - 产品只做 Android，技术方向为 Kotlin + Jetpack Compose。应用标识为 `com.elio.lifearchive`，显示名为 Life Archive。
 - 第一阶段聚焦本地笔记；第二阶段才讨论 AI 与见域共用能力，第三阶段讨论电脑协作。具体范围见 [文档索引](docs/README.md)。
 - 整体架构讨论必须读取[功能版图](docs/plans/overall-feature-roadmap.md)和[架构要求](docs/architecture/README.md)，再按需阅读对应阶段计划；新项目需求以本仓库记录为依据，不默认回查旧仓库或继承旧版功能。
