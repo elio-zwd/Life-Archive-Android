@@ -30,6 +30,8 @@
 
 ## 工程与资料
 
+- [核心流程扩展排查与修复](engineering/phase-1-core-resilience-handoff-20261031.md)：WebView 能力降级、缓存结构与异常隔离、渲染库及 PDF 重试、初始化时序和保存竞争回归；设备结果另验。
+
 - [三页紧凑布局交接](engineering/phase-1-compact-layout-handoff-20261031.md)：首页、阅读与编辑上下间距优化、前后对比、三主题与键盘占位／收起预览及最新包身份。
 
 - [独立封面功能交接](engineering/phase-1-note-cover-handoff-20261031.md)：首页左图、预设／自定义、阅读横幅、状态库 v3 与备份兼容、真实示例及电脑预览。

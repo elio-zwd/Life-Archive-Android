@@ -1,6 +1,16 @@
 # 一期阅读打开提速交接
 
+2026-10-31 阅读兼容与核心流程扩展修复、当前验证及修复包见[核心流程扩展修复交接](phase-1-core-resilience-handoff-20261031.md)。下方版本数字保留历史含义。
+
 日期：2026-10-23。版本：0.2.2（versionCode 4）。已确认要求见[阅读提速计划](../plans/phase-1-reader-open-performance.md)。此前 0.2.1 记录见[稳定性修复交接](phase-1-stability-handoff.md)，完整语法矩阵沿用[一期功能交接](phase-1-function-handoff.md)。
+
+## 2026-10-31 阅读重开兼容修复
+
+用户反馈“创建验收样例”首次可读，第二次打开报 `filter(...).at is not a function`。定位为 System WebView 缺少 `Array.prototype.at`：首次偏移为 0 时跳过定位分支，保存非零阅读位置后重开，首屏任务选择与正文滚动恢复会调用该方法。此异常发生在阅读脚本中，不表示 Markdown 正文损坏。
+
+阅读脚本已用基础数组操作替换四处 `.at(-1)`，覆盖首屏任务定位、正文滚动恢复、嵌入标题文字回退和附件扩展名识别。没有修改正文、存储或缓存格式。浏览器回归通过显式移除 `Array.prototype.at` 检查首次打开、带位置重开、原页刷新，以及嵌入标题和图片／PDF／音视频附件；修复前可复现同一报错。入口仍为 `testReader`，电脑回归不能代替用户当前 WebView 的设备复验。
+
+本次 `testReader :app:assembleDebug checkArchitecture --console=plain` 通过，浏览器共 40 项检查通过；`git diff --check` 通过。Debug APK 仍输出到 `app/build/outputs/apk/debug/app-debug.apk`，未安装到设备。本次未重跑完整 `verifyPhaseOne`、Lint 或真机交互／视觉验收；下方 0.2.2 的验证数字保留历史含义。
 
 ## 实现
 

@@ -1,5 +1,7 @@
 # 当前验证方法
 
+2026-10-31 核心流程兼容与恢复检查继续使用 `testReader` 和 `verifyPhaseOne`：新增能力缺失、布局／投影缓存类型错误、消息桥失败、库加载重试、PDF 页错误、图片超时、初始化配置及保存竞争回归。问题表、最终检查及 APK 见[核心流程扩展修复交接](../engineering/phase-1-core-resilience-handoff-20261031.md)，电脑故障注入与设备验收分开记录。
+
 三页上下间距调整的前后对比、三主题／键盘占位与收起预览、当前完整验证及最新包身份见[紧凑布局交接](../engineering/phase-1-compact-layout-handoff-20261031.md)。
 
 独立封面的真实存储示例、Compose／阅读资源预览及复现命令见[封面功能交接](../engineering/phase-1-note-cover-handoff-20261031.md)。封面回归接入既有数据、首页、App 与阅读浏览器检查入口；不操作设备。

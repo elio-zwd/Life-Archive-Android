@@ -48,6 +48,8 @@
 
 ## 当前使用方式
 
+2026-10-31 阅读重开及核心流程兼容／恢复修复，问题表、电脑验证和修复 APK 见[核心流程修复交接](docs/engineering/phase-1-core-resilience-handoff-20261031.md)；该包的设备结果需定向复验。
+
 首页、阅读与编辑已按后续要求压缩上下间距，最新三页预览、前后对比及 APK 见[紧凑布局交接](docs/engineering/phase-1-compact-layout-handoff-20261031.md)；原封面交付目录保留为历史证据。
 
 2026-10-31 新增首页左侧封面、预设／自定义设置及阅读横幅；新旧笔记默认山野插画，完整备份保留选择，Markdown 原文不变。实现、两篇真实入库的隔离示例与验证边界见[封面交接](docs/engineering/phase-1-note-cover-handoff-20261031.md)。
