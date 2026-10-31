@@ -21,7 +21,7 @@ internal class ReaderDocumentLoader(private val notes: NotesRepository, private 
         }
         val key = ReaderArtifactKey(ReaderArtifactKind.HTML, documentDigest("${HtmlProjection.VERSION}\u0000${id.value}\u0000$path\u0000$digest"))
         val cached = try { if (token != null) cache?.get(token, key)?.let(::JSONObject) else null } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
-        val hit = cached != null && cached.optString("digest") == digest && cached.has("html") && cached.has("blocks") && cached.has("ranges")
+        val hit = cached != null && cached.optString("digest") == digest && validProjection(cached, source.length)
         val result = if (hit) cached!! else {
             val projected = withContext(Dispatchers.Default) { HtmlProjection.project(source) }
             JSONObject().put("html", projected.html).put("digest", projected.digest)
@@ -31,5 +31,21 @@ internal class ReaderDocumentLoader(private val notes: NotesRepository, private 
         }
         return result.put("id", id.value).put("revision", if (id == root) current.revision else version).put("path", path)
             .put("cacheHit", hit).put("cacheNamespace", token?.namespace).put("projectionKey", key.digest)
+    }
+
+    private fun validProjection(value: JSONObject, sourceLength: Int): Boolean {
+        if (value.opt("html") !is String) return false
+        for (field in listOf("ranges", "blocks")) {
+            val entries = value.optJSONArray(field) ?: return false
+            for (i in 0 until entries.length()) {
+                val entry = entries.optJSONObject(i) ?: return false
+                val start = entry.opt("start") as? Number ?: return false
+                val end = entry.opt("end") as? Number ?: return false
+                if (start.toDouble() != start.toLong().toDouble() || end.toDouble() != end.toLong().toDouble()) return false
+                if (start.toLong() !in 0L..sourceLength.toLong() || end.toLong() !in start.toLong()..sourceLength.toLong()) return false
+                if (field == "blocks" && entry.opt("name") !is String) return false
+            }
+        }
+        return true
     }
 }

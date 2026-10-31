@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { readerResilience } from './reader-resilience.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fixtures = JSON.parse(await fs.readFile(path.join(root, 'core/document/build/reader-fixtures.json'), 'utf8'));
 const assetRoots = [path.join(root, 'feature/editor/src/main/assets'), path.join(root, 'feature/editor/build/generated/readerAssets'), path.join(root, 'core/designsystem/src/main/assets')];
@@ -93,6 +94,8 @@ const browserPath = process.env.LIFE_ARCHIVE_BROWSER || ['C:/Program Files/Googl
 const browser = await chromium.launch({ executablePath: browserPath, headless: true });
 const page = await browser.newPage({ viewport: { width: 412, height: 892 } });
 await page.addInitScript(() => {
+  // 模拟缺少 Array.at 的 System WebView，桌面浏览器默认支持会掩盖此类故障。
+  if (new URL(location.href).searchParams.has('withoutArrayAt')) delete Array.prototype.at;
   const bridge = new EventTarget();
   bridge.postMessage = data => fetch('/reader/test-cache-put', { method: 'POST', body: data }).then(response => response.json()).then(value => bridge.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(value) })));
   window.ReaderCache = bridge;
@@ -265,6 +268,38 @@ try {
   assert.equal(await page.locator('.math svg').count(), 2); assert.equal(await page.locator('.mermaid svg').count(), 1);
   assert.ok((await page.locator('.footnotes').innerText()).includes('脚注内容'));
   checks.push('工具栏实际生成的表格代码分隔线 Callout 公式 Mermaid 脚注完整阅读');
+  const compatibilityUrl = `http://127.0.0.1:${server.address().port}/reader/index.html?note=root&rev=deferred&dark=true&auto=false&withoutArrayAt`;
+  await page.goto(`${compatibilityUrl}&offset=0`);
+  await page.waitForFunction(() => window.readerReady === true);
+  assert.equal(await page.evaluate(() => typeof Array.prototype.at), 'undefined');
+  await page.locator('#lazy-anchor').evaluate(node => node.scrollIntoView());
+  const savedOffset = await page.evaluate(() => window.readerOffset());
+  assert.ok(savedOffset >= 5000);
+  await page.goto(`${compatibilityUrl}&offset=${savedOffset}`);
+  await page.waitForFunction(() => window.readerReady === true || document.querySelector('#status').textContent.includes('阅读加载失败'));
+  assert.equal(await page.locator('#status').textContent(), '');
+  assert.equal(await page.locator('.math[data-rendered]').count(), 1);
+  assert.equal(await page.locator('.mermaid svg').count(), 1);
+  assert.ok(await page.evaluate(() => window.readerOffset() >= 5000));
+  await page.evaluate(() => window.readerReload());
+  assert.equal(await page.locator('#status').textContent(), '');
+  assert.ok(await page.evaluate(() => window.readerOffset() >= 5000));
+  checks.push('缺少 Array.at 时首次打开、带位置重开及原页刷新保持正文和定位');
+  await page.route('**/reader/resolve?**', route => {
+    const target = new URL(route.request().url()).searchParams.get('target');
+    // 不提供可命中的偏移，确保执行按标题文字匹配的回退路径。
+    if (target === '目标#章节') return route.fulfill({ json: { note: 'target', offset: -1 } });
+    return route.continue();
+  });
+  await page.goto(`http://127.0.0.1:${server.address().port}/reader/index.html?note=root&dark=true&offset=0&auto=false&withoutArrayAt`);
+  await page.waitForFunction(() => window.readerReady === true);
+  await page.evaluate(() => window.readerDrain());
+  assert.equal(await page.locator('.embedded-note h2').innerText(), '章节');
+  assert.equal(await page.locator('img[width="100"]').evaluate(node => node.complete && node.naturalWidth > 0), true);
+  assert.ok(await page.locator('.pdf canvas').evaluate(node => node.width > 0));
+  await page.waitForFunction(() => document.querySelector('audio')?.readyState >= 1 && document.querySelector('video')?.readyState >= 1);
+  checks.push('缺少 Array.at 时嵌入标题文字回退及图片、PDF、音视频附件正常加载');
+  checks.push(...await readerResilience(browser, `http://127.0.0.1:${server.address().port}`));
   assert.equal(errors.length, 0, errors.join('\n')); assert.equal(failures.length, 0, failures.join('\n'));
   console.log(`PASS ${checks.length} 浏览器检查：${checks.join('、')}`);
 } catch (error) {

@@ -88,9 +88,13 @@ class ReaderHostStabilityTest {
         compose.waitForIdle()
         assertSame(view, find(compose.activity.window.decorView)); assertEquals(initialUrl, shadow.lastLoadedUrl)
         assertTrue(shadow.lastEvaluatedJavascript.contains("readerUpdate")); assertTrue(shadow.lastEvaluatedJavascript.contains("1.2"))
+        assertTrue(shadow.lastEvaluatedJavascript.contains("window.readerPendingConfiguration ="))
         compose.runOnIdle { palette = DocumentPalette.WARM }
         compose.waitForIdle()
         assertSame(view, find(compose.activity.window.decorView)); assertEquals(initialUrl, shadow.lastLoadedUrl)
+        assertTrue(shadow.lastEvaluatedJavascript.contains("\"theme\":\"warm\""))
+        compose.runOnIdle { shadow.webViewClient.onPageFinished(view, initialUrl) }
+        assertTrue(shadow.lastEvaluatedJavascript.contains("window.readerPendingConfiguration ="))
         assertTrue(shadow.lastEvaluatedJavascript.contains("\"theme\":\"warm\""))
         compose.runOnIdle { document = ReaderSnapshot("较新正文", "second") }
         compose.waitForIdle(); assertEquals(initialUrl, shadow.lastLoadedUrl)

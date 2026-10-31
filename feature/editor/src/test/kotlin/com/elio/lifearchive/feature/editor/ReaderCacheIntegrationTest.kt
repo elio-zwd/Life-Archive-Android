@@ -75,4 +75,21 @@ class ReaderCacheIntegrationTest {
         entered.await(); cache.clear(); release.complete(Unit); assertNotNull(loading.await()); runCurrent()
         assertTrue(cache.values.isEmpty())
     }
+
+    @Test fun validJsonWithWrongProjectionTypesIsIgnored() = runTest {
+        val repo = MemoryNotes(); val cache = Cache()
+        val loader = ReaderDocumentLoader(repo, cache, backgroundScope)
+        val snapshot = ReaderSnapshot("正文 **必须保留**", path = "笔记.md")
+        val expected = loader.load(repo.note.summary.id, repo.note.summary.id, snapshot)!!
+        runCurrent()
+        val key = ReaderArtifactKey(ReaderArtifactKind.HTML, expected.getString("projectionKey"))
+        for ((field, invalid) in listOf("html" to JSONObject.NULL, "html" to 42, "blocks" to JSONObject(), "ranges" to JSONObject.NULL,
+            "blocks" to org.json.JSONArray().put(JSONObject.NULL), "ranges" to org.json.JSONArray().put(JSONObject().put("start", -1).put("end", 9000)))) {
+            cache.values[key] = JSONObject(expected.toString()).put(field, invalid).toString()
+            val actual = loader.load(repo.note.summary.id, repo.note.summary.id, snapshot)!!
+            assertFalse("错误缓存字段：$field=$invalid", actual.getBoolean("cacheHit"))
+            assertEquals(expected.getString("html"), actual.getString("html"))
+            runCurrent()
+        }
+    }
 }

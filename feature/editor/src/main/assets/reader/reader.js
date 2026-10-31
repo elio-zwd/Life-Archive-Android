@@ -1,5 +1,7 @@
-import { cacheKey, cached, store, artifactMarkup, flushCacheWrites } from './reader-cache.js';
+import { cacheKey, cached, store, artifactMarkup, flushCacheWrites, layoutFromCache } from './reader-cache.js';
 import { ReaderWork } from './reader-work.js';
+if (window.readerStartupError || typeof DOMPurify === 'undefined') throw Error('阅读组件未能启动');
+window.readerStarted = true;
 const params = new URLSearchParams(location.search);
 const rootId = params.get('note');
 let auto = params.get('auto') === 'true';
@@ -9,7 +11,8 @@ const validTheme = value => ['blue', 'warm', 'graphite'].includes(value);
 let theme = validTheme(params.get('theme')) ? params.get('theme') : (dark ? 'legacy-dark' : 'legacy-light');
 dark = theme === 'graphite' || theme === 'legacy-dark';
 let generation = 0; let controller; let rendering;
-let mermaidPromise; let mathPromise;
+let mermaidPromise; let mathPromise; let mermaidAttempt = 0;
+const mathConfiguration = window.MathJax;
 let activeContext; let activeWork; let mathQueue = Promise.resolve(); let diagramQueue = Promise.resolve(); let styleRevision = 0;
 let currentMetadata = null;
 const resourceRecords = new WeakMap();
@@ -19,15 +22,18 @@ document.documentElement.classList.toggle('dark', dark);
 if (validTheme(theme)) document.documentElement.dataset.pageTheme = theme;
 document.documentElement.style.fontSize = `${17 * (Number(params.get('scale')) || 1)}px`;
 async function diagrams() {
-  const mermaid = (await (mermaidPromise ||= import('./mermaid/mermaid.esm.min.mjs'))).default;
+  // 模块加载失败会被浏览器记住；明确重试时换 URL，正常打开保持原资源 URL。
+  const mermaid = (await (mermaidPromise ||= import(`./mermaid/mermaid.esm.min.mjs${mermaidAttempt ? `?retry=${mermaidAttempt}` : ''}`).catch(error => { mermaidPromise = null; mermaidAttempt++; throw error; }))).default;
   mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'neutral', suppressErrorRendering: true, maxTextSize: 100000 });
   return mermaid;
 }
 async function mathEngine() {
   return mathPromise ||= new Promise((resolve, reject) => {
     const script = document.createElement('script'); script.src = 'mathjax/tex-svg.js';
-    script.onload = () => MathJax.startup.promise.then(() => resolve(MathJax), reject); script.onerror = () => reject(Error('公式资源加载失败')); document.head.append(script);
-  });
+    const failed = error => { script.remove(); reject(error); };
+    script.onload = () => Promise.resolve().then(() => MathJax.startup.promise).then(() => resolve(MathJax), failed);
+    script.onerror = () => failed(Error('公式资源加载失败')); document.head.append(script);
+  }).catch(error => { mathPromise = null; window.MathJax = mathConfiguration; throw error; });
 }
 const query = (name, values) => `/reader/${name}?${new URLSearchParams(values)}`;
 async function json(name, values, context = activeContext) { const response = await fetch(query(name, values), { signal: context?.signal || controller?.signal }); if (!response.ok) throw Error('内容不可用'); const data = await response.json(); if (context && !context.current()) throw new DOMException('过期阅读任务', 'AbortError'); return data; }
@@ -109,7 +115,7 @@ window.readerResourceUpdated = async (url, page) => {
       const next = staging.querySelector('audio,video');
       if (next && Number.isFinite(time)) { const restore = () => { next.currentTime = time; if (!paused) next.play().catch(() => {}); }; if (next.readyState >= 1) restore(); else next.addEventListener('loadedmetadata', restore, { once: true }); }
       box.replaceWith(...staging.childNodes);
-    } catch (e) { if (e.name !== 'AbortError') status.textContent = `资源更新失败：${e.message}`; }
+    } catch (e) { if (captured === generation && e.name !== 'AbortError') status.textContent = `资源更新失败：${e.message}`; }
     finally { staging.remove(); }
   }
 };
@@ -131,12 +137,24 @@ async function pdf(node, url, target, context) {
     const loading = pdfjs.getDocument({ url, disableAutoFetch: true, disableStream: true, cMapUrl: '/reader/pdfjs/cmaps/', cMapPacked: true, standardFontDataUrl: '/reader/pdfjs/standard_fonts/', wasmUrl: '/reader/pdfjs/wasm/', isEvalSupported: false });
     context.disposers.push(() => loading.destroy());
     const document = await loading.promise;
-    if (!context.current()) { await document.destroy(); return; }
-    context.disposers.push(() => document.destroy());
+    if (!context.current()) return;
     page = Math.min(page, document.numPages);
     let rendering = false;
-    async function render() { if (rendering) return; rendering = true; try { const pdfPage = await document.getPage(page); const viewport = pdfPage.getViewport({ scale: zoom }); canvas.width = viewport.width; canvas.height = viewport.height; await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise; label.textContent = `${page} / ${document.numPages}`; } finally { rendering = false; } }
-    controls.append(button('上一页', () => { if (page > 1 && !rendering) { page--; render(); } }), label, button('下一页', () => { if (page < document.numPages && !rendering) { page++; render(); } }), button('放大', () => { if (!rendering) { zoom = Math.min(4, zoom + .5); render(); } }), button('缩小', () => { if (!rendering) { zoom = Math.max(.5, zoom - .5); render(); } }));
+    const retry = button('重试', () => render()); retry.hidden = true;
+    async function render() {
+      if (rendering || !context.current()) return;
+      rendering = true; retry.hidden = true;
+      try {
+        const pdfPage = await document.getPage(page);
+        if (!context.current()) return;
+        const viewport = pdfPage.getViewport({ scale: zoom }); canvas.width = viewport.width; canvas.height = viewport.height;
+        await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        if (context.current()) label.textContent = `${page} / ${document.numPages}`;
+      } catch (e) {
+        if (context.current()) { label.textContent = `PDF 页面加载失败：${e.message}`; retry.hidden = false; }
+      } finally { rendering = false; }
+    }
+    controls.append(button('上一页', () => { if (page > 1 && !rendering) { page--; render(); } }), label, button('下一页', () => { if (page < document.numPages && !rendering) { page++; render(); } }), button('放大', () => { if (!rendering) { zoom = Math.min(4, zoom + .5); render(); } }), button('缩小', () => { if (!rendering) { zoom = Math.max(.5, zoom - .5); render(); } }), retry);
     await render();
   } catch (e) { if (context.current()) { error(box, `PDF 打开失败：${e.message}`); box.append(button('重试', () => pdf(box, url, target, context))); } }
 }
@@ -162,7 +180,7 @@ async function embedded(node, stack, context, work) {
         box.replaceChildren(...children);
       } else {
         const headings = [...box.querySelectorAll('h1,h2,h3,h4,h5,h6')];
-        const heading = headings.find(h => Number(h.dataset.source) === resolved.offset) || headings.find(h => h.textContent.trim() === fragment.split('#').at(-1));
+        const heading = headings.find(h => Number(h.dataset.source) === resolved.offset) || headings.find(h => h.textContent.trim() === fragment.split('#').pop());
         if (!heading) return error(node, `标题不存在：${target}`);
         let sibling = heading; const children = [];
         do { children.push(sibling); sibling = sibling.nextElementSibling; } while (sibling && !(/^H[1-6]$/.test(sibling.tagName) && Number(sibling.tagName[1]) <= Number(heading.tagName[1])));
@@ -174,7 +192,7 @@ async function embedded(node, stack, context, work) {
   }
   if (resolved.attachment) {
     const path = resolved.attachment;
-    const extension = path.split('.').at(-1).toLowerCase(); const url = localResource(path);
+    const extension = path.split('.').pop().toLowerCase(); const url = localResource(path);
     if (extension === 'pdf') { node.style.minHeight = '260px'; work.add(node, 'attachment', () => pdf(node, url, target, context)); return; }
     let media;
     if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp'].includes(extension)) media = element('img');
@@ -217,11 +235,12 @@ async function renderFormula(node, context) {
   const styled = styleRevision;
   const key = await cacheKey(`MathJax-4.1.3|${environment()}|${node.dataset.display}|${node.dataset.tex}`);
   let markup = await cached('FORMULA', key, context);
-  if (!markup?.includes('<svg')) {
+  const hit = markup?.includes('<svg');
+  if (!hit) {
     markup = await serial('FORMULA', context, async () => (await (await mathEngine()).tex2svgPromise(node.dataset.tex, { display: node.dataset.display === 'true' })).outerHTML);
-    store('FORMULA', key, markup, context);
   } else context.cacheHits++;
-  if (styled !== styleRevision) throw new DOMException('显示条件已更新', 'AbortError');
+  if (!context.current() || styled !== styleRevision) throw new DOMException('显示条件已更新', 'AbortError');
+  if (!hit) store('FORMULA', key, markup, context);
   const fragment = artifactMarkup(markup, `formula-${unique++}`);
   context.mutate(() => { node.replaceChildren(fragment); node.dataset.rendered = 'true'; });
 }
@@ -230,11 +249,12 @@ async function renderDiagram(box, context) {
   const source = box.dataset.diagramSource;
   const key = await cacheKey(`Mermaid-12.2.0|${environment()}|${source}`);
   let markup = await cached('DIAGRAM', key, context);
-  if (!markup?.includes('<svg')) {
+  const hit = markup?.includes('<svg');
+  if (!hit) {
     markup = await serial('DIAGRAM', context, async () => (await (await diagrams()).render(`diagram-${unique++}`, source)).svg);
-    store('DIAGRAM', key, markup, context);
   } else context.cacheHits++;
-  if (styled !== styleRevision) throw new DOMException('显示条件已更新', 'AbortError');
+  if (!context.current() || styled !== styleRevision) throw new DOMException('显示条件已更新', 'AbortError');
+  if (!hit) store('DIAGRAM', key, markup, context);
   const fragment = artifactMarkup(markup, `chart-${unique++}`);
   context.mutate(() => {
     box.replaceChildren(fragment);
@@ -249,7 +269,7 @@ async function imageResource(image, context) {
   const key = await cacheKey(`image-size|${resolved.attachment}`);
   let size;
   try { size = JSON.parse(await cached('GEOMETRY', key, context) || 'null'); } catch {}
-  if (!size?.width || !size?.height) {
+  if (!Number.isFinite(size?.width) || !Number.isFinite(size?.height) || size.width <= 0 || size.height <= 0) {
     try { size = await json('resource-info', { path: resolved.attachment }, context); }
     catch (error) { if (error.name === 'AbortError') throw error; size = { width: 0, height: 0 }; }
     if (size.width > 0 && size.height > 0) store('GEOMETRY', key, JSON.stringify(size), context);
@@ -268,7 +288,7 @@ function register(work, node, kind, run, context) {
   const owner = sourceOwner(node); const source = node.closest('[data-source]')?.dataset.source || '0';
   const slot = `${kind}:${owner}:${source}:${node.dataset.tex || node.dataset.diagramSource || node.dataset.target || node.dataset.originalSrc || ''}`;
   const previous = context.layout[slot];
-  if (previous?.height > 0 && previous.height < 20000) { context.temporaryHeights.set(node, node.style.minHeight); node.style.minHeight = `${previous.height}px`; }
+  if (Number.isFinite(previous?.height) && previous.height > 0 && previous.height < 20000) { context.temporaryHeights.set(node, node.style.minHeight); node.style.minHeight = `${previous.height}px`; }
   work.add(node, kind, async () => {
     await run();
     if (context.current() && node.isConnected) { context.layout[slot] = { height: node.getBoundingClientRect().height }; context.layoutDirty = true; }
@@ -299,7 +319,7 @@ function decorate(root, stack, context, work) {
     work.add(media, 'attachment', async () => {
       const src = media.getAttribute('src') || media.dataset.originalSrc;
       if (/^https?:\/\//i.test(src)) await remote(media, src, false, false, context);
-      else { const result = await resolve(src, sourceOwner(media), 'HTML', context); if (result.attachment) { media.preload = 'metadata'; media.src = localResource(result.attachment) + (src.includes('#') ? '#' + src.split('#').slice(1).join('#') : ''); await preparedMedia(media, context); } else media.removeAttribute('src'); }
+      else { const result = await resolve(src, sourceOwner(media), 'HTML', context); if (result.attachment) { media.preload = 'metadata'; media.src = localResource(result.attachment) + (src.includes('#') ? '#' + src.split('#').slice(1).join('#') : ''); await preparedMedia(media, context); } else throw Error(`附件不存在：${src}`); }
     });
   }
   for (const node of root.querySelectorAll('.math:not([data-prepared])')) { node.dataset.prepared = 'true'; node.textContent = '\u00a0'; register(work, node, 'formula', () => renderFormula(node, context), context); }
@@ -379,7 +399,7 @@ function addDocumentMetadata(staging, data) {
 }
 window.readerReload = async () => {
   const captured = ++generation; const capturedRevision = revision;
-  activeWork?.dispose(); activeContext?.disposers.forEach(dispose => { try { dispose(); } catch {} });
+  activeWork?.dispose(); activeContext?.disposers.forEach(dispose => { try { Promise.resolve(dispose()).catch(() => {}); } catch {} });
   controller?.abort(); controller = new AbortController();
   const context = {
     revision: capturedRevision, signal: controller.signal, namespace: null, disposers: [], layout: {}, temporaryHeights: new WeakMap(), cacheHits: 0,
@@ -396,7 +416,8 @@ window.readerReload = async () => {
   const staging = element('main', null, 'reader-staging');
   staging.style.width = `${content.getBoundingClientRect().width}px`; document.body.append(staging);
   try {
-    const restoreOffset = window.readerReady ? window.readerOffset() : Number(params.get('offset')) || 0;
+    const restoreOffset = content.dataset.note ? window.readerOffset() : Number(params.get('offset')) || 0;
+    window.readerReady = false;
     status.textContent = '';
     const data = await json('document', { note: rootId, revision: capturedRevision });
     if (captured !== generation) return;
@@ -407,7 +428,7 @@ window.readerReload = async () => {
     phase(context, 'BODY');
     if (context.projectionKey && staging.querySelector('.math,.embed,img,audio,video,pre>code.language-mermaid')) {
       context.layoutKey = await cacheKey(`layout|${context.projectionKey}|${environment()}`);
-      try { context.layout = JSON.parse(await cached('GEOMETRY', context.layoutKey, context) || '{}'); } catch { context.layout = {}; }
+      context.layout = layoutFromCache(await cached('GEOMETRY', context.layoutKey, context));
     }
     decorate(staging, [rootId], context, work);
     await work.first(staging, restoreOffset);
@@ -415,12 +436,12 @@ window.readerReload = async () => {
     rootBlocks = data.blocks; content.dataset.note = rootId; content.replaceChildren(...staging.childNodes);
     document.documentElement.classList.remove('reader-preparing');
     const offset = restoreOffset;
-    const node = offset ? [...content.querySelectorAll('[data-source]')].filter(n => !n.closest('.embedded-note') && Number(n.dataset.source) <= offset).at(-1) : null;
+    const node = offset ? [...content.querySelectorAll('[data-source]')].filter(n => !n.closest('.embedded-note') && Number(n.dataset.source) <= offset).slice(-1)[0] : null;
     if (offset && node) node.scrollIntoView();
+    work.mount(content);
     window.readerReady = true;
     window.readerRevision = capturedRevision;
     context.metrics.firstScreen = performance.now();
-    work.mount(content);
     action('ready', String(Math.round(context.metrics.firstScreen)));
   } catch (e) { if (captured === generation && e.name !== 'AbortError') { status.textContent = `阅读加载失败：${e.message}`; document.documentElement.classList.remove('reader-preparing'); status.append(button('重试', () => window.readerReload())); action('error', e.message); } }
   finally { staging.remove(); }
@@ -428,7 +449,7 @@ window.readerReload = async () => {
 function phase(context, name) {
   if (!context.current()) return;
   if (name === 'IDLE') context.metrics.idle = performance.now();
-  window.ReaderCache?.postMessage?.(JSON.stringify({ type: 'phase', phase: name, revision: context.revision, elapsed: Math.round(performance.now()), cacheHit: !!context.metrics.cacheHit, artifactHits: context.cacheHits }));
+  try { window.ReaderCache?.postMessage?.(JSON.stringify({ type: 'phase', phase: name, revision: context.revision, elapsed: Math.round(performance.now()), cacheHit: !!context.metrics.cacheHit, artifactHits: context.cacheHits })); } catch { /* 诊断消息失败不能阻断阅读。 */ }
 }
 window.readerDrain = async () => { await rendering; await activeWork?.drain(); activeContext?.idle(); await flushCacheWrites(); };
 async function refreshDisplay() {
@@ -466,5 +487,7 @@ window.readerUpdate = async config => {
   }
   return rendering;
 };
-rendering = window.readerReload();
+// 原生配置可能先于模块完成加载；只用最后一次配置开始首屏任务。
+if (window.readerPendingConfiguration) { await window.readerUpdate(window.readerPendingConfiguration); delete window.readerPendingConfiguration; }
+if (!rendering) rendering = window.readerReload();
 await rendering;

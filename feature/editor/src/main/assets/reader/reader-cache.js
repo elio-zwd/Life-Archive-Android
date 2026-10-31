@@ -1,34 +1,49 @@
 const pending = new Set();
-const encoder = new TextEncoder();
+const encoder = typeof TextEncoder === 'function' ? new TextEncoder() : null;
+let nextRequest = 0;
 export async function cacheKey(value) {
-  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value)))].map(n => n.toString(16).padStart(2, '0')).join('');
+  // 派生缓存不能成为正常阅读的前置条件，也不用弱摘要冒充 SHA-256。
+  try { return encoder ? [...new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value)))].map(n => n.toString(16).padStart(2, '0')).join('') : null; }
+  catch { return null; }
 }
 export async function cached(kind, key, context) {
-  if (!context.namespace || !context.current()) return null;
+  if (!key || !context.namespace || !context.current()) return null;
   try {
     const response = await fetch(`/reader/render-cache?${new URLSearchParams({ namespace: context.namespace, kind, key })}`, { signal: context.signal });
     if (!response.ok || !context.current()) return null;
-    return (await response.json()).value ?? null;
+    const data = await response.json();
+    return context.current() && typeof data?.value === 'string' ? data.value : null;
   } catch { return null; }
 }
 export function store(kind, key, value, context) {
-  if (!context.namespace || !context.current() || !window.ReaderCache?.postMessage || encoder.encode(value).length > 8 * 1024 * 1024) return;
+  try { queueStore(kind, key, value, context); } catch { /* 消息桥与编码失败只放弃本次缓存。 */ }
+}
+function queueStore(kind, key, value, context) {
+  if (!key || !encoder || !context.namespace || !context.current() || !window.ReaderCache?.postMessage || encoder.encode(value).length > 8 * 1024 * 1024) return;
   // 写盘异步进行，不能将缓存回执加入首屏就绪条件。
-  const request = crypto.randomUUID();
+  const request = `reader-${++nextRequest}`;
+  const bridge = window.ReaderCache;
   const promise = new Promise(resolve => {
-    const finish = () => { clearTimeout(timer); window.ReaderCache.removeEventListener?.('message', listener); resolve(); };
+    const finish = () => { clearTimeout(timer); try { bridge.removeEventListener?.('message', listener); } catch {} resolve(); };
     const timer = setTimeout(finish, 2000);
     const listener = event => {
       try { if (JSON.parse(event.data).request !== request) return; } catch { return; }
       finish();
     };
-    window.ReaderCache.addEventListener?.('message', listener);
-    try { window.ReaderCache.postMessage(JSON.stringify({ type: 'cache-put', request, revision: context.revision, namespace: context.namespace, kind, key, value })); }
+    try { bridge.addEventListener?.('message', listener); bridge.postMessage(JSON.stringify({ type: 'cache-put', request, revision: context.revision, namespace: context.namespace, kind, key, value })); }
     catch { finish(); }
-  });
+  }).catch(() => {});
   pending.add(promise); promise.finally(() => pending.delete(promise));
 }
 export async function flushCacheWrites() { await Promise.all([...pending]); }
+
+export function layoutFromCache(value) {
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([, entry]) => entry && Number.isFinite(entry.height) && entry.height > 0 && entry.height < 20000));
+  } catch { return {}; }
+}
 
 /** SVG 每次装入都使用新 ID，并清除可执行内容；缓存不保存页面事件或来源笔记。 */
 export function artifactMarkup(value, prefix) {

@@ -14,6 +14,27 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class EditorViewModelTest {
+    @Test fun modeSwitchesDuringSaveKeepTheNewestTextAndDraftVersion() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = MemoryNotes().apply { saveWait = kotlinx.coroutines.CompletableDeferred() }
+        val model = EditorViewModel(repo, repo.note.summary.id, true)
+        try {
+            runCurrent()
+            model.session!!.edit { replace(0, length, "保存第一版") }
+            model.changeMode(EditorMode.READ); runCurrent()
+            assertEquals(1, repo.saves)
+            model.changeMode(EditorMode.SOURCE)
+            model.session!!.edit { append("，继续中文输入") }
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications(); runCurrent()
+            model.changeMode(EditorMode.READ); runCurrent()
+            repo.saveWait!!.complete(Unit); runCurrent()
+            assertTrue(model.flush())
+            assertEquals("保存第一版，继续中文输入", repo.note.document.text)
+            assertEquals(repo.note.document.text, model.session!!.content.source)
+            assertNull(repo.draft)
+            assertEquals("已保存", model.persistence!!.status.value.label)
+        } finally { model.viewModelScope.coroutineContext[Job]!!.cancelAndJoin(); Dispatchers.resetMain() }
+    }
     @Test fun focusAndCursorChangesDoNotStartParsingAndTypingDebouncesFullParsing() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val repo = MemoryNotes(); var parses = 0

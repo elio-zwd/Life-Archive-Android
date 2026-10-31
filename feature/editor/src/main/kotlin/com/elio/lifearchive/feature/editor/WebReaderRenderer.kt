@@ -110,7 +110,7 @@ object WebReaderRenderer : ReaderRenderer {
                     }
                 }
                 webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView, url: String) { if (view.tag != null) view.evaluateJavascript("window.readerUpdate?.($currentConfiguration)", null) }
+                    override fun onPageFinished(view: WebView, url: String) { if (view.tag != null) view.evaluateJavascript(configurationScript(currentConfiguration), null) }
                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
                         val uri = request.url
                         if (view.tag == null || uri.scheme != "https" || uri.host != "appassets.androidplatform.net") return missing()
@@ -209,11 +209,13 @@ object WebReaderRenderer : ReaderRenderer {
         }, update = { view ->
             bindNavigation(view)
             view.setBackgroundColor(background.toArgb())
-            if (view.tag != configuration) { view.tag = configuration; view.evaluateJavascript("window.readerUpdate?.($configuration)", null) }
+            if (view.tag != configuration) { view.tag = configuration; view.evaluateJavascript(configurationScript(configuration), null) }
         }, onRelease = { it.tag = null; navigation?.request = null; navigation?.jump = null; it.stopLoading(); it.webViewClient = WebViewClient(); it.destroy() })
         if (!revealed) LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }
+    private fun configurationScript(configuration: String) = "window.readerUpdate ? window.readerUpdate($configuration) : (window.readerPendingConfiguration = $configuration)"
+
     internal suspend fun resourceResponse(header: String?, open: suspend (Long, Long?) -> CacheStream?): WebResourceResponse {
         val info = open(0, 0) ?: return missing(); info.stream.close()
         val range = requestedRange(header, info.length)

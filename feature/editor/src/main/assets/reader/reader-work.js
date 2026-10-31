@@ -51,7 +51,8 @@ export class ReaderWork {
     if (!this.tasks.length) return;
     // 嵌入内容会加入新任务，逐轮准备首屏，但不等待 PDF、图片或媒体解码。
     for (let round = 0; round < 14 && this.context.current(); round++) {
-      const anchor = offset ? [...root.querySelectorAll('[data-source]')].filter(n => !n.closest('.embedded-note') && Number(n.dataset.source) <= offset).at(-1) : null;
+      // System WebView 可能缺少 Array.at；恢复阅读位置不能依赖该方法。
+      const anchor = offset ? [...root.querySelectorAll('[data-source]')].filter(n => !n.closest('.embedded-note') && Number(n.dataset.source) <= offset).slice(-1)[0] : null;
       const top = offset && anchor ? anchor.getBoundingClientRect().top - root.getBoundingClientRect().top : 0;
       const tasks = this.tasks.filter(t => t.state === 'pending' && t.kind !== 'attachment' && this.inBand(t, top, top + innerHeight, root));
       if (!tasks.length) break;
@@ -60,8 +61,15 @@ export class ReaderWork {
   }
   mount(root) {
     this.root = root; this.visible = true;
-    this.observer = new IntersectionObserver(() => this.schedule(), { rootMargin: '100% 0px' });
-    for (const task of this.tasks) this.observer.observe(task.node);
+    if (typeof IntersectionObserver === 'function') {
+      this.observer = new IntersectionObserver(() => this.schedule(), { rootMargin: '100% 0px' });
+      for (const task of this.tasks) this.observer.observe(task.node);
+    } else {
+      // 旧 WebView 用同一范围调度器降级，仍按需加载且保留附件并发限制。
+      this.viewportChanged = () => this.schedule();
+      window.addEventListener('scroll', this.viewportChanged, { passive: true });
+      window.addEventListener('resize', this.viewportChanged);
+    }
     this.toggle = () => this.schedule(); root.addEventListener('toggle', this.toggle, true);
     this.schedule();
   }
@@ -90,5 +98,9 @@ export class ReaderWork {
       await new Promise(resolve => setTimeout(resolve, 20));
     }
   }
-  dispose() { this.observer?.disconnect(); if (this.frame) cancelAnimationFrame(this.frame); this.root?.removeEventListener('toggle', this.toggle, true); }
+  dispose() {
+    this.observer?.disconnect(); if (this.frame) cancelAnimationFrame(this.frame);
+    this.root?.removeEventListener('toggle', this.toggle, true);
+    if (this.viewportChanged) { window.removeEventListener('scroll', this.viewportChanged); window.removeEventListener('resize', this.viewportChanged); }
+  }
 }
