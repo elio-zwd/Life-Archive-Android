@@ -28,7 +28,19 @@ pwsh.exe -NoProfile -File .\tools\tests\Run-BuildScriptTests.ps1
 
 未操作真实设备，真实 ADB 覆盖安装与设备行为仍为 **NOT_VERIFIED**；脚本变更未修改 Android 业务源码，不重复既有完整一期验收。
 
-## 0.2.6 视频摘记补充验证
+## 粘贴建笔记与提示词优化验证
+
+独立更新 source 的验证见[链接更新交接](../engineering/phase-1-update-video-link-20261101.md)。定向入口为 `:core:document:test :feature:notes:testDebugUnitTest :feature:editor:testDebugUnitTest :app:testDebugUnitTest`；`SourceLinkNavigationTest` 检查预览／阅读／编辑、真实剪贴板接口、取消、多链接与重建；`SourceLinkCompositionTest` 使用真实 InputConnection 检查中文组合输入阻断。`SourceLinkDialogPreviewTest` 生成三主题长链接对话框截图，默认目录为仓库外 `D:/Temp/life-archive-update-link-20261101/`，可用 `LIFE_ARCHIVE_SOURCE_PREVIEW` 指定。
+
+本轮职场／生活提示词文案优化见[提示词交接](../engineering/phase-1-video-prompts-20261101.md)，定向执行架构检查、notes 单测、`VideoNotesNavigationTest` 与 Debug APK 构建；校验每类完整文本不超过 1000 字符及 YAML 格式示例可解析。此前完整一期检查仍保留其历史范围。
+
+2026-11-01 后续需求见[粘贴交接](../engineering/phase-1-paste-notes-handoff-20261101.md)。定向入口为 `:feature:notes:testDebugUnitTest :app:testDebugUnitTest :core:preferences:testDebugUnitTest`，完整入口仍为 `checkArchitecture verifyPhaseOne`，使用 PowerShell 7、JDK 17，不连接设备。
+
+新增检查覆盖 YAML 标题及两种标签列表、未知属性／BOM／CRLF 保留、普通文本补属性、标题回退和安全转义、全文围栏与内部代码、异常 YAML、Windows 名称／长度、重名后缀、失败重试、重复点击、首页预览取消不落盘、Activity 重建不重读剪贴板、真实 Repository 创建与标签筛选。原自定义提示词与完整备份回归保留；阅读浏览器检查继续验证标题、粗体和高亮展示。Compose 预览增加粘贴页和含可见粘贴按钮的首页三种风格图片。
+
+同日用户追加统一主题，`SharedThemeNavigationTest` 验证唯一的三风格选择器、首页实际文字配色、阅读切换返回首页、设置切换、重建持久化。全 App 沿用 documentTheme 与原备份结构，旧首页浅深设置只用于历史兼容，当前界面不再提供独立选择。
+
+## 0.2.6 视频摘记补充验证（初版历史）
 
 这是一期完成后的新增需求，检查范围与设备待验收项见[视频摘记交接](../engineering/phase-1-video-notes-handoff-20261101.md)，不重新打开历史未填验收表。
 
