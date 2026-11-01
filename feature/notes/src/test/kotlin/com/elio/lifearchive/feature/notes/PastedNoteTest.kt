@@ -76,4 +76,26 @@ class PastedNoteTest {
         assertTrue(LibraryPath.isValid("$folder/$name.md"))
         assertTrue(name.endsWith(" (10)"))
     }
+
+    @Test fun defaultsContainSaveContractAndMarkingRulesForEveryType() {
+        com.elio.lifearchive.core.preferences.VideoPromptType.entries.forEach {
+            val prompt = it.defaultPrompt
+            listOf("YAML", "title", "tags", "2～4", "大类", "**粗体**", "==高亮==", "Obsidian 课程辅助资料生成规则", "不虚构来源").forEach { rule -> assertTrue(rule, prompt.contains(rule)) }
+            assertFalse(prompt.contains("不必生成 YAML"))
+            assertTrue("${it.name}: ${prompt.length}", prompt.length <= 1000)
+            assertFalse(prompt.contains("API、函数"))
+            assertTrue(prompt.contains("四个反引号"))
+            val sample = prompt.substringAfter("````markdown\n").substringBefore("\n````")
+            val parsed = parsePastedNote(sample, null)
+            assertEquals("准确简短的主题标题", parsed.name)
+            assertEquals(listOf("大类标签一", "大类标签二"), parsed.tags)
+            assertEquals(sample, parsed.body)
+            assertTrue(sample.contains("\nsource: \"\"\n"))
+            val withSource = sample.replace("source: \"\"", "source: \"https://example.test/video?a=1&b=2\"")
+            val sourceNote = parsePastedNote("````markdown\n$withSource\n````", null)
+            assertEquals(withSource, sourceNote.body)
+            assertEquals(parsed.name, sourceNote.name)
+            assertEquals(parsed.tags, sourceNote.tags)
+        }
+    }
 }

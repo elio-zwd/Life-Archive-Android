@@ -118,7 +118,7 @@ fun VideoNotesScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (state.tab == 0) {
-                    Text("选择类型，复制到点点总结视频。模板是试用初稿，可以按实际效果修改。", style = MaterialTheme.typography.bodyMedium)
+                    Text("选择类型，复制到点点整理职场与生活视频。默认模板每类不超过 1000 字符，包含 YAML、大类标签和阅读标记；生成后复制笔记代码块的内容。已有自定义模板可通过恢复默认更新。", style = MaterialTheme.typography.bodyMedium)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(VideoPromptType.entries, key = { it.name }) { type ->
                             FilterChip(selected = state.selectedType == type, enabled = !state.busy, onClick = { onType(type) }, label = { Text(type.label) }, modifier = Modifier.testTag("video-type-${type.name}"))
