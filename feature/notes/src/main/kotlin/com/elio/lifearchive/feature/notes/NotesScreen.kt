@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,14 +52,10 @@ private data class HomeColors(
 )
 
 @Composable
-private fun homeColors(): HomeColors =
-    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) HomeColors(
-        Color(0xFF25292F), Color(0xFF303740), Color(0xFFF0F3F9), Color(0xFFB3BFCD),
-        Color(0xFF424A56), Color(0xFF39424D), Color(0xFF253D5D), Color(0xFF8AB7FF), Color(0xFF287FF7),
-    ) else HomeColors(
-        Color(0xFFFCFDFF), Color.White, Color(0xFF101F37), Color(0xFF5F6E82),
-        Color(0xFFE9EDF3), Color(0xFFF1F4F8), Color(0xFFEAF2FF), Color(0xFF145ED7), Color(0xFF1766F5),
-    )
+private fun homeColors(): HomeColors = MaterialTheme.colorScheme.let {
+    HomeColors(it.background, it.surface, it.onSurface, it.onSurfaceVariant,
+        it.outlineVariant, it.surfaceVariant, it.primaryContainer, it.primary, it.primary)
+}
 
 @Composable
 fun NotesScreen(
@@ -168,7 +163,7 @@ fun NotesScreen(
                     .clickable(enabled = !state.creating, onClick = newNote)
                     .semantics { contentDescription = "新建笔记" }.testTag("new-note"),
                 contentAlignment = Alignment.Center,
-            ) { HomeIcon("pencil", Color.White, Modifier.size(24.dp)) }
+            ) { HomeIcon("pencil", MaterialTheme.colorScheme.onPrimary, Modifier.size(24.dp)) }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {

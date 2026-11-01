@@ -11,7 +11,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.elio.lifearchive.core.designsystem.LifeArchiveTheme
+import com.elio.lifearchive.core.designsystem.DocumentPageTheme
+import com.elio.lifearchive.core.designsystem.DocumentPalette
+import com.elio.lifearchive.core.preferences.DocumentTheme
+import com.elio.lifearchive.core.preferences.resolvedDocumentTheme
 import com.elio.lifearchive.core.preferences.ThemeMode
 import com.elio.lifearchive.core.preferences.PreferencesRepository
 import com.elio.lifearchive.domain.notes.NotesRepository
@@ -43,7 +46,12 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.DARK -> true
                 ThemeMode.LIGHT -> false
             }
-            LifeArchiveTheme(darkTheme = dark) {
+            val palette = when (state.preferences.resolvedDocumentTheme(dark)) {
+                DocumentTheme.BLUE -> DocumentPalette.BLUE
+                DocumentTheme.WARM -> DocumentPalette.WARM
+                DocumentTheme.GRAPHITE -> DocumentPalette.GRAPHITE
+            }
+            DocumentPageTheme(palette) {
                 when {
                     state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
                     !state.ready -> Scaffold { Text("正在恢复本地状态…", modifier = androidx.compose.ui.Modifier.padding(it)) }

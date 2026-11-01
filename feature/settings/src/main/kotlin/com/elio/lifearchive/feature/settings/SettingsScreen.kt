@@ -9,16 +9,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.elio.lifearchive.core.preferences.*
+import com.elio.lifearchive.core.designsystem.LocalDocumentTheme
+import com.elio.lifearchive.core.designsystem.label
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun SettingsScreen(state: SettingsUiState, preferences: UserPreferences, onBack: () -> Unit, onTheme: (ThemeMode) -> Unit, onFont: (Float) -> Unit, onRemote: (RemoteLoading) -> Unit, onClearCache: () -> Unit, onImportFiles: () -> Unit, onImportDirectory: () -> Unit, onExport: () -> Unit, onBackup: () -> Unit, onPickRestore: () -> Unit, onRestore: () -> Unit, onCancelRestore: () -> Unit, onImport: () -> Unit, onCancelImport: () -> Unit, onClearReaderCache: () -> Unit = {}) {
+@Composable fun SettingsScreen(state: SettingsUiState, preferences: UserPreferences, onBack: () -> Unit, onTheme: () -> Unit, onFont: (Float) -> Unit, onRemote: (RemoteLoading) -> Unit, onClearCache: () -> Unit, onImportFiles: () -> Unit, onImportDirectory: () -> Unit, onExport: () -> Unit, onBackup: () -> Unit, onPickRestore: () -> Unit, onRestore: () -> Unit, onCancelRestore: () -> Unit, onImport: () -> Unit, onCancelImport: () -> Unit, onClearReaderCache: () -> Unit = {}) {
     BackHandler(enabled = state.busy) { }
     Scaffold(topBar = { TopAppBar(title = { Text("设置与资料管理") }, navigationIcon = { TextButton(onClick = onBack, enabled = !state.busy) { Text("返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             Text("显示", style = MaterialTheme.typography.titleMedium)
-            Row { ThemeMode.entries.forEach { mode -> TextButton(onClick = { onTheme(mode) }, enabled = !state.busy) { Text((if (mode == preferences.theme) "✓ " else "") + when (mode) { ThemeMode.SYSTEM -> "跟随系统"; ThemeMode.LIGHT -> "浅色"; ThemeMode.DARK -> "深色" }) } } }
+            TextButton(onClick = onTheme, enabled = !state.busy) { Text("主题：${LocalDocumentTheme.current.label}") }
             Text("字号：${(preferences.fontScale * 100).toInt()}%")
             var scale by remember(preferences.fontScale) { mutableFloatStateOf(preferences.fontScale) }
             Slider(value = scale.coerceIn(.5f, 3f), onValueChange = { scale = it }, onValueChangeFinished = { onFont(scale) }, valueRange = .5f..3f, enabled = !state.busy)

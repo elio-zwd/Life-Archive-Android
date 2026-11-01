@@ -35,6 +35,8 @@ import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.core.preferences.*
 import com.elio.lifearchive.core.designsystem.DocumentPageTheme
 import com.elio.lifearchive.core.designsystem.DocumentPalette
+import com.elio.lifearchive.core.designsystem.ThemeStyleDialog
+import com.elio.lifearchive.core.designsystem.label
 import androidx.core.view.WindowCompat
 import com.elio.lifearchive.domain.notes.*
 import com.elio.lifearchive.feature.editor.*
@@ -80,7 +82,24 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
     val homeDark = when (values.theme) { ThemeMode.SYSTEM -> systemDark; ThemeMode.DARK -> true; ThemeMode.LIGHT -> false }
     val documentTheme = values.resolvedDocumentTheme(homeDark)
     val documentPalette = when (documentTheme) { DocumentTheme.BLUE -> DocumentPalette.BLUE; DocumentTheme.WARM -> DocumentPalette.WARM; DocumentTheme.GRAPHITE -> DocumentPalette.GRAPHITE }
-    val currentDark = if (backStack.lastOrNull() is NoteDestination) documentPalette == DocumentPalette.GRAPHITE else homeDark
+    val currentDark = documentPalette == DocumentPalette.GRAPHITE
+    var themePicker by rememberSaveable { mutableStateOf(false) }
+    var themeError by rememberSaveable { mutableStateOf<String?>(null) }
+    fun chooseTheme(chosen: DocumentTheme) {
+        libraryOperation {
+            try { preferences.setDocumentTheme(chosen) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { themeError = e.message ?: "请重试" }
+        }
+    }
+    if (themePicker) ThemeStyleDialog(documentPalette, onDismiss = { themePicker = false }, onChoose = {
+        themePicker = false
+        chooseTheme(when (it) { DocumentPalette.BLUE -> DocumentTheme.BLUE; DocumentPalette.WARM -> DocumentTheme.WARM; DocumentPalette.GRAPHITE -> DocumentTheme.GRAPHITE })
+    })
+    themeError?.let { failure -> AlertDialog(
+        onDismissRequest = { themeError = null }, title = { Text("主题保存失败") },
+        text = { Text(failure) }, confirmButton = { TextButton(onClick = { themeError = null }) { Text("关闭") } },
+    ) }
     SideEffect {
         activity?.window?.let { window ->
             WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -221,14 +240,8 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                             }
                         }
                     },
-                    onTheme = {
-                        libraryOperation {
-                            try { preferences.setTheme(when (values.theme) { ThemeMode.SYSTEM -> ThemeMode.LIGHT; ThemeMode.LIGHT -> ThemeMode.DARK; ThemeMode.DARK -> ThemeMode.SYSTEM }) }
-                            catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                            catch (e: Exception) { message = "主题保存失败：${e.message}" }
-                        }
-                    },
-                    themeLabel = when (values.theme) { ThemeMode.SYSTEM -> "跟随系统"; ThemeMode.LIGHT -> "浅色"; ThemeMode.DARK -> "深色" },
+                    onTheme = { themePicker = true },
+                    themeLabel = documentPalette.label,
                     onClearError = model::clearError, sampleBusy = creatingSample, message = message,
                     onQuery = model::query, onSettings = { if (settings != null) backStack.add(SettingsDestination) },
                     onBackup = { if (settings != null) pickExport("backup") }, loadThumbnail = model::loadThumbnail,
@@ -256,11 +269,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                             val detail = withContext(Dispatchers.IO) { library?.metadata(NoteId(key.id)) }
                             if (backStack.lastOrNull() == key) (detail as? NoteResult.Success)?.value?.let(::openCover)
                         } },
-                        onDocumentTheme = { chosen -> libraryOperation {
-                            try { preferences.setDocumentTheme(chosen) }
-                            catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                            catch (e: Exception) { model.message("文档主题保存失败：${e.message}") }
-                        } },
+                        onDocumentTheme = ::chooseTheme,
                     )
                 }
             }
@@ -281,7 +290,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 LaunchedEffect(Unit) { settings?.refreshCache() }
                 if (settings != null) {
                     val state by settings.state.collectAsStateWithLifecycle()
-                    SettingsScreen(state, values, onBack = { backStack.removeLastOrNull() }, onTheme = settings::theme, onFont = settings::font, onRemote = settings::remote,
+                    SettingsScreen(state, values, onBack = { backStack.removeLastOrNull() }, onTheme = { themePicker = true }, onFont = settings::font, onRemote = settings::remote,
                         onClearCache = settings::clearCache, onClearReaderCache = settings::clearReaderCache, onImportFiles = { importPicker.launch(arrayOf("text/markdown", "text/plain", "application/octet-stream")) },
                         onImportDirectory = { directoryPicker.launch(null) }, onExport = { pickExport("zip") }, onBackup = { pickExport("backup") },
                         onPickRestore = { backupPicker.launch(arrayOf("application/zip", "application/octet-stream")) }, onRestore = { settings.restore(beforeRestore = {

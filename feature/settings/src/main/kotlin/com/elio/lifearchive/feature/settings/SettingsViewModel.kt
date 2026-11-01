@@ -34,7 +34,6 @@ class SettingsViewModel(private val preferences: PreferencesRepository, private 
             finally { mutable.value = state.value.copy(busy = false) }
         }
     }
-    fun theme(value: ThemeMode) = run { preferences.setTheme(value); "主题已保存" }
     fun font(value: Float) = run { preferences.setFontScale(value); "字号已保存" }
     fun remote(value: RemoteLoading) = run { preferences.setRemoteLoading(value); "远程加载设置已保存" }
     fun clearCache() = run { cache.clear(); mutable.value = state.value.copy(cacheBytes = 0); "已清理远程资源及网页副本，笔记和附件不受影响" }

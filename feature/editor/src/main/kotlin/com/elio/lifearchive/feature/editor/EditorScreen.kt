@@ -6,8 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,7 +17,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,7 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.lifearchive.domain.notes.NoteId
 import com.elio.lifearchive.core.preferences.DocumentTheme
 import com.elio.lifearchive.core.designsystem.DocumentPalette
-import com.elio.lifearchive.core.designsystem.colors
+import com.elio.lifearchive.core.designsystem.ThemeStyleDialog
 import kotlinx.coroutines.launch
 
 @Composable
@@ -205,37 +202,9 @@ private fun HeaderButton(label: String, glyph: HeaderGlyph, onClick: () -> Unit,
 
 @Composable
 private fun DocumentThemeDialog(current: DocumentTheme, onDismiss: () -> Unit, onChoose: (DocumentTheme) -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    val choices = listOf(
-        Triple(DocumentTheme.BLUE, "A · 浅灰蓝", "极简写作 · 轻量蓝色工具"),
-        Triple(DocumentTheme.WARM, "B · 暖纸色", "温润手记 · 柔和灰绿强调"),
-        Triple(DocumentTheme.GRAPHITE, "C · 深石墨", "专注阅读 · 低亮度深色画布"),
+    ThemeStyleDialog(
+        when (current) { DocumentTheme.BLUE -> DocumentPalette.BLUE; DocumentTheme.WARM -> DocumentPalette.WARM; DocumentTheme.GRAPHITE -> DocumentPalette.GRAPHITE },
+        onDismiss = onDismiss,
+        onChoose = { onChoose(when (it) { DocumentPalette.BLUE -> DocumentTheme.BLUE; DocumentPalette.WARM -> DocumentTheme.WARM; DocumentPalette.GRAPHITE -> DocumentTheme.GRAPHITE }) },
     )
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("主题") }, text = {
-        Column {
-            Text("阅读与编辑共用主题，首页外观保持独立。", color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 14.dp))
-            choices.forEach { (theme, label, description) ->
-                val selected = current == theme
-                val palette = when (theme) { DocumentTheme.BLUE -> DocumentPalette.BLUE; DocumentTheme.WARM -> DocumentPalette.WARM; DocumentTheme.GRAPHITE -> DocumentPalette.GRAPHITE }.colors
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).selectable(selected = selected, role = Role.RadioButton, onClick = { onChoose(theme) }),
-                    shape = RoundedCornerShape(12.dp), color = if (selected) scheme.primaryContainer else scheme.surface,
-                    border = BorderStroke(1.dp, if (selected) scheme.primary else scheme.outlineVariant),
-                ) {
-                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = RoundedCornerShape(8.dp), color = palette.background, border = BorderStroke(1.dp, palette.line)) {
-                            Box(Modifier.size(width = 44.dp, height = 50.dp), contentAlignment = Alignment.Center) {
-                                Text("Aa", color = palette.accent, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text(description, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (selected) Text("✓", color = scheme.primary, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
-                    }
-                }
-            }
-        }
-    }, confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } })
 }
