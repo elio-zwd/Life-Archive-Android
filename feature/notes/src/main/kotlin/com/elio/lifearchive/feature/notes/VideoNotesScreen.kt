@@ -22,12 +22,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.lifearchive.core.preferences.MAX_VIDEO_PROMPT_LENGTH
 import com.elio.lifearchive.core.preferences.VideoPromptType
 import com.elio.lifearchive.domain.notes.NoteId
+import com.elio.lifearchive.core.document.DocumentAnalyzer
+
+private fun readClipboard(context: Context): String? {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = clipboard.primaryClip
+    return if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
+}
 
 @Composable
 fun VideoNotesRoute(model: VideoNotesViewModel, active: Boolean = true, onBack: () -> Unit, onCreated: (NoteId) -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmRestore by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(active) {
+        // 首页点击明确授权本次读取；重建或从阅读返回时不再次读取剪贴板。
+        if (active && model.captureOnly) model.initialPaste { readClipboard(context) }
+    }
     val leave = { model.leave(onBack) }
     BackHandler(enabled = active) { leave() }
     LaunchedEffect(state.createdNote, active) {
@@ -47,16 +58,15 @@ fun VideoNotesRoute(model: VideoNotesViewModel, active: Boolean = true, onBack: 
         onPaste = {
             try {
                 // 只在明确点击后读取文字；不把 URI 强制转换为文本或访问剪贴板内容。
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = clipboard.primaryClip
-                model.paste(if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null)
+                model.paste(readClipboard(context))
             } catch (e: Exception) { model.error("读取剪贴板失败：${e.message ?: "请手动粘贴"}") }
         },
         onCreate = model::create, onReload = model::loadPrompts,
+        captureOnly = model.captureOnly,
     )
     if (state.pendingPaste != null) AlertDialog(
         onDismissRequest = { model.confirmPaste(false) }, title = { Text("替换已有正文？") },
-        text = { Text("将用这次复制的文字替换当前总结，笔记名和来源保留。") },
+        text = { Text("将重新解析这次复制的内容；手动修改的笔记名和来源保留。") },
         confirmButton = { TextButton(onClick = { model.confirmPaste(true) }) { Text("替换正文") } },
         dismissButton = { TextButton(onClick = { model.confirmPaste(false) }) { Text("取消") } },
     )
@@ -82,25 +92,27 @@ fun VideoNotesScreen(
     onSavePrompt: () -> Unit, onRestorePrompt: () -> Unit, onCopy: () -> Unit,
     onName: (String) -> Unit, onBody: (String) -> Unit, onSource: (String) -> Unit,
     onPaste: () -> Unit, onCreate: () -> Unit, onReload: () -> Unit,
+    captureOnly: Boolean = false,
 ) {
     val promptScroll = rememberScrollState()
     val captureScroll = rememberScrollState()
     Scaffold(
         modifier = Modifier.testTag("video-notes"),
         topBar = {
-            TopAppBar(title = { Text("视频摘记") }, navigationIcon = {
+            TopAppBar(title = { Text(if (captureOnly) "粘贴预览" else "视频摘记") }, navigationIcon = {
                 TextButton(onClick = onBack, enabled = !state.busy, modifier = Modifier.semantics { contentDescription = "返回" }) { Text("返回") }
             })
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
-            PrimaryTabRow(selectedTabIndex = state.tab) {
+            if (!captureOnly) PrimaryTabRow(selectedTabIndex = state.tab) {
                 listOf("复制提示词", "收录总结").forEachIndexed { index, label ->
                     Tab(selected = state.tab == index, enabled = !state.busy, onClick = { onTab(index) }, text = { Text(label) }, modifier = Modifier.testTag("video-tab-$index"))
                 }
             }
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("video-error")) }
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("video-message")) }
+            state.warning?.let { Text(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("paste-warning")) }
             Column(
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(if (state.tab == 0) promptScroll else captureScroll).padding(16.dp).testTag("video-form"),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -128,12 +140,14 @@ fun VideoNotesScreen(
                         TextButton(onClick = onRestorePrompt, enabled = ready, modifier = Modifier.weight(1f).testTag("video-restore-prompt")) { Text("恢复默认") }
                     }
                 } else {
-                    Text("保存到：${folder ?: "根目录"}。任何文字都可收录，不要求固定总结格式。", style = MaterialTheme.typography.bodyMedium)
+                    Text("保存到：${folder ?: "根目录"}。已自动识别名称和标签，确认内容后保存；普通文本也可收录。", style = MaterialTheme.typography.bodyMedium)
                     OutlinedTextField(state.name, onName, label = { Text("笔记名（文件名，不含 .md）") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-name"))
-                    OutlinedButton(onClick = onPaste, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-paste")) { Text("粘贴总结") }
-                    OutlinedTextField(state.body, onBody, label = { Text("总结正文") }, minLines = 6, maxLines = 12, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-body"))
-                    OutlinedTextField(state.source, onSource, label = { Text("来源（可选）") }, supportingText = { Text("可粘贴原始分享文字或链接，仅追加到正文末尾。") }, minLines = 2, maxLines = 4, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-source"))
-                    Button(onClick = onCreate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-save-note")) { Text(if (state.savingNote) "正在收录…" else "保存并编辑") }
+                    val tags = remember(state.body) { runCatching { DocumentAnalyzer.analyze(state.body).tags }.getOrDefault(emptyList()) }
+                    Text(if (tags.isEmpty()) "标签：无（可直接保存）" else "标签：${tags.joinToString("、")}", modifier = Modifier.testTag("paste-tags"))
+                    OutlinedButton(onClick = onPaste, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-paste")) { Text(if (captureOnly) "重新粘贴" else "粘贴总结") }
+                    OutlinedTextField(state.body, onBody, label = { Text("Markdown 内容（含 YAML，可修改）") }, minLines = 6, maxLines = 12, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-body"))
+                    if (!captureOnly) OutlinedTextField(state.source, onSource, label = { Text("来源（可选）") }, supportingText = { Text("可粘贴原始分享文字或链接，仅追加到正文末尾。") }, minLines = 2, maxLines = 4, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-source"))
+                    Button(onClick = onCreate, enabled = !state.busy && state.body.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("video-save-note")) { Text(if (state.savingNote) "正在保存…" else "保存") }
                 }
             }
         }

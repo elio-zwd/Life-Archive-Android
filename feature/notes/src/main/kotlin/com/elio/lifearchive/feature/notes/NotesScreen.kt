@@ -68,6 +68,7 @@ fun NotesScreen(
     listState: LazyListState = rememberLazyListState(),
     loadThumbnail: suspend (NoteId, String, LinkSyntax) -> ImageBitmap? = { _, _, _ -> null },
     onVideoNotes: () -> Unit = {},
+    onPaste: () -> Unit = {},
 ) {
     var naming by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -109,6 +110,7 @@ fun NotesScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Life Archive", Modifier.weight(1f), color = colors.ink, fontSize = 25.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp)
+                    TextButton(onClick = onPaste, enabled = !state.query.trash && !state.creating, modifier = Modifier.testTag("home-paste")) { Text("粘贴") }
                     HomeIconButton("本地备份", "cloud", colors.ink, onBackup)
                     Box {
                         HomeIconButton("更多操作", "more", colors.ink, { more = true }, Modifier.testTag("home-more"))

@@ -24,6 +24,18 @@ import org.robolectric.annotation.Config
 class NotesScreenTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun pasteIsVisibleAndDisabledInTrashOrDuringCreation() {
+        var state by mutableStateOf(NotesUiState(loading = false))
+        var clicks = 0
+        compose.setContent { MaterialTheme { NotesScreen(state, {}, { _, _ -> }, {}, {}, "浅色", {}, onPaste = { clicks++ }) } }
+        compose.onNodeWithTag("home-paste").assertIsDisplayed().performClick()
+        assertEquals(1, clicks)
+        compose.runOnIdle { state = state.copy(query = NotesQuery(trash = true)) }
+        compose.onNodeWithTag("home-paste").assertIsNotEnabled()
+        compose.runOnIdle { state = state.copy(query = NotesQuery(), creating = true) }
+        compose.onNodeWithTag("home-paste").assertIsNotEnabled()
+    }
+
     private class CountingList<T>(private val entries: List<T>) : AbstractList<T>() {
         var reads = 0
         override val size get() = entries.size

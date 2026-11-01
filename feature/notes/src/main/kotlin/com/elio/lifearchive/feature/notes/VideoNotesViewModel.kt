@@ -8,6 +8,7 @@ import com.elio.lifearchive.core.preferences.PreferencesRepository
 import com.elio.lifearchive.core.preferences.VideoPromptType
 import com.elio.lifearchive.domain.notes.NoteId
 import com.elio.lifearchive.domain.notes.NoteResult
+import com.elio.lifearchive.domain.notes.NoteSnapshot
 import com.elio.lifearchive.domain.notes.NotesRepository
 import com.elio.lifearchive.domain.notes.failureMessage
 import kotlinx.coroutines.CancellationException
@@ -51,13 +52,14 @@ data class VideoNotesUiState(
     val confirmLeave: Boolean = false,
     val message: String? = null,
     val error: String? = null,
+    val warning: String? = null,
 ) {
     val busy get() = savingPrompt || savingNote || createdNote != null
     val hasUnsavedInput get() = name.isNotEmpty() || body.isNotEmpty() || source.isNotEmpty() || prompts != savedPrompts
     val prompt get() = prompts.getValue(selectedType)
 }
 
-/** 保留正文全部字节顺序；来源只追加在末尾，不从总结推导文件名或属性。 */
+/** 保留正文全部字节顺序；来源只追加在末尾。 */
 internal fun videoSummaryBody(body: String, source: String): String =
     if (source.isBlank()) body else {
         val newline = if (body.contains("\r\n")) "\r\n" else "\n"
@@ -68,12 +70,47 @@ class VideoNotesViewModel(
     private val notes: NotesRepository,
     private val preferences: PreferencesRepository,
     val folder: String?,
+    val captureOnly: Boolean = false,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(VideoNotesUiState())
+    private val mutableState = MutableStateFlow(VideoNotesUiState(tab = if (captureOnly) 1 else 0))
     val state = mutableState.asStateFlow()
     private var readingPrompts = false
+    private var initialPasteHandled = false
+    private var manualName = false
+    private var knownPaths: List<String> = emptyList()
 
-    init { loadPrompts() }
+    init {
+        if (!captureOnly) loadPrompts()
+        viewModelScope.launch {
+            try { notes.observeNotes().collect { values -> knownPaths = values.map { it.path.value } } }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { /* 创建仍通过 Repository 的路径冲突结果兜底。 */ }
+        }
+    }
+
+    fun initialPaste(read: () -> String?) {
+        if (initialPasteHandled) return
+        initialPasteHandled = true
+        try { paste(read()) }
+        catch (e: Exception) { error("读取剪贴板失败：${e.message ?: "请手动粘贴"}") }
+    }
+
+    private fun uniqueName(base: String): String {
+        for (index in 0..1000) {
+            val name = pastedFileName(base, folder, if (index == 0) "" else " ($index)")
+            val path = (folder?.let { "$it/" } ?: "") + "$name.md"
+            if (!LibraryPath.conflicts(path, knownPaths)) return name
+        }
+        throw IllegalStateException("同名笔记过多，请修改名称")
+    }
+
+    private fun applyPaste(text: String) {
+        try {
+            val parsed = parsePastedNote(text, folder)
+            mutableState.value = state.value.copy(body = parsed.body,
+                name = if (manualName) state.value.name else uniqueName(parsed.name), warning = parsed.warning, error = null)
+        } catch (e: Exception) { mutableState.value = state.value.copy(body = text, warning = "识别失败，原文已保留：${e.message}") }
+    }
 
     fun loadPrompts() {
         if (readingPrompts || state.value.promptsLoaded || state.value.busy) return
@@ -95,9 +132,10 @@ class VideoNotesViewModel(
     fun prompt(value: String) {
         if (!state.value.busy && state.value.promptsLoaded) mutableState.value = state.value.copy(prompts = state.value.prompts + (state.value.selectedType to value), message = null, error = null)
     }
-    fun name(value: String) { if (!state.value.busy) mutableState.value = state.value.copy(name = value, error = null) }
+    fun name(value: String) { if (!state.value.busy) { manualName = value.isNotBlank(); mutableState.value = state.value.copy(name = value, error = null) } }
     fun body(value: String) { if (!state.value.busy) mutableState.value = state.value.copy(body = value, error = null) }
     fun source(value: String) { if (!state.value.busy) mutableState.value = state.value.copy(source = value, error = null) }
+
     fun message(value: String) { mutableState.value = state.value.copy(message = value, error = null) }
     fun error(value: String) { mutableState.value = state.value.copy(error = value, message = null) }
 
@@ -125,12 +163,13 @@ class VideoNotesViewModel(
         when {
             text.isNullOrBlank() -> error("剪贴板为空或不含可收录的文字")
             state.value.body.isNotEmpty() -> mutableState.value = state.value.copy(pendingPaste = text)
-            else -> body(text)
+            else -> applyPaste(text)
         }
     }
     fun confirmPaste(accept: Boolean) {
         val text = state.value.pendingPaste ?: return
-        mutableState.value = state.value.copy(pendingPaste = null, body = if (accept) text else state.value.body, error = null)
+        mutableState.value = state.value.copy(pendingPaste = null)
+        if (accept) applyPaste(text)
     }
 
     fun leave(onLeave: () -> Unit) {
@@ -140,18 +179,30 @@ class VideoNotesViewModel(
     fun cancelLeave() { mutableState.value = state.value.copy(confirmLeave = false) }
 
     fun create() {
+        if (state.value.busy) return
+        if (state.value.body.isBlank()) { error("请先粘贴或填写总结正文"); return }
+        val parsed = try { parsePastedNote(state.value.body, folder) }
+        catch (e: Exception) { error("识别失败：${e.message}"); return }
+        val name = try { state.value.name.ifBlank { uniqueName(parsed.name) } }
+        catch (e: Exception) { error(e.message ?: "无法创建名称"); return }
+        mutableState.value = state.value.copy(body = parsed.body, name = name, warning = parsed.warning)
         val current = state.value
-        if (current.busy) return
         if (!LibraryPath.isValid(current.name) || current.name.contains('/') || current.name.contains('\\')) {
             error("笔记名不能为空，且不能包含路径、非法字符、保留名或尾随空格/点")
             return
         }
-        if (current.body.isBlank()) { error("请先粘贴或填写总结正文"); return }
         mutableState.value = current.copy(savingNote = true, message = null, error = null)
         viewModelScope.launch {
             try {
-                val path = (folder?.let { "$it/" } ?: "") + "${current.name}.md"
-                val result = notes.create(path, RawDocument(videoSummaryBody(current.body, current.source)))
+                var candidate = current.name
+                var result: NoteResult<NoteSnapshot> = NoteResult.PathConflict
+                for (index in 0..100) {
+                    candidate = fitPastedFileName(current.name, folder, if (index == 0) "" else " ($index)")
+                    val path = (folder?.let { "$it/" } ?: "") + "$candidate.md"
+                    result = notes.create(path, RawDocument(videoSummaryBody(current.body, current.source)))
+                    if (result != NoteResult.PathConflict) break
+                }
+                mutableState.value = state.value.copy(name = candidate)
                 if (result is NoteResult.Committed) mutableState.value = state.value.copy(createdNote = result.value.summary.id)
                 else error("收录失败：${result.failureMessage()}")
             } catch (e: CancellationException) { throw e }
@@ -161,5 +212,5 @@ class VideoNotesViewModel(
     }
 
     /** 导航确认消费后再清表单，避免重建页面重复创建或丢掉失败输入。 */
-    fun noteOpened() { mutableState.value = state.value.copy(name = "", body = "", source = "", createdNote = null, message = "总结已收录") }
+    fun noteOpened() { manualName = false; mutableState.value = state.value.copy(name = "", body = "", source = "", warning = null, createdNote = null, message = "笔记已保存") }
 }

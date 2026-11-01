@@ -22,6 +22,29 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class VideoNotesViewModelTest {
+    @Test fun initialPasteReadsOnlyOnceAndConflictRetryKeepsIndependentTitle() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = FakeNotes().apply { conflicts = 1; waiting = CompletableDeferred() }
+        val model = VideoNotesViewModel(repo, FakePreferences(), null, captureOnly = true)
+        try {
+            runCurrent()
+            var reads = 0
+            model.initialPaste { reads++; "# 初始标题\n\n正文" }
+            model.initialPaste { reads++; "不能再读" }
+            assertEquals(1, reads)
+            assertEquals("初始标题", model.state.value.name)
+            model.name("独立文件名")
+            model.create(); model.create(); runCurrent()
+            assertEquals(listOf("独立文件名.md", "独立文件名 (1).md"), repo.creates.map { it.first })
+            assertTrue(repo.creates.last().second.text.contains("title: \"初始标题\""))
+            val note = NoteSnapshot(NoteSummary(NoteId("new"), LibraryPath("独立文件名 (1).md"), DocumentVersion("v1"), false), repo.creates.last().second)
+            repo.result = NoteResult.Committed(note, false)
+            repo.waiting!!.complete(Unit); runCurrent()
+            assertEquals(note.summary.id, model.state.value.createdNote)
+            assertEquals("独立文件名 (1)", model.state.value.name)
+        } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
+
     private class FakePreferences : PreferencesRepository {
         val saved = MutableStateFlow(UserPreferences())
         var readFailure = false
@@ -38,12 +61,14 @@ class VideoNotesViewModelTest {
     private class FakeNotes : NotesRepository {
         val creates = mutableListOf<Pair<String, RawDocument>>()
         var waiting: CompletableDeferred<Unit>? = null
-        var result: NoteResult<NoteSnapshot> = NoteResult.PathConflict
+        var result: NoteResult<NoteSnapshot> = NoteResult.StorageFailure("存储失败")
+        var conflicts = 0
         var throwing = false
         override fun observeNotes() = MutableStateFlow(emptyList<NoteSummary>())
         override suspend fun initialize() = NoteResult.Success(Unit)
         override suspend fun create(path: String, document: RawDocument): NoteResult<NoteSnapshot> {
             creates += path to document
+            if (conflicts-- > 0) return NoteResult.PathConflict
             waiting?.await()
             if (throwing) error("异常故障")
             return result
@@ -89,15 +114,15 @@ class VideoNotesViewModelTest {
         val repo = FakeNotes(); val model = VideoNotesViewModel(repo, FakePreferences(), null)
         try {
             runCurrent(); model.body("无固定格式的一段总结"); model.source("来源原文")
-            for (name in listOf("", "非法/路径", "非法\\路径", "CON", "尾随点.", "尾随空格 ", "a:b")) {
+            for (name in listOf("非法/路径", "非法\\路径", "CON", "尾随点.", "尾随空格 ", "a:b")) {
                 model.name(name); model.create(); runCurrent()
             }
             assertTrue(repo.creates.isEmpty())
             model.name("合法文件名")
-            for (result in listOf(NoteResult.PathConflict, NoteResult.StorageFailure("存储失败"))) {
+            for (result in listOf(NoteResult.StorageFailure("存储失败"))) {
                 repo.result = result; model.create(); runCurrent()
                 assertNull(model.state.value.createdNote); assertFalse(model.state.value.busy)
-                assertEquals("合法文件名", model.state.value.name); assertEquals("无固定格式的一段总结", model.state.value.body)
+                assertEquals("合法文件名", model.state.value.name); assertTrue(model.state.value.body.endsWith("无固定格式的一段总结"))
                 assertEquals("来源原文", model.state.value.source); assertNotNull(model.state.value.error)
             }
             repo.throwing = true; model.create(); runCurrent()
@@ -115,12 +140,12 @@ class VideoNotesViewModelTest {
             var left = false; model.leave { left = true }; assertTrue(left)
             model.name("名称"); model.source("来源")
             model.paste("原正文\n第二行"); model.paste(null)
-            assertEquals("原正文\n第二行", model.state.value.body)
+            assertTrue(model.state.value.body.endsWith("原正文\n第二行"))
             assertNotNull(model.state.value.error)
             model.paste("新总结"); assertEquals("新总结", model.state.value.pendingPaste)
-            model.confirmPaste(false); assertEquals("原正文\n第二行", model.state.value.body)
+            model.confirmPaste(false); assertTrue(model.state.value.body.endsWith("原正文\n第二行"))
             model.paste("新总结"); model.confirmPaste(true)
-            assertEquals("新总结", model.state.value.body)
+            assertTrue(model.state.value.body.endsWith("新总结"))
             assertEquals("名称", model.state.value.name); assertEquals("来源", model.state.value.source)
             left = false; model.leave { left = true }
             assertFalse(left); assertTrue(model.state.value.confirmLeave)
