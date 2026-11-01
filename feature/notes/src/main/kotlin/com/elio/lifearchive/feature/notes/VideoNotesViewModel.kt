@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elio.lifearchive.core.document.LibraryPath
 import com.elio.lifearchive.core.document.RawDocument
+import com.elio.lifearchive.core.document.NoteSource
+import com.elio.lifearchive.core.document.extractSharedWebLinks
+import com.elio.lifearchive.core.designsystem.SourceLinkDialogState
 import com.elio.lifearchive.core.preferences.PreferencesRepository
 import com.elio.lifearchive.core.preferences.VideoPromptType
 import com.elio.lifearchive.domain.notes.NoteId
@@ -80,6 +83,7 @@ data class VideoNotesUiState(
     val message: String? = null,
     val error: String? = null,
     val warning: String? = null,
+    val sourceLink: SourceLinkDialogState? = null,
 ) {
     val busy get() = savingPrompt || savingNote || createdNote != null
     val hasUnsavedInput get() = name.isNotEmpty() || body.isNotEmpty() || source.isNotEmpty() || prompts != savedPrompts
@@ -163,6 +167,37 @@ class VideoNotesViewModel(
     fun body(value: String) { if (!state.value.busy) mutableState.value = state.value.copy(body = value, error = null) }
     fun source(value: String) { if (!state.value.busy) mutableState.value = state.value.copy(source = value, error = null) }
 
+    fun openSourceLink(read: () -> String?) {
+        if (state.value.busy || state.value.body.isBlank()) return
+        val current = runCatching { NoteSource.read(state.value.body).orEmpty() }.getOrDefault("无法识别，请在源码中查看")
+        mutableState.value = state.value.copy(sourceLink = SourceLinkDialogState(current = current))
+        pasteSourceLink(read)
+    }
+    fun pasteSourceLink(read: () -> String?) {
+        if (state.value.busy || state.value.sourceLink == null) return
+        try { sourceLinkText(read().orEmpty()) }
+        catch (e: Exception) { mutableState.value = state.value.copy(sourceLink = state.value.sourceLink?.copy(error = "读取剪贴板失败，请手动粘贴")) }
+    }
+    fun sourceLinkText(text: String) {
+        val dialog = state.value.sourceLink ?: return
+        if (state.value.busy) return
+        val links = extractSharedWebLinks(text)
+        mutableState.value = state.value.copy(sourceLink = dialog.copy(text = text, links = links, selected = links.singleOrNull(),
+            error = if (links.isEmpty()) "未识别到 HTTP／HTTPS 链接，剪贴板可能为空或不含文字，可手动输入。" else null))
+    }
+    fun selectSourceLink(url: String) {
+        val dialog = state.value.sourceLink ?: return
+        if (!state.value.busy && url in dialog.links) mutableState.value = state.value.copy(sourceLink = dialog.copy(selected = url, error = null))
+    }
+    fun dismissSourceLink() { if (!state.value.busy) mutableState.value = state.value.copy(sourceLink = null) }
+    fun applySourceLink() {
+        val url = state.value.sourceLink?.selected ?: return
+        if (state.value.busy) return
+        try {
+            val changed = NoteSource.withUrl(state.value.body, url)
+            mutableState.value = state.value.copy(body = changed, sourceLink = null, error = null, message = "链接已应用，保存笔记后生效")
+        } catch (e: Exception) { mutableState.value = state.value.copy(sourceLink = state.value.sourceLink?.copy(error = e.message ?: "链接未修改，请重试")) }
+    }
     fun message(value: String) { mutableState.value = state.value.copy(message = value, error = null) }
     fun error(value: String) { mutableState.value = state.value.copy(error = value, message = null) }
 
@@ -239,5 +274,5 @@ class VideoNotesViewModel(
     }
 
     /** 导航确认消费后再清表单，避免重建页面重复创建或丢掉失败输入。 */
-    fun noteOpened() { manualName = false; mutableState.value = state.value.copy(name = "", body = "", source = "", warning = null, createdNote = null, message = "笔记已保存") }
+    fun noteOpened() { manualName = false; mutableState.value = state.value.copy(name = "", body = "", source = "", warning = null, sourceLink = null, createdNote = null, message = "笔记已保存") }
 }

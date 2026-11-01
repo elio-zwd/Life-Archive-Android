@@ -23,6 +23,7 @@ import com.elio.lifearchive.core.preferences.MAX_VIDEO_PROMPT_LENGTH
 import com.elio.lifearchive.core.preferences.VideoPromptType
 import com.elio.lifearchive.domain.notes.NoteId
 import com.elio.lifearchive.core.document.DocumentAnalyzer
+import com.elio.lifearchive.core.designsystem.SourceLinkDialog
 
 private fun readClipboard(context: Context): String? {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -63,7 +64,12 @@ fun VideoNotesRoute(model: VideoNotesViewModel, active: Boolean = true, onBack: 
         },
         onCreate = model::create, onReload = model::loadPrompts,
         captureOnly = model.captureOnly,
+        onUpdateSource = { model.openSourceLink { readClipboard(context) } },
     )
+    state.sourceLink?.let { dialog -> SourceLinkDialog(dialog, preview = true,
+        onText = model::sourceLinkText, onSelect = model::selectSourceLink,
+        onPaste = { model.pasteSourceLink { readClipboard(context) } },
+        onConfirm = model::applySourceLink, onDismiss = model::dismissSourceLink) }
     if (state.pendingPaste != null) AlertDialog(
         onDismissRequest = { model.confirmPaste(false) }, title = { Text("替换已有正文？") },
         text = { Text("将重新解析这次复制的内容；手动修改的笔记名和来源保留。") },
@@ -93,6 +99,7 @@ fun VideoNotesScreen(
     onName: (String) -> Unit, onBody: (String) -> Unit, onSource: (String) -> Unit,
     onPaste: () -> Unit, onCreate: () -> Unit, onReload: () -> Unit,
     captureOnly: Boolean = false,
+    onUpdateSource: () -> Unit = {},
 ) {
     val promptScroll = rememberScrollState()
     val captureScroll = rememberScrollState()
@@ -144,6 +151,7 @@ fun VideoNotesScreen(
                     OutlinedTextField(state.name, onName, label = { Text("笔记名（文件名，不含 .md）") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-name"))
                     val tags = remember(state.body) { runCatching { DocumentAnalyzer.analyze(state.body).tags }.getOrDefault(emptyList()) }
                     Text(if (tags.isEmpty()) "标签：无（可直接保存）" else "标签：${tags.joinToString("、")}", modifier = Modifier.testTag("paste-tags"))
+                    OutlinedButton(onClick = onUpdateSource, enabled = !state.busy && state.body.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("update-source")) { Text("更新链接") }
                     OutlinedButton(onClick = onPaste, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-paste")) { Text(if (captureOnly) "重新粘贴" else "粘贴总结") }
                     OutlinedTextField(state.body, onBody, label = { Text("Markdown 内容（含 YAML，可修改）") }, minLines = 6, maxLines = 12, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-body"))
                     if (!captureOnly) OutlinedTextField(state.source, onSource, label = { Text("来源（可选）") }, supportingText = { Text("可粘贴原始分享文字或链接，仅追加到正文末尾。") }, minLines = 2, maxLines = 4, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-source"))

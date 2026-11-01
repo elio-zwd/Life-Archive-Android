@@ -39,6 +39,7 @@ class EditorPersistence(
     private val mutableStatus = MutableStateFlow(SaveStatus(indexPending = initial.summary.indexPending))
     val status = mutableStatus.asStateFlow()
     val fullyCommitted: Boolean get() = latestText == committedText && !stopped
+    val writing: Boolean get() = mutex.isLocked
 
     fun changed(text: String) {
         if (text == latestText) return

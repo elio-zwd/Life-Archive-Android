@@ -16,6 +16,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -29,11 +30,14 @@ import com.elio.lifearchive.domain.notes.NoteId
 import com.elio.lifearchive.core.preferences.DocumentTheme
 import com.elio.lifearchive.core.designsystem.DocumentPalette
 import com.elio.lifearchive.core.designsystem.ThemeStyleDialog
+import com.elio.lifearchive.core.designsystem.SourceLinkDialog
+import com.elio.lifearchive.core.designsystem.readPlainClipboardText
 import kotlinx.coroutines.launch
 
 @Composable
 fun EditorRoute(model: EditorViewModel, fontScale: Float, debugControls: Boolean, onBack: () -> Unit, onOpenCopy: (NoteId) -> Unit, services: ReaderServices? = null, onLink: ((String) -> Unit)? = null, onAttach: () -> Unit = {}, onManage: () -> Unit = {}, documentTheme: DocumentTheme = DocumentTheme.BLUE, onDocumentTheme: (DocumentTheme) -> Unit = {}, onCover: () -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val coordinator = model.persistence
     val tools = remember(model) { EditorToolActions(model::command, model::beginInsertion, model::dismissInsertion, model::reanchorInsertion, model::editInsertion, model::searchLinkNotes, model::insertExternal, model::insertTemplateFromPrompt, model::insertNoteLink, model::reinsertAttachment) }
     val status = if (coordinator == null) SaveStatus() else coordinator.status.collectAsStateWithLifecycle().value
@@ -52,7 +56,12 @@ fun EditorRoute(model: EditorViewModel, fontScale: Float, debugControls: Boolean
         initialReadingOffset = model.initialReadingOffset, onReadingOffset = model::readingPosition,
         loadImage = model::image, onLink = onLink ?: { model.message("链接目标：$it") }, services = services,
         onAttach = onAttach, onManage = onManage, toolActions = tools, documentTheme = documentTheme, onDocumentTheme = onDocumentTheme, onCover = onCover,
+        onUpdateSource = { model.openSourceLink { readPlainClipboardText(context) } },
     )
+    state.sourceLink?.let { dialog -> SourceLinkDialog(dialog, preview = false,
+        onText = model::sourceLinkText, onSelect = model::selectSourceLink,
+        onPaste = { model.pasteSourceLink { readPlainClipboardText(context) } },
+        onConfirm = model::applySourceLink, onDismiss = model::dismissSourceLink) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,6 +76,7 @@ fun EditorScreen(
     services: ReaderServices? = null, onAttach: () -> Unit = {}, onManage: () -> Unit = {},
     toolActions: EditorToolActions? = null, documentTheme: DocumentTheme = DocumentTheme.BLUE, onDocumentTheme: (DocumentTheme) -> Unit = {},
     onCover: () -> Unit = {},
+    onUpdateSource: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     var modes by remember { mutableStateOf(false) }
@@ -104,6 +114,8 @@ fun EditorScreen(
                             DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                                 DropdownMenuItem(text = { Text("主题") }, onClick = { more = false; themes = true })
                                 DropdownMenuItem(text = { Text("设置封面") }, enabled = !state.loading && !state.busy, onClick = { more = false; keyboard?.hide(); onCover() })
+                                DropdownMenuItem(text = { Text("更新链接") }, enabled = !state.loading && !state.busy && !state.commandRunning && state.pendingDraft == null,
+                                    onClick = { more = false; onUpdateSource() })
                                 if (editing) DropdownMenuItem(text = { Text("选择标题级别") }, enabled = state.pendingDraft == null && session != null && session.canModify && !state.busy && !state.commandRunning, onClick = { more = false; headingLevels = true })
                                 if (!editing) DropdownMenuItem(text = { Text("编辑笔记") }, enabled = session != null && state.pendingDraft == null, onClick = { more = false; onMode(EditorMode.SOURCE) })
                                 if (editing) DropdownMenuItem(text = { Text("插入附件") }, enabled = state.pendingDraft == null && !state.busy && !state.commandRunning && session?.canModify == true, onClick = { more = false; onAttach() })

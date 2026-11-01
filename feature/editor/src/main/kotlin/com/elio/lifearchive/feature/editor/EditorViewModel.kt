@@ -9,6 +9,7 @@ import com.elio.lifearchive.core.document.DocumentVersion
 import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.core.document.*
 import com.elio.lifearchive.domain.notes.*
+import com.elio.lifearchive.core.designsystem.SourceLinkDialogState
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,7 @@ data class EditorUiState(
     val commandRunning: Boolean = false, val insertion: EditorInsertion? = null,
     val linkChoices: List<NoteLinkChoice> = emptyList(), val linkLoading: Boolean = false,
     val insertionError: String? = null, val attachmentToInsert: String? = null,
+    val sourceLink: SourceLinkDialogState? = null,
 )
 
 enum class EditorInsertKind { EXTERNAL_LINK, WIKI_LINK, CODE_BLOCK, CALLOUT }
@@ -252,6 +254,67 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         return attachmentAnchor != null
     }
     fun cancelAttachment() { attachmentAnchor = null }
+
+    private fun sourceLinkBlock(): String? = when {
+        retired || state.value.loading || session == null -> "笔记尚未就绪"
+        state.value.pendingDraft != null -> "请先处理草稿，再更新链接"
+        state.value.busy || state.value.commandRunning || persistence?.writing == true -> "请等待当前操作完成后再更新链接"
+        session?.canModify != true -> "请完成当前输入后再更新链接"
+        persistence?.status?.value?.conflict == true -> "正文存在版本冲突，请先处理后再更新链接"
+        else -> null
+    }
+    fun openSourceLink(read: () -> String?) {
+        sourceLinkBlock()?.let { message(it); return }
+        val current = runCatching { NoteSource.read(session!!.content.source).orEmpty() }.getOrDefault("无法识别，请在源码中查看")
+        mutableState.value = state.value.copy(sourceLink = SourceLinkDialogState(current = current), message = null)
+        pasteSourceLink(read)
+    }
+    fun pasteSourceLink(read: () -> String?) {
+        if (retired || state.value.busy || state.value.sourceLink == null) return
+        try { sourceLinkText(read().orEmpty()) }
+        catch (e: Exception) { mutableState.value = state.value.copy(sourceLink = state.value.sourceLink?.copy(error = "读取剪贴板失败，请手动粘贴")) }
+    }
+    fun sourceLinkText(text: String) {
+        val dialog = state.value.sourceLink ?: return
+        if (retired || state.value.busy) return
+        val links = extractSharedWebLinks(text)
+        mutableState.value = state.value.copy(sourceLink = dialog.copy(text = text, links = links, selected = links.singleOrNull(),
+            error = if (links.isEmpty()) "未识别到 HTTP／HTTPS 链接，剪贴板可能为空或不含文字，可手动输入。" else null))
+    }
+    fun selectSourceLink(url: String) {
+        val dialog = state.value.sourceLink ?: return
+        if (!retired && !state.value.busy && url in dialog.links) mutableState.value = state.value.copy(sourceLink = dialog.copy(selected = url, error = null))
+    }
+    fun dismissSourceLink() { if (!state.value.busy) mutableState.value = state.value.copy(sourceLink = null) }
+    fun applySourceLink() {
+        val dialog = state.value.sourceLink ?: return
+        val url = dialog.selected ?: return
+        sourceLinkBlock()?.let { mutableState.value = state.value.copy(sourceLink = dialog.copy(error = it)); return }
+        val editor = session ?: return
+        val coordinator = persistence ?: return
+        val before = editor.content.source
+        val changed = try { NoteSource.withUrl(before, url) }
+        catch (e: Exception) { mutableState.value = state.value.copy(sourceLink = dialog.copy(error = e.message ?: "链接未修改，请重试")); return }
+        mutableState.value = state.value.copy(busy = true, message = null, sourceLink = dialog.copy(saving = true, error = null))
+        if (changed != before) editor.edit {
+            val cursor = selection.start
+            replace(0, length, changed)
+            selection = TextRange((cursor + changed.length - before.length).coerceIn(0, length))
+        }
+        coordinator.changed(editor.content.source)
+        viewModelScope.launch {
+            try {
+                val committed = coordinator.flush() && coordinator.fullyCommitted && editor.content.source == changed
+                if (!retired) {
+                    if (committed) mutableState.value = state.value.copy(sourceLink = null, message = "链接已更新")
+                    else mutableState.value = state.value.copy(sourceLink = state.value.sourceLink?.copy(error = "链接尚未保存：${coordinator.status.value.error ?: "请重试"}"))
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { if (!retired) mutableState.value = state.value.copy(sourceLink = state.value.sourceLink?.copy(error = "链接尚未保存：${e.message ?: "请重试"}")) }
+            finally { if (!retired) mutableState.value = state.value.copy(busy = false, sourceLink = state.value.sourceLink?.copy(saving = false)) }
+        }
+    }
+
     fun applyTags(tags: List<String>): Boolean {
         if (retired) return false
         if (state.value.pendingDraft != null) { message("请先处理草稿"); return false }

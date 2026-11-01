@@ -14,6 +14,91 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class EditorViewModelTest {
+    @Test fun sourceUpdateThrownWriteCanRetryAfterTheRealWriteLockIsReleased() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = object : MemoryNotes() {
+            var throwing = true
+            override suspend fun save(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long?): NoteResult<NoteSnapshot> {
+                if (throwing) error("临时写入异常")
+                return super.save(id, expected, document, acknowledgedDraftRevision)
+            }
+        }
+        val model = EditorViewModel(repo, repo.note.summary.id, true)
+        try {
+            runCurrent()
+            model.openSourceLink { "https://example.test/v" }
+            model.applySourceLink(); runCurrent()
+            assertNotNull(model.state.value.sourceLink!!.error)
+            assertEquals("原文", repo.note.document.text)
+            assertFalse(model.persistence!!.writing)
+            repo.throwing = false
+            model.applySourceLink(); runCurrent()
+            assertEquals("链接已更新", model.state.value.message)
+            assertEquals("https://example.test/v", NoteSource.read(repo.note.document.text))
+        } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
+    @Test fun sourceUpdateIncludesUnsavedTextPreservesModeAndIsOneUndoStep() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = MemoryNotes(); val model = EditorViewModel(repo, repo.note.summary.id, false)
+        try {
+            runCurrent()
+            model.session!!.insert("未保存正文")
+            val before = model.session!!.content.source
+            model.openSourceLink { "分享 https://xhslink.cn/o/6va5s9Fs9CN 口令" }
+            model.applySourceLink(); model.applySourceLink(); runCurrent()
+            assertEquals(1, repo.saves)
+            assertEquals(EditorMode.READ, model.state.value.mode)
+            assertEquals("https://xhslink.cn/o/6va5s9Fs9CN", NoteSource.read(repo.note.document.text))
+            assertTrue(repo.note.document.text.endsWith(before))
+            assertEquals("链接已更新", model.state.value.message)
+            assertNull(model.state.value.sourceLink)
+            model.session!!.undo()
+            assertEquals(before, model.session!!.content.source)
+        } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
+
+    @Test fun sourceUpdateFailureKeepsInputAndOnlyReportsSuccessAfterRetryCommits() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = MemoryNotes().apply { failSave = true }
+        val model = EditorViewModel(repo, repo.note.summary.id, true)
+        try {
+            runCurrent()
+            model.openSourceLink { "https://v.douyin.com/ySydEn8zeT8/" }
+            model.applySourceLink(); runCurrent()
+            assertEquals("原文", repo.note.document.text)
+            assertNull(model.state.value.message)
+            assertNotNull(model.state.value.sourceLink!!.error)
+            assertEquals("https://v.douyin.com/ySydEn8zeT8/", NoteSource.read(model.session!!.content.source))
+            repo.failSave = false
+            model.applySourceLink(); runCurrent()
+            assertEquals("链接已更新", model.state.value.message)
+            assertNull(model.state.value.sourceLink)
+            assertEquals(EditorMode.SOURCE, model.state.value.mode)
+        } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
+
+    @Test fun sourceUpdateConflictAndPendingDraftNeverOverwriteTheDisk() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = MemoryNotes(); val model = EditorViewModel(repo, repo.note.summary.id, true)
+        try {
+            runCurrent()
+            model.openSourceLink { "https://example.test/v" }
+            repo.note = repo.note.copy(summary = repo.note.summary.copy(version = DocumentVersion("external")), document = RawDocument("外部更新"))
+            model.applySourceLink(); runCurrent()
+            assertEquals("外部更新", repo.note.document.text)
+            assertTrue(model.persistence!!.status.value.conflict)
+            assertNotNull(model.state.value.sourceLink!!.error)
+            assertNull(model.state.value.message)
+        } finally { model.viewModelScope.cancel() }
+        val draftRepo = MemoryNotes().apply { draft = Draft(note.summary.id, note.summary.version, 7, RawDocument("待恢复")) }
+        val pending = EditorViewModel(draftRepo, draftRepo.note.summary.id, true)
+        try {
+            runCurrent()
+            var reads = 0
+            pending.openSourceLink { reads++; "https://example.test/v" }
+            assertEquals(0, reads); assertNull(pending.state.value.sourceLink); assertEquals(0, draftRepo.saves)
+        } finally { pending.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
     @Test fun modeSwitchesDuringSaveKeepTheNewestTextAndDraftVersion() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val repo = MemoryNotes().apply { saveWait = kotlinx.coroutines.CompletableDeferred() }

@@ -22,6 +22,29 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class VideoNotesViewModelTest {
+    @Test fun linkPreviewCancelAndApplyNeverCreatesNotesAndMultipleLinksRequireSelection() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = FakeNotes(); val model = VideoNotesViewModel(repo, FakePreferences(), null, captureOnly = true)
+        try {
+            runCurrent()
+            val raw = "---\ntitle: 独立标题\ntags: [生活]\nsource: \"https://wrong.test\"\nunknown: keep\n---\n# 正文\n"
+            model.body(raw); model.name("独立文件名")
+            model.openSourceLink { "https://xhslink.cn/o/6va5s9Fs9CN" }
+            model.dismissSourceLink(); assertEquals(raw, model.state.value.body)
+            model.openSourceLink { "https://xhslink.cn/o/6va5s9Fs9CN https://v.douyin.com/ySydEn8zeT8/" }
+            assertNull(model.state.value.sourceLink!!.selected)
+            model.applySourceLink(); assertEquals(raw, model.state.value.body)
+            model.selectSourceLink("https://v.douyin.com/ySydEn8zeT8/"); model.applySourceLink()
+            assertEquals(raw.replace("https://wrong.test", "https://v.douyin.com/ySydEn8zeT8/"), model.state.value.body)
+            assertEquals("独立文件名", model.state.value.name)
+            assertEquals("链接已应用，保存笔记后生效", model.state.value.message)
+            assertTrue(repo.creates.isEmpty())
+            model.openSourceLink { null }; assertNull(model.state.value.sourceLink!!.selected)
+            model.applySourceLink(); assertNotNull(model.state.value.sourceLink!!.error)
+            model.sourceLinkText("https://example.test/?a=1&b=2"); model.applySourceLink()
+            assertEquals("https://example.test/?a=1&b=2", NoteSource.read(model.state.value.body))
+        } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
     @Test fun initialPasteReadsOnlyOnceAndConflictRetryKeepsIndependentTitle() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val repo = FakeNotes().apply { conflicts = 1; waiting = CompletableDeferred() }

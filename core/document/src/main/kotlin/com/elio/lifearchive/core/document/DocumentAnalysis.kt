@@ -16,7 +16,7 @@ data class DocumentAnalysis(val tags: List<String>, val aliases: List<String>, v
 object DocumentAnalyzer {
     private val codeParser = Parser.builder().includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES).build()
     private fun tree(source: String): Node = codeParser.parse(if (source.startsWith('\uFEFF')) " " + source.drop(1) else source)
-    private fun withoutComment(value: String): String {
+    internal fun withoutComment(value: String): String {
         var quote = ' '; var escaped = false
         value.forEachIndexed { i, c ->
             if (quote == ' ' && c == '#' && (i == 0 || value[i - 1].isWhitespace())) return value.substring(0, i).trimEnd()
@@ -192,7 +192,10 @@ object DocumentAnalyzer {
         val insert = source.indexOf('\n') + 1
         return source.substring(0, insert) + replacement + newline + source.substring(insert)
     }
-    private fun jsonMember(source: String, name: String): IntRange? {
+    private fun jsonMember(source: String, name: String): IntRange? = jsonMembers(source, name).firstOrNull()
+
+    internal fun jsonMembers(source: String, name: String): List<IntRange> {
+        val members = mutableListOf<IntRange>()
         var depth = 0; var i = 0
         while (i < source.length) {
             when (source[i]) {
@@ -212,13 +215,14 @@ object DocumentAnalyzer {
                             end++
                         }
                         while (end > valueStart && source[end - 1].isWhitespace()) end--
-                        return valueStart until end
+                        members += valueStart until end
+                        i = end
                     }
                 }
                 else -> i++
             }
         }
-        return null
+        return members
     }
     fun decode(value: String): String = runCatching { URLDecoder.decode(value.replace("+", "%2B"), "UTF-8") }.getOrDefault(value)
     private fun inlineDestinationStart(raw: String): Int? {
