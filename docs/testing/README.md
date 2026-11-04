@@ -1,5 +1,15 @@
 # 当前验证方法
 
+## 三期同步（仅电脑、合成资料）
+
+```powershell
+.\gradlew.bat --no-daemon --max-workers=2 verifyPhaseThree --console=plain
+```
+
+汇总一期回归、架构、构建与 Lint，新增 ID／协议样例、规则、真实 Kotlin 客户端与 PC HTTP 服务、笔记存储和 Compose 入口重建检查。跨端用相邻 `life-archive-pc` 的专用测试夹具，可通过 `LIFE_ARCHIVE_PC_ROOT` 指定该仓库；PC 同步源文件作为测试输入，变更后不会复用过期通过结果。全部数据在临时合成目录，不运行真实库。
+
+大库检查使用 500 篇笔记、100 个共 200 MiB 附件，其中单文件 50 MiB，结果默认写到仓库外系统 TEMP 的 `life-archive-phase3/sync-scale.json`；`LIFE_ARCHIVE_PHASE3_EVIDENCE` 可指定证据目录。PC 单测、契约、打包和真实静态页面冒烟见其 `docs/SIMPLE_SYNC.md`。实际结果与产物见[三期交接](../engineering/phase-3-sync-handoff.md)，手机另按[三期真机清单](phase-3-manual-acceptance.md)验收。
+
 2026-11-01 用户明确确认一期验证完成，当前进入使用反馈与维护阶段；结论见[完成度核对](../engineering/phase-1-completion-audit-20261031.md)。下方按日期／版本记录的检查及未实测范围保留历史含义，后续按具体改动和问题选择验证入口。
 
 2026-10-31 核心流程兼容与恢复检查继续使用 `testReader` 和 `verifyPhaseOne`：新增能力缺失、布局／投影缓存类型错误、消息桥失败、库加载重试、PDF 页错误、图片超时、初始化配置及保存竞争回归。问题表、最终检查及 APK 见[核心流程扩展修复交接](../engineering/phase-1-core-resilience-handoff-20261031.md)，电脑故障注入与设备验收分开记录。

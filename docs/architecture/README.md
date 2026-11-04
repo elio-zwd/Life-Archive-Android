@@ -1,5 +1,7 @@
 # 架构入口与实施边界
 
+2026-11-04 三期同步增加 `domain:sync` 与 `data:sync`，共十二个实际模块；笔记域提供专用同步接口，共享原有存储门锁，feature 仅依赖领域接口。YAML `life_archive_id` 保持跨端身份；同步配置和附件回收站接入可兼容历史缺失域的备份参与者，凭据及基线不导出，恢复后重新配对。原有模块数量描述保留历史含义；当前规则和检查见[三期计划](../plans/phase-3-computer-obsidian.md)及[三期交接](../engineering/phase-3-sync-handoff.md)。
+
 2026-11-01 视频摘记补充沿用十个模块：`feature:notes` 通过 `core:preferences` 保存四类提示词覆盖值，preferences 备份快照升级为 format=2 并兼容历史 format=1；Markdown 正文、notes 快照与外层备份格式不变。交互及边界见[视频摘记计划](../plans/phase-1-video-notes.md)。
 
 2026-10-31 独立笔记封面已接入现有笔记域，当前状态库升级到 v3（显式 v2→v3 迁移），notes 快照 format=3 兼容旧备份，外层备份维持 v1。下文 v2 描述保留其历史版本含义，当前封面数据归属及验证见[封面交接](../engineering/phase-1-note-cover-handoff-20261031.md)。
@@ -32,9 +34,10 @@
 | `feature` | 笔记列表、编辑阅读、设置等 UI 与 ViewModel；不依赖 data 实现或其他 feature |
 | `domain:notes` | 纯 Kotlin 模型、业务接口与必要 Use Case |
 | `data:notes` | 文件、附件、草稿、Room、索引协调与笔记备份参与实现 |
+| `domain:sync` / `data:sync` | 纯 Kotlin 同步规则与公开接口 / HTTP、基线、连接配置及备份参与实现；正式代码不依赖笔记 data 实现 |
 | `core` | 文档、设计系统、设置、备份等实际使用的基础能力；不依赖具体业务域 |
 
-上表是完整实施边界，目前有 app、core:designsystem、core:document、core:backup、core:preferences、domain:notes、data:notes、feature:notes、feature:editor、feature:settings 十个模块；包名以 `com.elio.lifearchive` 为根按模块职责区分。依赖规则由根工程 `checkArchitecture` 检查。当前接口及验证范围见功能交接。
+上表是当前实施边界，共 app、四个 core、domain:notes、data:notes、三个 feature，以及 domain:sync、data:sync 十二个模块；包名以 `com.elio.lifearchive` 为根按职责区分。依赖由 `checkArchitecture` 检查；一期接口见功能交接，三期接口和验证见三期交接。
 
 ## 本阶段边界
 
@@ -60,6 +63,6 @@
 | 首页与导航 | 整体页面组织尚未冻结，需能逐步接入新业务；已有编辑器页面规则继续有效 |
 | 生活与重要档案范围 | 用户尚未选择；可作为候选扩展场景分析，不提前实施，不要求为了架构讨论确认全部远期细节 |
 
-与见域共享的具体代码边界、电脑同步协议和出行交付形态按既定阶段继续延后，不作为一期架构实施的前置任务。
+与见域共享的具体代码边界和出行交付形态继续后置；电脑同步协议及初步交付以三期交接为准，不再列为待定。它们都不追溯扩大一期范围。
 
 实施交付需报告真实依赖图、测试及设备结果，对照 ADR-001 检查扩展边界，不以“架构强”或层数多代替证据。

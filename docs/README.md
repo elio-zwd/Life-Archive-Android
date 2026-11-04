@@ -11,10 +11,11 @@
 - [第一期：UI 优化实施计划](plans/phase-1-ui-polish.md)：首页及已认可编辑／阅读视觉的 Android 移植、保护边界和分层验证。
 - [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
 - [第一期：工具栏增强与回车续写](plans/phase-1-editor-toolbar.md)：标题手势、格式／插入面板、选区保护与输入事务约定。
-- [第二期：AI 与共享能力](plans/phase-2-ai-and-shared-capabilities.md)
-- [第三期：电脑与 Obsidian 协作](plans/phase-3-computer-obsidian.md)
+- [原第二期：AI 与共享能力](plans/phase-2-ai-and-shared-capabilities.md)：后置，暂不另定实施顺序。
+- [第三期：简化双向同步与 AI 修改前备份](plans/phase-3-computer-obsidian.md)：本期先行，含 ID、改名移动和初步交付门槛。
+- [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：仅记录两个方向，暂不详细规划。
 
-一期范围及已确认交互以这两份一期文档为依据。第二、三期保持现有记录，不在仓库初始化时扩展设计。
+一期范围及已确认交互以一期计划和决策为依据；三期按 2026-11-04 用户确认先行，计划、实现和验收分别记录。
 
 ## 架构讨论的阅读顺序与文档职责
 
@@ -30,6 +31,8 @@
 功能细节在计划中维护，README 和 AGENTS 通过链接引用。只在定位、入口或长期规则变化时同步摘要，避免多份完整清单发生冲突。整体架构已由 ADR-001 选定；模块、存储和状态管理按该文实施，编辑器样板和未定产品细节仍须完成各自门槛。
 
 ## 工程与资料
+
+- [三期同步实现与初步交付](engineering/phase-3-sync-handoff.md)：双向同步、备份脚本、恢复兼容、产物和实际检查；[真机验收清单](testing/phase-3-manual-acceptance.md)单独记录手机结果。
 
 - [独立更新视频链接](engineering/phase-1-update-video-link-20261101.md)：平台分享文字提取网址、预览和已有笔记更新 YAML source、保存与原文保护及验证。
 

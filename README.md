@@ -1,5 +1,7 @@
 # Life Archive
 
+**三期已达到初步交付：** Android 0.3.0 与 PC 1.1.0 的局域网手动双向同步、笔记身份与改名移动、AI 修改前备份已完成电脑检查；产物、校验值及使用方式见[三期交接](docs/engineering/phase-3-sync-handoff.md)，真机验收待用户进行。
+
 面向个人使用的 Android 应用，第一期以本地 Markdown 笔记起步，按 Obsidian 官方内置文档语法规划文件兼容能力。整体功能范围仍在确认，架构须能承接后续选中的任务、生活管理、AI 和出行等能力。
 
 **当前状态：一期开发及验证完成（2026-11-01 用户确认），进入使用反馈与维护阶段。** HTML 编辑与阅读设计已认可，首页已按最新确认更新，其他临时页面保留；阶段结论和历史证据见[一期完成度核对与接手清单](docs/engineering/phase-1-completion-audit-20261031.md)，实施范围及当前 APK 见[UI 优化计划](docs/plans/phase-1-ui-polish.md)。历史未填验收表不再作为一期未完成待办。现有功能包含组织搜索、源码编辑与本地完整阅读、附件、回收站、导入导出、备份恢复及可清理缓存。首页滚动、长标签／笔记本选择与刷新优化见[列表性能修复交接](docs/engineering/phase-1-list-performance-handoff.md)。列表与引用混合回车、正文快照与高亮调度见[输入修复交接](docs/engineering/phase-1-editor-input-handoff.md)；标题手势、格式／插入面板与续写用法见[工具栏交接](docs/engineering/phase-1-toolbar-handoff.md)，首屏优先与按需缓存见[阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整支持清单和迁移见[一期功能交接](docs/engineering/phase-1-function-handoff.md)。设计认可、电脑验证和设备实测分别记录。
@@ -22,10 +24,11 @@
 整体产品范围还在梳理，参见[整体功能版图与旧版迁移评估](docs/plans/overall-feature-roadmap.md)。其中后期候选等待确认，不自动扩充以下阶段。
 
 1. [第一期：本地笔记](docs/plans/phase-1-local-notes.md)：编辑、组织、搜索、附件、导入导出和简单备份恢复。交互与视觉以[已确认的决策文档](docs/plans/phase-1-editor-visual-decisions.md)为准。
-2. [第二期：AI 与共享能力](docs/plans/phase-2-ai-and-shared-capabilities.md)：对接 AI 进行全搜索、自动调用资料，并与见域共用重叠能力。
-3. [第三期：电脑与 Obsidian](docs/plans/phase-3-computer-obsidian.md)：记录电脑保存、AI 整理、原件留存及回写目标，详细方案后续讨论。
+2. [原第二期：AI 与共享能力](docs/plans/phase-2-ai-and-shared-capabilities.md)：App 内 AI 全搜索、自动调用资料及见域共用能力后置，暂不另定实施顺序。
+3. [第三期：简化双向同步](docs/plans/phase-3-computer-obsidian.md)：先实施局域网手动双向同步、YAML ID、改名移动及 AI 修改前备份；实现、检查和产物见[三期交接](docs/engineering/phase-3-sync-handoff.md)，随后由用户[真机验证](docs/testing/phase-3-manual-acceptance.md)。
+4. [第四期：电脑端阅读显示与修改差异](docs/plans/phase-4-pc-reading.md)：仅记录方向，暂不详细规划；笔记身份识别已重新归入第三期。
 
-这些是目标范围，不代表已实现。第一期不接入 AI、不抽取两款 App 的共享模块；旧数据库不迁移。版本对比、关系图和手写暂不计划实现。
+目标范围、实现与验收分别记录。第一期不接入 AI、不抽取两款 App 的共享模块；旧数据库不迁移。Android App 内版本对比、关系图和手写暂不计划实现。
 
 ## 仓库入口
 
