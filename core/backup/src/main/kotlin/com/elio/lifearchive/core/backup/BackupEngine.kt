@@ -15,6 +15,9 @@ import kotlinx.serialization.json.Json
 /** 回调均在 StorageGate 内执行；只能操作本域数据，不可再调用公开 Repository。 */
 interface BackupParticipant {
     val id: String
+    /** 新增域可显式兼容没有本域的历史包；必需域仍严格校验。 */
+    val optionalInLegacy: Boolean get() = false
+    suspend fun restoreMissing() { error("备份缺少数据域：$id") }
     suspend fun snapshot(directory: File)
     suspend fun validate(directory: File)
     suspend fun restore(directory: File)
@@ -116,7 +119,7 @@ class BackupEngine(
         gate.requireRecovery()
         var committed = false
         try {
-            participants.forEach { it.restore(File(source, it.id)) }
+            participants.forEach { if (File(source, it.id).isDirectory) it.restore(File(source, it.id)) else it.restoreMissing() }
             atomicWrite(transaction, json.encodeToString(Transaction(prepared.token, true)).toByteArray())
             committed = true
             fault("committed")
@@ -150,9 +153,11 @@ class BackupEngine(
         val manifestFile = File(directory, "manifest.json")
         require(manifestFile.length() in 1..65536)
         val manifest = json.decodeFromString<Manifest>(manifestFile.readText())
-        require(manifest.format == 1 && manifest.participants == participants.map { it.id }) { "备份格式或参与者不匹配" }
+        require(manifest.format == 1 && manifest.participants.distinct() == manifest.participants &&
+            manifest.participants == participants.filter { it.id in manifest.participants }.map { it.id } &&
+            participants.filterNot { it.optionalInLegacy }.all { it.id in manifest.participants }) { "备份格式或参与者不匹配" }
         require(directory.list()?.toSet() == (manifest.participants + "manifest.json").toSet()) { "备份包含未知数据域" }
-        participants.forEach { it.validate(File(directory, it.id)) }
+        participants.filter { it.id in manifest.participants }.forEach { it.validate(File(directory, it.id)) }
     }
 
     private suspend fun recoverLocked() {
@@ -161,7 +166,7 @@ class BackupEngine(
         val rollback = File(root, "rollback")
         if (!tx.committed) {
             validate(rollback)
-            participants.forEach { it.restore(File(rollback, it.id)) }
+            participants.forEach { if (File(rollback, it.id).isDirectory) it.restore(File(rollback, it.id)) else it.restoreMissing() }
             atomicWrite(transaction, json.encodeToString(tx.copy(committed = true)).toByteArray())
         }
         // committed 记录先持久化，清理中断后只继续清理，不再次回滚。
