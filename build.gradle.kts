@@ -11,7 +11,7 @@ plugins {
 
 // 编译依赖是架构边界；新模块必须在这里声明允许的直接依赖。
 val allowedModules = mapOf(
-    ":app" to setOf(":core:designsystem", ":core:preferences", ":core:backup", ":domain:notes", ":data:notes", ":core:document"),
+    ":app" to setOf(":core:designsystem", ":core:preferences", ":core:backup", ":domain:notes", ":data:notes", ":core:document", ":domain:sync", ":data:sync"),
     ":core:designsystem" to emptySet(),
     ":core:document" to emptySet(),
     ":core:backup" to emptySet(),
@@ -20,7 +20,9 @@ val allowedModules = mapOf(
     ":data:notes" to setOf(":domain:notes", ":core:document", ":core:backup"),
     ":feature:notes" to setOf(":domain:notes", ":core:designsystem", ":core:preferences"),
     ":feature:editor" to setOf(":domain:notes", ":core:document", ":core:designsystem", ":core:preferences"),
-    ":feature:settings" to setOf(":domain:notes", ":core:preferences", ":core:backup", ":core:designsystem"),
+    ":feature:settings" to setOf(":domain:notes", ":domain:sync", ":core:preferences", ":core:backup", ":core:designsystem"),
+    ":domain:sync" to setOf(":domain:notes"),
+    ":data:sync" to setOf(":domain:sync", ":domain:notes", ":data:notes", ":core:document", ":core:backup"),
 )
 tasks.register("checkArchitecture") {
     group = "verification"
@@ -83,4 +85,9 @@ tasks.register("verifyPhaseOne") {
     group = "verification"
     description = "一期功能、迁移与本地阅读脚本验证；不连接设备"
     dependsOn("verifyFoundation", "testReader", ":feature:settings:testDebugUnitTest", ":feature:settings:lintDebug")
+}
+tasks.register("verifyPhaseThree") {
+    group = "verification"
+    description = "三期同步与实际 PC HTTP 往返、一期回归、Lint 和 APK；仅合成资料，不连接设备"
+    dependsOn("verifyPhaseOne", ":domain:sync:test", ":data:sync:testDebugUnitTest", ":data:sync:lintDebug")
 }
