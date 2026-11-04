@@ -13,7 +13,7 @@ import com.elio.lifearchive.core.designsystem.LocalDocumentTheme
 import com.elio.lifearchive.core.designsystem.label
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun SettingsScreen(state: SettingsUiState, preferences: UserPreferences, onBack: () -> Unit, onTheme: () -> Unit, onFont: (Float) -> Unit, onRemote: (RemoteLoading) -> Unit, onClearCache: () -> Unit, onImportFiles: () -> Unit, onImportDirectory: () -> Unit, onExport: () -> Unit, onBackup: () -> Unit, onPickRestore: () -> Unit, onRestore: () -> Unit, onCancelRestore: () -> Unit, onImport: () -> Unit, onCancelImport: () -> Unit, onClearReaderCache: () -> Unit = {}) {
+@Composable fun SettingsScreen(state: SettingsUiState, preferences: UserPreferences, onBack: () -> Unit, onTheme: () -> Unit, onFont: (Float) -> Unit, onRemote: (RemoteLoading) -> Unit, onClearCache: () -> Unit, onImportFiles: () -> Unit, onImportDirectory: () -> Unit, onExport: () -> Unit, onBackup: () -> Unit, onPickRestore: () -> Unit, onRestore: () -> Unit, onCancelRestore: () -> Unit, onImport: () -> Unit, onCancelImport: () -> Unit, onClearReaderCache: () -> Unit = {}, syncContent: @Composable () -> Unit = {}) {
     BackHandler(enabled = state.busy) { }
     Scaffold(topBar = { TopAppBar(title = { Text("设置与资料管理") }, navigationIcon = { TextButton(onClick = onBack, enabled = !state.busy) { Text("返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -33,6 +33,7 @@ import com.elio.lifearchive.core.designsystem.label
             Row { RemoteLoading.entries.forEach { mode -> TextButton(onClick = { onRemote(mode) }, enabled = !state.busy) { Text((if (mode == preferences.remoteLoading) "✓ " else "") + if (mode == RemoteLoading.MANUAL) "手动加载" else "自动缓存") } } }
             Text("缓存 ${(state.cacheBytes / 1024.0 / 1024).toInt()} MiB / 512 MiB；不进入完整备份。")
             OutlinedButton(onClick = onClearCache, enabled = !state.busy) { Text("清理远程缓存与网页副本") }
+            syncContent()
             HorizontalDivider(); Text("导入与导出", style = MaterialTheme.typography.titleMedium)
             Button(onClick = onImportFiles, enabled = !state.busy) { Text("导入 Markdown 文件") }
             OutlinedButton(onClick = onImportDirectory, enabled = !state.busy) { Text("导入目录（含附件）") }

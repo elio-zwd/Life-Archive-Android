@@ -15,9 +15,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 data class SettingsUiState(val busy: Boolean = false, val message: String? = null, val cacheBytes: Long = 0, val restore: PreparedRestore? = null, val importing: PreparedImport? = null, val readerCacheBytes: Long = 0, val readerMemoryBytes: Long = 0)
-class SettingsViewModel(private val preferences: PreferencesRepository, private val backup: BackupEngine, private val notes: NotesRepository, private val library: LibraryRepository, private val cache: RemoteCacheRepository, private val readerCache: ReaderCacheRepository? = null) : ViewModel() {
+class SettingsViewModel(private val preferences: PreferencesRepository, private val backup: BackupEngine, private val notes: NotesRepository, private val library: LibraryRepository, private val cache: RemoteCacheRepository, private val readerCache: ReaderCacheRepository? = null, val sync: com.elio.lifearchive.domain.sync.SyncRepository? = null) : ViewModel() {
     private val mutable = MutableStateFlow(SettingsUiState())
     val state = mutable.asStateFlow()
+    fun connectComputer(address: String, code: String) { if (!state.value.busy) viewModelScope.launch { sync?.connect(address, code) } }
+    fun testComputer() { if (!state.value.busy) viewModelScope.launch { sync?.testConnection() } }
+    fun syncComputer(choices: Map<String, com.elio.lifearchive.domain.sync.SyncChoice> = emptyMap(), beforeSync: suspend () -> Boolean = { true }) {
+        if (state.value.busy || sync?.state?.value?.busy == true) return
+        mutable.value = state.value.copy(busy = true)
+        viewModelScope.launch {
+            try { if (beforeSync()) sync?.synchronize(choices) else mutable.value = state.value.copy(message = "请先保存或处理当前草稿，再同步电脑") }
+            finally { mutable.value = state.value.copy(busy = false) }
+        }
+    }
+    fun restoreSyncAttachment(token: String) { if (!state.value.busy) viewModelScope.launch { sync?.restoreAttachment(token) } }
     init { refreshCache() }
     fun refreshCache() { viewModelScope.launch {
         val bytes = cache.size()
@@ -25,7 +36,7 @@ class SettingsViewModel(private val preferences: PreferencesRepository, private 
         mutable.value = state.value.copy(cacheBytes = bytes, readerCacheBytes = reading?.diskBytes ?: 0, readerMemoryBytes = reading?.memoryBytes ?: 0)
     } }
     private fun run(action: suspend () -> String) {
-        if (state.value.busy) return
+        if (state.value.busy || sync?.state?.value?.busy == true) return
         mutable.value = state.value.copy(busy = true, message = null)
         viewModelScope.launch {
             try { val message = action(); mutable.value = state.value.copy(message = message) }

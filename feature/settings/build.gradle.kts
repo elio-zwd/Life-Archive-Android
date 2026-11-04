@@ -13,6 +13,7 @@ android {
 }
 kotlin { jvmToolchain(17) }
 dependencies {
+    implementation(project(":domain:sync"))
     implementation(project(":domain:notes"))
     implementation(project(":core:preferences"))
     implementation(project(":core:backup"))

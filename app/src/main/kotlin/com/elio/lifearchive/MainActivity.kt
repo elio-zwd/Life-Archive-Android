@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
     @Inject internal lateinit var remote: RemoteCacheRepository
     @Inject internal lateinit var readerCache: ReaderCacheRepository
     @Inject internal lateinit var backup: BackupEngine
+    @Inject internal lateinit var sync: com.elio.lifearchive.domain.sync.SyncRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,7 +56,7 @@ class MainActivity : ComponentActivity() {
                 when {
                     state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
                     !state.ready -> Scaffold { Text("正在恢复本地状态…", modifier = androidx.compose.ui.Modifier.padding(it)) }
-                    else -> ArchiveApp(notes, preferences, state.preferences, variant.debugControls, library, remote, backup, readerCache)
+                    else -> ArchiveApp(notes, preferences, state.preferences, variant.debugControls, library, remote, backup, readerCache, sync)
                 }
             }
         }

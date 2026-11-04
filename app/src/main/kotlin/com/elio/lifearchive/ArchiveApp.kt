@@ -60,7 +60,7 @@ import kotlinx.serialization.Serializable
 @Serializable internal data class OnlineDestination(val url: String) : NavKey
 
 @Composable
-internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesRepository, values: UserPreferences, debugControls: Boolean, library: LibraryRepository? = null, remote: RemoteCacheRepository? = null, backup: BackupEngine? = null, readerCache: ReaderCacheRepository? = null) {
+internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesRepository, values: UserPreferences, debugControls: Boolean, library: LibraryRepository? = null, remote: RemoteCacheRepository? = null, backup: BackupEngine? = null, readerCache: ReaderCacheRepository? = null, sync: com.elio.lifearchive.domain.sync.SyncRepository? = null) {
     val backStack = rememberNavBackStack(remember { NotesHome() })
     val scope = rememberCoroutineScope()
     val pendingTransfers = remember { mutableSetOf<Job>() }
@@ -109,7 +109,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
         }
     }
     val context = LocalContext.current
-    val settings: SettingsViewModel? = if (library != null && remote != null && backup != null) viewModel(factory = remember(library, remote, backup, readerCache) { viewModelFactory { initializer { SettingsViewModel(preferences, backup, notes, library, remote, readerCache) } } }) else null
+    val settings: SettingsViewModel? = if (library != null && remote != null && backup != null) viewModel(factory = remember(library, remote, backup, readerCache, sync) { viewModelFactory { initializer { SettingsViewModel(preferences, backup, notes, library, remote, readerCache, sync) } } }) else null
     if (settings != null) {
         val transferState by settings.state.collectAsStateWithLifecycle()
         LaunchedEffect(transferState.message) { transferState.message?.let { message = it; activeEditor?.message(it) } }
@@ -291,7 +291,8 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 LaunchedEffect(Unit) { settings?.refreshCache() }
                 if (settings != null) {
                     val state by settings.state.collectAsStateWithLifecycle()
-                    SettingsScreen(state, values, onBack = { backStack.removeLastOrNull() }, onTheme = { themePicker = true }, onFont = settings::font, onRemote = settings::remote,
+                    val syncBusy = settings.sync?.state?.collectAsStateWithLifecycle()?.value?.busy == true
+                    SettingsScreen(state.copy(busy = state.busy || syncBusy), values, onBack = { backStack.removeLastOrNull() }, onTheme = { themePicker = true }, onFont = settings::font, onRemote = settings::remote,
                         onClearCache = settings::clearCache, onClearReaderCache = settings::clearReaderCache, onImportFiles = { importPicker.launch(arrayOf("text/markdown", "text/plain", "application/octet-stream")) },
                         onImportDirectory = { directoryPicker.launch(null) }, onExport = { pickExport("zip") }, onBackup = { pickExport("backup") },
                         onPickRestore = { backupPicker.launch(arrayOf("application/zip", "application/octet-stream")) }, onRestore = { settings.restore(beforeRestore = {
@@ -303,7 +304,20 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                                 sessions.all { it.retire() }
                             }
                         }) { editors.clear(); homes.clear(); activeEditor = null; managed = null; folderPrompt = null; deleteFolder = null; attachmentEntry = null; backStack.clear(); backStack.add(NotesHome()) } }, onCancelRestore = settings::cancelRestore,
-                        onImport = settings::commitImport, onCancelImport = settings::cancelImport)
+                        onImport = settings::commitImport, onCancelImport = settings::cancelImport,
+                        syncContent = { ComputerSyncPanel(settings, beforeSync = {
+                            val sessions = editors.values.toList()
+                            if (sessions.any { !it.flush() }) false else {
+                                pendingTransfers.toList().forEach { it.cancelAndJoin() }
+                                val retired = sessions.all { it.retire() }
+                                if (retired) {
+                                    editors.clear(); activeEditor = null
+                                    // 同步可改路径和正文，不能回到携带旧快照的编辑导航项。
+                                    backStack.removeAll { it is NoteDestination }
+                                }
+                                retired
+                            }
+                        }) })
                 }
             }
             entry<OnlineDestination> { key ->

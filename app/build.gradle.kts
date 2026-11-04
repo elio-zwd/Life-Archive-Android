@@ -15,8 +15,8 @@ android {
         applicationId = "com.elio.lifearchive"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.2.6"
+        versionCode = 9
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -36,6 +36,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":domain:sync"))
+    implementation(project(":data:sync"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:notes"))
     implementation(project(":feature:editor"))
