@@ -1,0 +1,11 @@
+{
+  "protocol": 1,
+  "identityField": "life_archive_id",
+  "id": "12345678-1234-1234-1234-123456789abc",
+  "entry": { "key": "n:12345678-1234-1234-1234-123456789abc", "kind": "note", "path": "中文/笔记.md", "hash": "8d969eef6ecad3c29a3a629280e686cff8ca728b1d2ed79ea107f97209b1e9d41", "size": 6 },
+  "identityCases": [
+    { "raw": "\ufeff正文\r\n", "expected": "\ufeff---\r\nlife_archive_id: 12345678-1234-1234-1234-123456789abc\r\n---\r\n正文\r\n" },
+    { "raw": "---\nunknown: [a, b]\n---\n正文", "expected": "---\nlife_archive_id: 12345678-1234-1234-1234-123456789abc\nunknown: [a, b]\n---\n正文" },
+    { "raw": "---\n{\"unknown\":1}\n---\n正文", "expected": "---\n{\"life_archive_id\":\"12345678-1234-1234-1234-123456789abc\",\"unknown\":1}\n---\n正文" }
+  ]
+}

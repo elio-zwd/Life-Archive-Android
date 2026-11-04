@@ -12,6 +12,8 @@ import com.elio.lifearchive.core.document.LibraryPath
 import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.core.document.DocumentAnalyzer
 import com.elio.lifearchive.core.document.LinkSyntax
+import com.elio.lifearchive.core.document.NoteIdentity
+import com.elio.lifearchive.core.document.isSyncPath
 import com.elio.lifearchive.domain.notes.*
 import java.io.File
 import java.io.FileOutputStream
@@ -80,6 +82,8 @@ class NotesStorage private constructor(
 
     val repository: NotesRepository = Repository()
     val library: LibraryRepository = Library()
+    val sync: NotesSyncRepository = SyncLibrary()
+    val syncTrashBackupParticipant: BackupParticipant = SyncTrashParticipant()
     val backupParticipant: BackupParticipant = Participant()
 
     companion object {
@@ -197,6 +201,217 @@ class NotesStorage private constructor(
         val indexed = project(record)
         publish()
         return NoteResult.Committed(NoteSnapshot(record.copy(indexPending = !indexed).summary(), document), !indexed)
+    }
+
+    private val syncHashCache = mutableMapOf<String, Pair<String, String>>()
+    private fun fileHash(file: File): String {
+        val attr = Files.readAttributes(file.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java)
+        val signature = "${attr.size()}:${attr.lastModifiedTime()}:${attr.fileKey()}"
+        syncHashCache[file.absolutePath]?.takeIf { it.first == signature }?.let { return it.second }
+        val hash = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input -> val buffer = ByteArray(65536); while (true) { val n = input.read(buffer); if (n < 0) break; hash.update(buffer, 0, n) } }
+        return hash.digest().joinToString("") { "%02x".format(it) }.also { syncHashCache[file.absolutePath] = signature to it }
+    }
+
+    private val syncKeysById = mutableMapOf<String, String>()
+    private suspend fun syncInventory(stamp: Boolean): SyncInventory {
+        syncKeysById.clear()
+        val files = mutableListOf<SyncEntry>(); val issues = mutableListOf<SyncIssue>()
+        val active = state.notes().all().filter { it.deleted == null }
+        // 草稿属于尚未提交的用户内容；同步不能据已保存旧正文覆盖它。
+        active.forEach { ensureNoDraft(it) }
+        for (original in active) {
+            if (!isSyncPath(original.path)) { issues += SyncIssue(original.path, "同步保留路径"); continue }
+            try {
+                var record = original
+                val raw = RawDocument.fromUtf8(documentFile(record).readBytes())
+                check(digest(raw.utf8()) == record.hash) { "正文与提交记录不一致" }
+                val changed = if (stamp) NoteIdentity.ensure(raw.text, record.id) else raw.text
+                val identity = NoteIdentity.read(changed) ?: error("笔记缺少同步 ID，请重新扫描")
+                syncKeysById[record.id] = "n:$identity"
+                if (changed != raw.text) {
+                    record = record.copy(version = UUID.randomUUID().toString(), hash = digest(RawDocument(changed).utf8()), indexPending = true)
+                    commit(record, RawDocument(changed), null)
+                }
+                files += SyncEntry("n:$identity", "note", record.path, record.hash, documentFile(record).length())
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { issues += SyncIssue(original.path, e.message ?: "无法识别笔记") }
+        }
+        attachmentPaths().forEach { path ->
+            if (isSyncPath(path)) {
+                val file = safeFile(attachments, LibraryPath(path))
+                files += SyncEntry("a:$path", "attachment", path, fileHash(file), file.length())
+            } else issues += SyncIssue(path, "同步保留路径")
+        }
+        val folders = state.notes().folders().map { it.path }.toMutableSet()
+        files.forEach { entry -> var parent = entry.path.substringBeforeLast('/', ""); while (parent.isNotEmpty()) { folders += parent; parent = parent.substringBeforeLast('/', "") } }
+        folders.filter(::isSyncPath).forEach { files += SyncEntry("d:$it", "folder", it, "", 0) }
+        val duplicated = files.groupBy { it.key }.filterValues { it.size > 1 }.keys
+        files.filter { it.key in duplicated }.forEach { issues += SyncIssue(it.path, "同步 ID 重复，请删除新副本的 ID 后重试", it.key) }
+        return SyncInventory(files.filterNot { it.key in duplicated }, issues)
+    }
+
+    private suspend fun syncMatches(key: String, expected: SyncEntry?): Boolean {
+        val actual = when {
+            key.startsWith("n:") -> {
+                val knownId = syncKeysById.entries.firstOrNull { it.value == key }?.key ?: key.removePrefix("n:")
+                val record = state.notes().find(knownId)?.takeIf { it.deleted == null }
+                if (record == null) null else {
+                    ensureNoDraft(record)
+                    val file = documentFile(record)
+                    val raw = RawDocument.fromUtf8(file.readBytes())
+                    SyncEntry("n:${NoteIdentity.read(raw.text)}", "note", record.path, digest(raw.utf8()), file.length())
+                }
+            }
+            key.startsWith("a:") -> {
+                val path = key.removePrefix("a:"); require(isSyncPath(path))
+                val file = safeFile(attachments, LibraryPath(path))
+                if (!file.isFile) null else SyncEntry(key, "attachment", path, fileHash(file), file.length())
+            }
+            else -> syncMetadata().files.singleOrNull { it.key == key }
+        }
+        return actual == expected
+    }
+
+    /** 条件提交只枚举元数据及路径；不为每个文件重新解析全库正文。 */
+    private suspend fun syncMetadata(): SyncInventory {
+        val entries = state.notes().all().filter { it.deleted == null }.map { record ->
+            val key = syncKeysById[record.id] ?: runCatching { NoteIdentity.read(RawDocument.fromUtf8(documentFile(record).readBytes()).text)?.let { "n:$it" } }.getOrNull() ?: "blocked:${record.id}"
+            SyncEntry(key, "note", record.path, record.hash, documentFile(record).length())
+        }.toMutableList()
+        attachmentPaths().forEach { path -> val file = safeFile(attachments, LibraryPath(path)); entries += SyncEntry("a:$path", "attachment", path, fileHash(file), file.length()) }
+        val folders = state.notes().folders().map { it.path }.toMutableSet()
+        entries.forEach { e -> var parent = e.path.substringBeforeLast('/', ""); while (parent.isNotEmpty()) { folders += parent; parent = parent.substringBeforeLast('/', "") } }
+        folders.forEach { entries += SyncEntry("d:$it", "folder", it, "", 0) }
+        return SyncInventory(entries)
+    }
+
+    private inner class SyncLibrary : NotesSyncRepository {
+        override suspend fun inventory(): NoteResult<SyncInventory> = access { NoteResult.Success(syncInventory(true)) }
+        override suspend fun matches(key: String, expected: SyncEntry?): NoteResult<Boolean> = access { NoteResult.Success(syncMatches(key, expected)) }
+        override suspend fun copy(entry: SyncEntry, output: OutputStream): NoteResult<Unit> = access {
+            require(syncMatches(entry.key, entry)) { "读取版本已变化" }
+            require(entry.kind != "folder")
+            val file = if (entry.kind == "note") documentFile(state.notes().all().first { it.deleted == null && it.path == entry.path }) else safeFile(attachments, LibraryPath(entry.path))
+            file.inputStream().use { it.copyTo(output, 65536) }
+            NoteResult.Success(Unit)
+        }
+        override suspend fun apply(expected: SyncEntry?, desired: SyncEntry?, input: InputStream?): NoteResult<Unit> = access {
+            val entry = desired ?: expected ?: error("空变更")
+            require(entry.kind in setOf("note", "attachment", "folder"))
+            require(expected == null || expected.key == entry.key)
+            listOfNotNull(expected, desired).forEach { require(isSyncPath(it.path)) { "非法或保留路径" } }
+            val inventory = syncMetadata()
+            require(inventory.issues.none { it.key == entry.key || it.path == entry.path || it.path == expected?.path }) { "笔记身份异常" }
+            require(syncMatches(entry.key, expected)) { "版本已变化，请重新同步" }
+            if (desired != null) {
+                val remaining = inventory.files.filterNot { it.key == entry.key }
+                validateNamespace(remaining.filter { it.kind != "folder" }.map { it.path } + (if (entry.kind != "folder") listOf(entry.path) else emptyList()), remaining.filter { it.kind == "folder" }.map { it.path } + (if (entry.kind == "folder") listOf(entry.path) else emptyList()))
+                require(inventory.issues.none { it.path.equals(desired.path, true) }) { "目标路径被异常资料占用" }
+            }
+            if (entry.kind == "folder") {
+                if (desired != null) state.notes().putFolder(FolderRecord(desired.path))
+                else {
+                    require(inventory.files.none { it.key != entry.key && it.path.startsWith(expected!!.path + "/", true) }) { "目录仍有资料，未删除" }
+                    state.notes().removeFolder(expected!!.path)
+                }
+                publish(); return@access NoteResult.Success(Unit)
+            }
+            var staged: File? = null
+            try {
+                if (desired != null) {
+                    require(desired.size in 0..2L * 1024 * 1024 * 1024 && desired.hash.matches(Regex("[a-f0-9]{64}")))
+                    staged = File(root, "sync-staging/${UUID.randomUUID()}"); check(staged.parentFile!!.isDirectory || staged.parentFile!!.mkdirs())
+                    FileOutputStream(staged).use { out ->
+                        val buffer = ByteArray(65536); var size = 0L; val source = requireNotNull(input)
+                        while (true) { val n = source.read(buffer); if (n < 0) break; size += n; require(size <= desired.size); out.write(buffer, 0, n) }
+                        out.fd.sync(); require(size == desired.size) { "文件长度不符" }
+                    }
+                    require(fileHash(staged) == desired.hash) { "文件校验失败" }
+                }
+                if (entry.kind == "note") {
+                    val old = expected?.let { state.notes().all().single { n -> n.deleted == null && n.path == it.path } }
+                    val now = System.currentTimeMillis()
+                    if (desired == null) {
+                        requireNotNull(old)
+                        return@access batch {
+                            val deleted = old.copy(deleted = now, pathKey = "trash:${old.id}", version = UUID.randomUUID().toString())
+                            val target = documentFile(deleted); check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs())
+                            Files.move(documentFile(old).toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                            state.notes().put(deleted); project(deleted)
+                        }
+                    }
+                    val document = RawDocument.fromUtf8(requireNotNull(staged).readBytes())
+                    require("n:${NoteIdentity.read(document.text)}" == entry.key) { "正文 ID 与清单不符" }
+                    val updated = old?.copy(path = desired.path, pathKey = LibraryPath(desired.path).collisionKey, version = UUID.randomUUID().toString(), hash = desired.hash, modified = now, indexPending = true)
+                        ?: NoteRecord(entry.key.removePrefix("n:").takeIf { state.notes().find(it) == null } ?: UUID.randomUUID().toString(), desired.path, LibraryPath(desired.path).collisionKey, UUID.randomUUID().toString(), desired.hash, created = now, modified = now)
+                    syncKeysById[updated.id] = entry.key
+                    if (old == null || old.path == desired.path) {
+                        commit(updated, document, null)
+                    } else {
+                        return@access batch {
+                            atomicWrite(documentFile(updated), document.utf8())
+                            state.notes().put(updated)
+                            if (!Files.isSameFile(documentFile(old).toPath(), documentFile(updated).toPath())) check(documentFile(old).delete())
+                            draftFile(old.id).takeIf { it.exists() }?.let { check(it.delete()) }
+                            project(updated)
+                        }
+                    }
+                } else {
+                    require(entry.key == "a:${entry.path}")
+                    if (desired == null) {
+                        val token = UUID.randomUUID().toString()
+                        val dir = File(root, "sync-trash/$token"); check(dir.mkdirs())
+                        atomicWrite(File(dir, "entry.json"), json.encodeToString(requireNotNull(expected)).toByteArray())
+                        Files.move(safeFile(attachments, LibraryPath(expected.path)).toPath(), File(dir, "file").toPath(), StandardCopyOption.ATOMIC_MOVE)
+                    } else {
+                        val target = safeFile(attachments, LibraryPath(desired.path)); check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs())
+                        Files.move(requireNotNull(staged).toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                    }
+                    publish()
+                }
+                NoteResult.Success(Unit)
+            } finally { staged?.takeIf { it.exists() }?.delete() }
+        }
+        override suspend fun attachmentTrash(): NoteResult<List<SyncTrashItem>> = access {
+            NoteResult.Success(File(root, "sync-trash").listFiles().orEmpty().filter { File(it, "file").isFile }.map { SyncTrashItem(it.name, json.decodeFromString<SyncEntry>(File(it, "entry.json").readText())) })
+        }
+        override suspend fun restoreAttachment(token: String): NoteResult<Unit> = access {
+            require(UUID.fromString(token).toString() == token)
+            val dir = File(root, "sync-trash/$token")
+            val entry = json.decodeFromString<SyncEntry>(File(dir, "entry.json").readText())
+            require(isSyncPath(entry.path) && fileHash(File(dir, "file")) == entry.hash)
+            val current = syncInventory(false)
+            validateNamespace(current.files.filter { it.kind != "folder" }.map { it.path } + entry.path, current.files.filter { it.kind == "folder" }.map { it.path })
+            val target = safeFile(attachments, LibraryPath(entry.path)); check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs())
+            Files.move(File(dir, "file").toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            dir.deleteRecursively(); publish(); NoteResult.Success(Unit)
+        }
+    }
+
+    private inner class SyncTrashParticipant : BackupParticipant {
+        override val id = "notes-sync-trash"
+        override val optionalInLegacy = true
+        override suspend fun snapshot(directory: File) {
+            val source = File(root, "sync-trash")
+            if (source.exists()) source.copyRecursively(directory, overwrite = true)
+            atomicWrite(File(directory, "format.json"), "1".toByteArray())
+        }
+        override suspend fun validate(directory: File) {
+            require(File(directory, "format.json").readText() == "1")
+            directory.listFiles().orEmpty().filterNot { it.name == "format.json" }.forEach { dir ->
+                require(dir.isDirectory && UUID.fromString(dir.name).toString() == dir.name)
+                val entry = json.decodeFromString<SyncEntry>(File(dir, "entry.json").readText())
+                require(isSyncPath(entry.path) && entry.kind == "attachment")
+                require(dir.list().orEmpty().all { it == "file" || it == "entry.json" })
+                if (File(dir, "file").exists()) require(fileHash(File(dir, "file")) == entry.hash)
+            }
+        }
+        override suspend fun restore(directory: File) {
+            validate(directory); restoreMissing()
+            directory.listFiles().orEmpty().filter { it.isDirectory }.forEach { it.copyRecursively(File(root, "sync-trash/${it.name}"), overwrite = true) }
+        }
+        override suspend fun restoreMissing() { File(root, "sync-trash").takeIf { it.exists() }?.let { check(it.deleteRecursively()) } }
     }
 
     private inner class Repository : NotesRepository {

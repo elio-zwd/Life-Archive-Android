@@ -43,6 +43,7 @@ internal interface StateDao {
     @Query("SELECT * FROM folders ORDER BY path") suspend fun folders(): List<FolderRecord>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putFolder(folder: FolderRecord)
     @Query("DELETE FROM folders") suspend fun clearFolders()
+    @Query("DELETE FROM folders WHERE path = :path") suspend fun removeFolder(path: String)
     @Query("UPDATE notes SET indexPending = 1") suspend fun invalidateIndex()
     @Transaction suspend fun replace(records: List<NoteRecord>) { clear(); records.forEach { put(it.copy(indexPending = true)) } }
 }
