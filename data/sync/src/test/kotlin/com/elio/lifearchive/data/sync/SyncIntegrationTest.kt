@@ -24,6 +24,38 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], manifest = Config.NONE)
 class SyncIntegrationTest {
+    @Test fun organizationAndControlledPcEditingRoundtripWithRealStoresAndHttp() = runBlocking {
+        val first = notes.repository.createManaged("待整理/个人笔记/整理往返.md", RawDocument("原文")).get()
+        notes.library.setPinned(first.summary.id, true).get()
+        notes.repository.updateReadingOffset(first.summary.id, 19).get()
+        sync.synchronize(); assertCompleted()
+        val change = OrganizationChange(first.summary.id, first.summary.version, "职业发展", NoteKind.PERSONAL, listOf("职业发展/面试/自我介绍"))
+        val preview = notes.library.previewOrganization(listOf(change)).get()
+        assertEquals("COMPLETED", notes.library.applyOrganization(preview).get().outcomes.single().status)
+        sync.synchronize(); assertCompleted()
+        val relative = "职业发展/个人笔记/整理往返.md"
+        val file = File(vault, relative)
+        assertTrue(file.isFile); assertFalse(File(vault, "待整理/个人笔记/整理往返.md").exists())
+        assertEquals(NoteTimes.read(first.document.text), NoteTimes.read(file.readText()))
+        val pcRoot = File(requireNotNull(System.getProperty("lifeArchive.pcRoot")))
+        fun tool(script: String) {
+            val process = ProcessBuilder("pwsh.exe", "-NoProfile", "-File", File(pcRoot, "tools/$script").absolutePath, "-Root", vault.absolutePath, "-TaskId", "真实往返", "-Paths", relative).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().readText()
+            assertEquals(output, 0, process.waitFor())
+        }
+        tool("Backup-NotesBeforeEdit.ps1"); file.appendText("\n电脑 AI 补充")
+        tool("Complete-NotesAiEdit.ps1")
+        val complete = file.readText()
+        tool("Complete-NotesAiEdit.ps1"); assertEquals(complete, file.readText())
+        sync.synchronize(); assertCompleted()
+        val current = notes.repository.read(first.summary.id).get()
+        assertEquals(complete, current.document.text)
+        assertEquals(NoteIdentity.read(first.document.text), NoteIdentity.read(current.document.text))
+        val metadata = notes.library.metadata(first.summary.id).get()
+        assertTrue(metadata.pinned); assertFalse(metadata.timeUncertain)
+        assertEquals(19, notes.repository.readReadingOffset(first.summary.id).get())
+        sync.synchronize(); assertCompleted(); assertEquals(0L, sync.state.value.transferredBytes)
+    }
     @get:Rule val temp = TemporaryFolder()
     private lateinit var process: Process
     private lateinit var notes: NotesStorage

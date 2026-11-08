@@ -91,3 +91,8 @@ tasks.register("verifyPhaseThree") {
     description = "三期同步与实际 PC HTTP 往返、一期回归、Lint 和 APK；仅合成资料，不连接设备"
     dependsOn("verifyPhaseOne", ":domain:sync:test", ":data:sync:testDebugUnitTest", ":data:sync:lintDebug")
 }
+tasks.register("verifyNoteOrganization") {
+    group = "verification"
+    description = "四期笔记分类、内容时间与真实同步回归；仅临时合成资料，不操作设备"
+    dependsOn("verifyPhaseThree", ":domain:notes:test")
+}
