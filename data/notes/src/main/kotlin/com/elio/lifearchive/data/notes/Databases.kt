@@ -27,14 +27,23 @@ internal data class NoteRecord(
     val deleted: Long? = null,
     @androidx.room.ColumnInfo(defaultValue = "'mountain'") val coverPreset: String = "mountain",
     val coverAttachment: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val timeUncertain: Boolean = false,
 )
 
 @Serializable
 @Entity(tableName = "folders")
 internal data class FolderRecord(@androidx.room.PrimaryKey val path: String)
 
+@Serializable
+@Entity(tableName = "organization_topics")
+internal data class TopicRecord(@androidx.room.PrimaryKey val name: String, val position: Int)
+
 @Dao
 internal interface StateDao {
+    @Query("SELECT * FROM organization_topics ORDER BY position, name") suspend fun topics(): List<TopicRecord>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putTopic(topic: TopicRecord)
+    @Query("DELETE FROM organization_topics") suspend fun clearTopics()
+    @Query("DELETE FROM organization_topics WHERE name = :name") suspend fun removeTopic(name: String)
     @Query("SELECT * FROM notes ORDER BY pathKey") suspend fun all(): List<NoteRecord>
     @Query("SELECT * FROM notes WHERE id = :id") suspend fun find(id: String): NoteRecord?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(record: NoteRecord)
@@ -48,7 +57,7 @@ internal interface StateDao {
     @Transaction suspend fun replace(records: List<NoteRecord>) { clear(); records.forEach { put(it.copy(indexPending = true)) } }
 }
 
-@Database(entities = [NoteRecord::class, FolderRecord::class], version = 3, exportSchema = true)
+@Database(entities = [NoteRecord::class, FolderRecord::class, TopicRecord::class], version = 4, exportSchema = true)
 internal abstract class StateDatabase : RoomDatabase() { abstract fun notes(): StateDao }
 
 @Entity(tableName = "projections")

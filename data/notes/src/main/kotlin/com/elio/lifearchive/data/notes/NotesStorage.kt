@@ -13,6 +13,9 @@ import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.core.document.DocumentAnalyzer
 import com.elio.lifearchive.core.document.LinkSyntax
 import com.elio.lifearchive.core.document.NoteIdentity
+import com.elio.lifearchive.core.document.NoteTimes
+import com.elio.lifearchive.core.document.ContentTimes
+import com.elio.lifearchive.core.document.mapDocumentTags
 import com.elio.lifearchive.core.document.isSyncPath
 import com.elio.lifearchive.domain.notes.*
 import java.io.File
@@ -71,13 +74,18 @@ class NotesStorage private constructor(
                 db.execSQL("ALTER TABLE notes ADD COLUMN coverPreset TEXT NOT NULL DEFAULT 'mountain'")
                 db.execSQL("ALTER TABLE notes ADD COLUMN coverAttachment TEXT")
             }
+        }, object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN timeUncertain INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE TABLE IF NOT EXISTS organization_topics (name TEXT NOT NULL PRIMARY KEY, position INTEGER NOT NULL)")
+            }
         }).build()
     private var index = newIndex()
     internal var fault: (String) -> Unit = {}
 
-    @Serializable private data class SaveRecord(val note: NoteRecord, val draftRevision: Long? = null)
+    @Serializable private data class SaveRecord(val note: NoteRecord, val draftRevision: Long? = null, val inputHash: String? = null)
     @Serializable private data class DraftRecord(val id: String, val base: String, val revision: Long, val text: String)
-    @Serializable private data class SnapshotState(val format: Int = 1, val notes: List<NoteRecord>, val folders: List<FolderRecord> = emptyList())
+    @Serializable private data class SnapshotState(val format: Int = 1, val notes: List<NoteRecord>, val folders: List<FolderRecord> = emptyList(), val topics: List<TopicRecord> = emptyList())
     @Serializable private data class BatchRecord(val token: String, val committed: Boolean = false, val rolledBack: Boolean = false)
 
     val repository: NotesRepository = Repository()
@@ -128,6 +136,11 @@ class NotesStorage private constructor(
     private fun documentFile(record: NoteRecord): File = if (record.deleted == null) safeFile(documents, LibraryPath(record.path)) else File(root, "trash/${record.id}.md")
 
     private suspend fun publish() { changes.value += 1 }
+    private suspend fun ensureTopic(name: String?) {
+        if (name == null || !NoteOrganization.validTopic(name)) return
+        val topics = state.notes().topics()
+        if (topics.none { it.name == name }) state.notes().putTopic(TopicRecord(name, (topics.maxOfOrNull { it.position } ?: -1) + 1))
+    }
 
     private suspend fun recover() {
         if (batchJournal.exists()) {
@@ -153,6 +166,7 @@ class NotesStorage private constructor(
             Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         }
         state.notes().put(record.copy(indexPending = true))
+        ensureTopic(NoteOrganization.placement(record.path).topic)
         removeAcknowledgedDraft(operation)
         check(journal.delete())
         if (temp.exists()) check(temp.delete())
@@ -164,7 +178,7 @@ class NotesStorage private constructor(
         val file = draftFile(operation.note.id)
         if (file.exists() && operation.draftRevision != null) {
             val draft = json.decodeFromString<DraftRecord>(file.readText())
-            if (draft.revision == operation.draftRevision && digest(RawDocument(draft.text).utf8()) == operation.note.hash) check(file.delete())
+            if (draft.revision == operation.draftRevision && digest(RawDocument(draft.text).utf8()) == (operation.inputHash ?: operation.note.hash)) check(file.delete())
         }
     }
 
@@ -184,18 +198,19 @@ class NotesStorage private constructor(
         NoteResult.StorageFailure(e.message ?: "存储操作失败", journal.exists() || batchJournal.exists())
     }
 
-    private suspend fun commit(record: NoteRecord, document: RawDocument, draftRevision: Long?): NoteResult<NoteSnapshot> {
+    private suspend fun commit(record: NoteRecord, document: RawDocument, draftRevision: Long?, inputHash: String? = null): NoteResult<NoteSnapshot> {
         val target = safeFile(documents, LibraryPath(record.path))
         check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs())
         val temp = pending(record)
         fault("write")
         FileOutputStream(temp).use { it.write(document.utf8()); it.fd.sync() }
-        val operation = SaveRecord(record, draftRevision)
+        val operation = SaveRecord(record, draftRevision, inputHash)
         atomicWrite(journal, json.encodeToString(operation).toByteArray())
         fault("journal")
         Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         fault("file")
         state.notes().put(record)
+        ensureTopic(NoteOrganization.placement(record.path).topic)
         removeAcknowledgedDraft(operation)
         check(journal.delete())
         val indexed = project(record)
@@ -343,7 +358,11 @@ class NotesStorage private constructor(
                     }
                     val document = RawDocument.fromUtf8(requireNotNull(staged).readBytes())
                     require("n:${NoteIdentity.read(document.text)}" == entry.key) { "正文 ID 与清单不符" }
-                    val updated = old?.copy(path = desired.path, pathKey = LibraryPath(desired.path).collisionKey, version = UUID.randomUUID().toString(), hash = desired.hash, modified = now, indexPending = true)
+                    val uncertain = old?.let { previous ->
+                        val before = RawDocument.fromUtf8(documentFile(previous).readBytes()).text
+                        runCatching { NoteTimes.content(before) != NoteTimes.content(document.text) && NoteTimes.read(before).updated == NoteTimes.read(document.text).updated }.getOrDefault(true)
+                    } ?: false
+                    val updated = old?.copy(path = desired.path, pathKey = LibraryPath(desired.path).collisionKey, version = UUID.randomUUID().toString(), hash = desired.hash, modified = now, indexPending = true, timeUncertain = uncertain || old.timeUncertain && runCatching { NoteTimes.read(document.text).updated == NoteTimes.read(RawDocument.fromUtf8(documentFile(old).readBytes()).text).updated }.getOrDefault(true))
                         ?: NoteRecord(entry.key.removePrefix("n:").takeIf { state.notes().find(it) == null } ?: UUID.randomUUID().toString(), desired.path, LibraryPath(desired.path).collisionKey, UUID.randomUUID().toString(), desired.hash, created = now, modified = now)
                     syncKeysById[updated.id] = entry.key
                     if (old == null || old.path == desired.path) {
@@ -423,6 +442,7 @@ class NotesStorage private constructor(
         }
 
         override suspend fun initialize(): NoteResult<Unit> = access {
+            if (state.notes().topics().isEmpty()) NoteOrganization.initialTopics.forEachIndexed { i, name -> state.notes().putTopic(TopicRecord(name, i)) }
             state.notes().all().filter { it.created == 0L }.forEach { record ->
                 val baseline = documentFile(record).lastModified().takeIf { it > 0 } ?: System.currentTimeMillis()
                 state.notes().put(record.copy(created = baseline, modified = baseline))
@@ -434,13 +454,24 @@ class NotesStorage private constructor(
             NoteResult.Success(Unit)
         }
 
-        override suspend fun create(path: String, document: RawDocument): NoteResult<NoteSnapshot> = access {
-            if (!LibraryPath.isValid(path) || !path.endsWith(".md", true)) return@access NoteResult.InvalidPath("需要跨平台合法的 .md 相对路径")
+        override suspend fun create(path: String, document: RawDocument): NoteResult<NoteSnapshot> = access { createDocument(path, document) }
+        override suspend fun createManaged(path: String, document: RawDocument, authored: Boolean): NoteResult<NoteSnapshot> = access {
+            val id = UUID.randomUUID().toString()
+            val identity = NoteIdentity.ensure(document.text, id)
+            val existingId = NoteIdentity.read(identity)!!
+            // 新 UUID 不需要反复读全库；只有外来正文自带 ID 时才核对是否复用。
+            if (NoteIdentity.read(document.text) != null) require(state.notes().all().none { record -> runCatching { NoteIdentity.read(RawDocument.fromUtf8(documentFile(record).readBytes()).text) == existingId }.getOrDefault(false) }) { "同步 ID 已存在；新副本请使用新 ID" }
+            val now = java.time.OffsetDateTime.now().toString()
+            val managed = if (authored) NoteTimes.withTimes(identity, ContentTimes(now, now)) else identity
+            createDocument(path, RawDocument(managed), id)
+        }
+        private suspend fun createDocument(path: String, document: RawDocument, id: String = UUID.randomUUID().toString()): NoteResult<NoteSnapshot> {
+            if (!LibraryPath.isValid(path) || !path.endsWith(".md", true)) return NoteResult.InvalidPath("需要跨平台合法的 .md 相对路径")
             val valid = LibraryPath(path)
-            if (LibraryPath.conflicts(path, state.notes().all().filter { it.deleted == null }.map { it.path } + attachmentPaths() + state.notes().folders().map { "${it.path}/.folder" }) || safeFile(documents, valid).exists()) return@access NoteResult.PathConflict
+            if (LibraryPath.conflicts(path, state.notes().all().filter { it.deleted == null }.map { it.path } + attachmentPaths() + state.notes().folders().map { "${it.path}/.folder" }) || safeFile(documents, valid).exists()) return NoteResult.PathConflict
             val now = System.currentTimeMillis()
-            val record = NoteRecord(UUID.randomUUID().toString(), path, valid.collisionKey, UUID.randomUUID().toString(), digest(document.utf8()), created = now, modified = now)
-            commit(record, document, null)
+            val record = NoteRecord(id, path, valid.collisionKey, UUID.randomUUID().toString(), digest(document.utf8()), created = now, modified = now)
+            return commit(record, document, null)
         }
 
         override suspend fun read(id: NoteId): NoteResult<NoteSnapshot> = access {
@@ -457,6 +488,27 @@ class NotesStorage private constructor(
             if (old.version != expected.value) return@access NoteResult.Conflict(DocumentVersion(old.version))
             check(digest(safeFile(documents, LibraryPath(old.path)).readBytes()) == old.hash) { "正文被存储层外修改" }
             commit(old.copy(version = UUID.randomUUID().toString(), hash = digest(document.utf8()), indexPending = true, modified = System.currentTimeMillis()), document, acknowledgedDraftRevision)
+        }
+
+        override suspend fun saveContent(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long?): NoteResult<NoteSnapshot> = access {
+            val old = state.notes().find(id.value) ?: return@access NoteResult.NotFound
+            if (old.deleted != null) return@access NoteResult.NotFound
+            if (old.version != expected.value) return@access NoteResult.Conflict(DocumentVersion(old.version))
+            val before = documentFile(old).readBytes()
+            check(digest(before) == old.hash) { "正文被存储层外修改" }
+            val previous = RawDocument.fromUtf8(before).text
+            val previousTags = DocumentAnalyzer.analyze(previous).tags
+            require(DocumentAnalyzer.analyze(document.text).tags.filterNot { it in previousTags }.all(NoteOrganization::validTag)) { "新标签最多三级，不能包含空白或非法分隔符" }
+            val identity = NoteIdentity.read(previous)
+            var text = NoteIdentity.ensure(document.text, identity ?: old.id)
+            require(identity == null || NoteIdentity.read(text) == identity) { "编辑不能修改笔记 ID" }
+            val contentChanged = NoteTimes.content(previous) != NoteTimes.content(text)
+            val supplied = runCatching { NoteTimes.read(previous) }.getOrElse { NoteTimes.read(text) }
+            text = NoteTimes.withTimes(text, supplied)
+            if (contentChanged) text = NoteTimes.withTimes(text, supplied.copy(updated = java.time.OffsetDateTime.now().toString()))
+            val changed = RawDocument(text)
+            // 草稿仍对应用户输入；技术字段由保存层补齐后也必须按修订确认清理。
+            commit(old.copy(version = UUID.randomUUID().toString(), hash = digest(changed.utf8()), indexPending = true, modified = System.currentTimeMillis(), timeUncertain = if (contentChanged) false else old.timeUncertain), changed, acknowledgedDraftRevision, digest(document.utf8()))
         }
 
         override suspend fun readDraft(id: NoteId): NoteResult<Draft?> = access {
@@ -618,7 +670,7 @@ class NotesStorage private constructor(
             require(digest(RawDocument(draft.text).utf8()) == record.hash) { "${record.path} 有未解决草稿，请先恢复或另存" }
         }
     }
-    private suspend fun relocateAll(mapping: Map<String, String>, folderMap: ((String) -> String)? = null): NoteResult<Unit> {
+    private suspend fun relocateAll(mapping: Map<String, String>, folderMap: ((String) -> String)? = null, transform: (NoteId, String) -> String = { _, text -> text }, confirmedTimes: Set<NoteId> = emptySet(), topicRename: Pair<String, String>? = null): NoteResult<Unit> {
         val records = state.notes().all().filter { it.deleted == null }
         val attachmentNames = attachmentPaths()
         val paths = records.map { it.path } + attachmentNames
@@ -639,8 +691,8 @@ class NotesStorage private constructor(
             check(digest(bytes) == record.hash) { "正文校验失败：${record.path}" }
             val source = RawDocument.fromUtf8(bytes).text
             val path = mapping[record.path] ?: record.path
-            val rewritten = rewrite(source, record.path, path, paths, mapping)
-            if (path == record.path && rewritten == source) null else {
+            val rewritten = transform(NoteId(record.id), rewrite(source, record.path, path, paths, mapping))
+            if (path == record.path && rewritten == source && !(record.timeUncertain && NoteId(record.id) in confirmedTimes)) null else {
                 ensureNoDraft(record)
                 record to Pair(path, RawDocument(rewritten))
             }
@@ -649,7 +701,7 @@ class NotesStorage private constructor(
             val staged = updates.map { (old, change) -> Triple(old, change, documentFile(old)) }
             staged.forEach { (old, change, _) ->
                 atomicWrite(safeFile(documents, LibraryPath(change.first)), change.second.utf8())
-                val updated = old.copy(path = change.first, pathKey = LibraryPath(change.first).collisionKey, version = UUID.randomUUID().toString(), hash = digest(change.second.utf8()), modified = System.currentTimeMillis(), indexPending = true)
+                val updated = old.copy(path = change.first, pathKey = LibraryPath(change.first).collisionKey, version = UUID.randomUUID().toString(), hash = digest(change.second.utf8()), modified = System.currentTimeMillis(), indexPending = true, timeUncertain = if (NoteId(old.id) in confirmedTimes) false else old.timeUncertain)
                 state.notes().put(updated)
                 draftFile(old.id).takeIf { it.exists() }?.let { check(it.delete()) }
                 fault("batch-note")
@@ -673,6 +725,13 @@ class NotesStorage private constructor(
                 val folders = state.notes().folders(); state.notes().clearFolders()
                 folders.forEach { state.notes().putFolder(FolderRecord(folderMap(it.path))) }
             }
+            topicRename?.let { (from, to) ->
+                val topics = state.notes().topics()
+                val old = topics.find { it.name == from }
+                state.notes().removeTopic(from)
+                if (topics.none { it.name == to }) state.notes().putTopic(TopicRecord(to, old?.position ?: ((topics.maxOfOrNull { it.position } ?: -1) + 1)))
+            }
+            staged.mapNotNull { NoteOrganization.placement(it.second.first).topic }.distinct().forEach { ensureTopic(it) }
             state.notes().all().filter { it.indexPending }.forEach { project(it) }
         }
     }
@@ -711,6 +770,8 @@ class NotesStorage private constructor(
         thumbnail = thumbnail(raw, analysis),
         cover = record.coverAttachment?.let { NoteCover.Attachment(LibraryPath(it)) }
             ?: NoteCover.Preset(CoverPreset.entries.firstOrNull { it.key == record.coverPreset } ?: CoverPreset.MOUNTAIN),
+        contentTimes = runCatching { NoteTimes.read(raw) }.getOrDefault(ContentTimes()),
+        timeUncertain = record.timeUncertain || runCatching { NoteTimes.read(raw) }.isFailure,
     )
 
     private fun excerpt(
@@ -891,6 +952,148 @@ class NotesStorage private constructor(
     }
 
     private inner class Library : LibraryRepository {
+        private suspend fun active() = state.notes().all().filter { it.deleted == null }
+        private fun raw(record: NoteRecord): String {
+            val bytes = documentFile(record).readBytes()
+            check(digest(bytes) == record.hash) { "正文版本已变化：${record.path}" }
+            return RawDocument.fromUtf8(bytes).text
+        }
+        private fun proposed(raw: String, change: OrganizationChange): String {
+            NoteIdentity.read(raw)
+            NoteTimes.read(raw)
+            var result = raw
+            change.tags?.let { tags ->
+                require(tags.all(NoteOrganization::validTag)) { "新标签最多三级，不能包含空白或非法分隔符" }
+                result = DocumentAnalyzer.withTags(result, tags)
+            }
+            change.times?.let { result = NoteTimes.withTimes(result, it) }
+            return result
+        }
+        override suspend fun organizationSuggestions(): NoteResult<List<OrganizationSuggestion>> = access {
+            val records = active()
+            val topics = state.notes().topics().map { it.name } + state.notes().folders().map { it.path.substringBefore('/') }.filter(NoteOrganization::validTopic)
+            NoteResult.Success(records.map { record ->
+                val note = indexedLibraryNote(record, index.projections().find(record.id)).asLibraryNote()
+                val place = NoteOrganization.placement(record.path)
+                val candidates = place.topic?.let { listOf(it) } ?: note.tags.map { it.substringBefore('/') }.filter { it in topics }.distinct()
+                OrganizationSuggestion(note, candidates, place, if (place.topic != null) "标准目录" else if (candidates.isNotEmpty()) "已有标签与主题名称一致；类型仍需确认" else "无可靠分类依据，请人工选择")
+            })
+        }
+        override suspend fun previewOrganization(changes: List<OrganizationChange>): NoteResult<OrganizationPreview> = access {
+            require(changes.map { it.id }.distinct().size == changes.size) { "重复的整理对象" }
+            val records = active(); val paths = records.map { it.path } + attachmentPaths()
+            val originals = records.associate { NoteId(it.id) to raw(it) }
+            val analyses = originals.mapValues { DocumentAnalyzer.analyze(it.value) }
+            val duplicateIds = originals.values.mapNotNull { runCatching { NoteIdentity.read(it) }.getOrNull() }.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+            val versions = mutableMapOf<NoteId, com.elio.lifearchive.core.document.DocumentVersion>()
+            val items = changes.map { change ->
+                val record = records.find { it.id == change.id.value }
+                val from = record?.path.orEmpty()
+                val to = NoteOrganization.folder(change.topic, change.kind) + "/" + from.substringAfterLast('/')
+                var affected = emptyList<String>()
+                val beforeTags = analyses[change.id]?.propertyTags.orEmpty()
+                val issue = runCatching {
+                    requireNotNull(record) { "笔记不存在" }
+                    require(record.version == change.expected.value) { "笔记版本已变化" }
+                    require(change.topic?.let(NoteOrganization::validTopic) != false) { "非法主题名称" }
+                    require(!LibraryPath.conflicts(to, paths.filter { it != from } + state.notes().folders().map { "${it.path}/.folder" })) { "目标位置已被占用" }
+                    ensureNoDraft(record)
+                    require(NoteIdentity.read(originals.getValue(change.id)) !in duplicateIds) { "同步 ID 重复，请先处理副本" }
+                    proposed(originals.getValue(change.id), change)
+                    val mapping = mapOf(from to to)
+                    affected = records.filter { other ->
+                        val text = originals.getValue(NoteId(other.id))
+                        val mayChange = other.id == record.id || analyses.getValue(NoteId(other.id)).links.any { link -> resolvePath(other.path, link.target, paths, link.syntax).contains(from) }
+                        mayChange && rewrite(text, other.path, if (other.id == record.id) to else other.path, paths, mapping) != text
+                    }.map { it.path }
+                    records.filter { it.path in affected || it.id == record.id }.forEach {
+                        ensureNoDraft(it); versions[NoteId(it.id)] = com.elio.lifearchive.core.document.DocumentVersion(it.version)
+                    }
+                }.exceptionOrNull()?.message
+                OrganizationPreviewItem(change, from, to, beforeTags, change.tags ?: beforeTags, affected, issue)
+            }
+            val duplicates = items.filter { it.issue == null }.groupBy { LibraryPath(it.to).collisionKey }.filterValues { it.size > 1 }.keys
+            NoteResult.Success(OrganizationPreview(items.map { if (it.issue == null && LibraryPath(it.to).collisionKey in duplicates) it.copy(issue = "本批次目标重名") else it }, versions))
+        }
+        override suspend fun applyOrganization(preview: OrganizationPreview): NoteResult<OrganizationResult> = access {
+            val records = active(); val outcomes = mutableListOf<OrganizationOutcome>()
+            val accepted = preview.items.filter { item ->
+                val relevant = records.filter { it.id == item.change.id.value || it.path in item.affectedLinks }
+                val issue = item.issue ?: runCatching {
+                    require(relevant.any { it.id == item.change.id.value && it.path == item.from }) { "笔记位置已变化" }
+                    relevant.forEach {
+                        require(preview.versions[NoteId(it.id)]?.value == it.version) { "预览后版本已变化，请重新预览" }
+                        ensureNoDraft(it); raw(it)
+                    }
+                    require(!LibraryPath.conflicts(item.to, (records.map { it.path } + attachmentPaths()).filter { it != item.from })) { "目标位置已被占用" }
+                }.exceptionOrNull()?.message
+                if (issue != null) outcomes += OrganizationOutcome(item.change.id, "SKIPPED", issue)
+                issue == null
+            }
+            if (accepted.isNotEmpty()) {
+                val mapping = accepted.associate { it.from to it.to }
+                val edits = accepted.associateBy { it.change.id }
+                try {
+                    val result = relocateAll(mapping, transform = { id, text -> edits[id]?.let { proposed(text, it.change) } ?: text }, confirmedTimes = accepted.filter { it.change.times?.updated != null }.map { it.change.id }.toSet())
+                    check(result is NoteResult.Success) { result.failureMessage() }
+                    accepted.forEach { outcomes += OrganizationOutcome(it.change.id, "COMPLETED", "已整理") }
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { accepted.forEach { outcomes += OrganizationOutcome(it.change.id, "FAILED", "操作未确认，请刷新或恢复后检查：${e.message}") } }
+            }
+            NoteResult.Success(OrganizationResult(outcomes))
+        }
+        private fun taxonomyText(source: String, change: TaxonomyChange): String {
+            fun mapped(tag: String): String {
+                val value = if (NoteOrganization.matches(tag, change.from)) change.to + tag.substring(change.from.length) else tag
+                require(value == tag || NoteOrganization.validTag(value)) { "调整后标签超过三级：$value" }
+                return value
+            }
+            val analysis = DocumentAnalyzer.analyze(source)
+            val property = analysis.propertyTags.map(::mapped).distinct()
+            var text = if (property != analysis.propertyTags) DocumentAnalyzer.withTags(source, property) else source
+            val start = DocumentAnalyzer.yaml(text)?.last?.plus(1) ?: 0
+            val masked = DocumentAnalyzer.masked(text)
+            Regex("(?:^|\\s)#([\\p{L}\\p{N}_/-]+)").findAll(masked).toList().asReversed().forEach { match ->
+                val tag = match.groups[1]!!
+                if (tag.range.first >= start && mapped(tag.value) != tag.value) text = text.replaceRange(tag.range, mapped(tag.value))
+            }
+            return text
+        }
+        private suspend fun taxonomyMapping(change: TaxonomyChange): Map<String, String> = if (!change.topic) emptyMap() else
+            (active().map { it.path } + attachmentPaths()).filter { it.startsWith(change.from + "/") }.associateWith { change.to + it.removePrefix(change.from) }
+        override suspend fun previewTaxonomy(change: TaxonomyChange): NoteResult<TaxonomyPreview> = access {
+            require(change.from != change.to)
+            require(if (change.topic) NoteOrganization.validTopic(change.from) && NoteOrganization.validTopic(change.to) else NoteOrganization.validTag(change.from) && NoteOrganization.validTag(change.to)) { "无效分类名称" }
+            val mapping = taxonomyMapping(change)
+            val records = active(); val paths = records.map { it.path } + attachmentPaths()
+            validateNamespace(paths.map { mapping[it] ?: it }, state.notes().folders().map { if (change.topic && (it.path == change.from || it.path.startsWith(change.from + "/"))) change.to + it.path.removePrefix(change.from) else it.path }.distinct())
+            val notes = records.mapNotNull { record ->
+                val text = raw(record)
+                val changed = taxonomyText(rewrite(text, record.path, mapping[record.path] ?: record.path, paths, mapping), change)
+                if (record.path in mapping || changed != text) {
+                    NoteIdentity.read(text); NoteTimes.read(text)
+                    ensureNoDraft(record)
+                    indexedLibraryNote(record, index.projections().find(record.id)).asLibraryNote()
+                } else null
+            }
+            val folders = state.notes().folders().map { it.path }.filter { it == change.from || it.startsWith(change.from + "/") }
+            NoteResult.Success(TaxonomyPreview(change, notes, folders))
+        }
+        override suspend fun applyTaxonomy(preview: TaxonomyPreview): NoteResult<Unit> = access {
+            val records = active()
+            preview.notes.forEach { note ->
+                val record = records.find { it.id == note.summary.id.value } ?: return@access NoteResult.NotFound
+                if (record.version != note.summary.version.value) return@access NoteResult.Conflict(com.elio.lifearchive.core.document.DocumentVersion(record.version))
+                ensureNoDraft(record); raw(record)
+            }
+            val change = preview.change
+            // 新出现的受影响笔记必须重新预览，不能悄悄扩大本次写入范围。
+            val expected = preview.notes.map { it.summary.id.value }.toSet()
+            val mapping = taxonomyMapping(change)
+            val paths = records.map { it.path } + attachmentPaths()
+            require(records.none { record -> record.id !in expected && (record.path in mapping || taxonomyText(rewrite(raw(record), record.path, mapping[record.path] ?: record.path, paths, mapping), change) != raw(record)) }) { "分类涉及范围已变化，请重新预览" }
+            relocateAll(mapping, if (change.topic) ({ path -> if (path == change.from || path.startsWith(change.from + "/")) change.to + path.removePrefix(change.from) else path }) else null, transform = { _, text -> taxonomyText(text, change) }, topicRename = if (change.topic) change.from to change.to else null)
+        }
         override suspend fun setCover(id: NoteId, cover: NoteCover): NoteResult<Unit> = access {
             val record = state.notes().find(id.value)?.takeIf { it.deleted == null } ?: return@access NoteResult.NotFound
             if (cover is NoteCover.Attachment) {
@@ -942,6 +1145,9 @@ class NotesStorage private constructor(
                 val record = indexed.record; val analysis = indexed.analysis; val text = indexed.lowercase
                 (record.deleted != null) == query.trash &&
                     (query.folder == null || record.path.startsWith(query.folder + "/")) &&
+                    (query.topic == null || (NoteOrganization.placement(record.path).topic ?: NoteOrganization.INBOX) == query.topic) &&
+                    (query.kind == null || NoteOrganization.placement(record.path).kind == query.kind) &&
+                    (query.selectedTags.isEmpty() || query.selectedTags.map { selected -> analysis.tags.any { NoteOrganization.matches(it, selected) } }.let { if (query.tagMatch == TagMatch.ALL) it.all { matched -> matched } else it.any { matched -> matched } }) &&
                     (query.tag == null || analysis.tags.any { it.equals(query.tag, true) || it.startsWith(query.tag + "/", true) }) &&
                     (words.isEmpty() || run {
                         // 列表刷新／排序不拼接全文；搜索时也不再复制大正文构造 haystack。
@@ -950,16 +1156,16 @@ class NotesStorage private constructor(
                     })
             }.map { it.asLibraryNote(words) }
             val order = when (query.sort) {
-                NoteSort.MODIFIED_DESC -> compareByDescending<LibraryNote> { it.modified }
-                NoteSort.MODIFIED_ASC -> compareBy { it.modified }
-                NoteSort.CREATED_DESC -> compareByDescending { it.created }
-                NoteSort.CREATED_ASC -> compareBy { it.created }
+                NoteSort.MODIFIED_DESC -> compareBy<LibraryNote> { it.contentTimes.updated == null || it.timeUncertain }.thenByDescending { NoteTimes.epoch(it.contentTimes.updated) }
+                NoteSort.MODIFIED_ASC -> compareBy<LibraryNote> { it.contentTimes.updated == null || it.timeUncertain }.thenBy { NoteTimes.epoch(it.contentTimes.updated) }
+                NoteSort.CREATED_DESC -> compareBy<LibraryNote> { it.contentTimes.created == null }.thenByDescending { NoteTimes.epoch(it.contentTimes.created) }
+                NoteSort.CREATED_ASC -> compareBy<LibraryNote> { it.contentTimes.created == null }.thenBy { NoteTimes.epoch(it.contentTimes.created) }
                 NoteSort.NAME -> compareBy { it.summary.path.collisionKey }
             }
             val folders = (state.notes().folders().map { it.path } + records.filter { it.deleted == null }.flatMap { record ->
                 val parts = record.path.split('/').dropLast(1); parts.indices.map { parts.take(it + 1).joinToString("/") }
             }).distinct().sorted()
-            NoteResult.Success(LibraryListing(matches.sortedWith(compareByDescending<LibraryNote> { it.pinned }.then(order)), folders, all.flatMap { it.analysis.tags }.distinct().sorted(), records.count { it.indexPending }))
+            NoteResult.Success(LibraryListing(matches.sortedWith(compareByDescending<LibraryNote> { it.pinned }.then(order).thenBy { it.summary.path.collisionKey }), folders, all.flatMap { it.analysis.tags }.distinct().sorted(), records.count { it.indexPending }, (state.notes().topics().map { it.name } + records.mapNotNull { NoteOrganization.placement(it.path).topic }).distinct()))
         }
         override suspend fun metadata(id: NoteId): NoteResult<LibraryNote> = access {
             val record = state.notes().find(id.value) ?: return@access NoteResult.NotFound
@@ -970,7 +1176,10 @@ class NotesStorage private constructor(
             val existingFolders = state.notes().folders().map { it.path }
             val existing = existingFolders.map { "$it/.folder" } + state.notes().all().filter { it.deleted == null }.map { it.path } + attachmentPaths()
             if (existingFolders.any { it.equals(path, true) } || LibraryPath.conflicts("$path/.folder", existing)) return@access NoteResult.PathConflict
-            state.notes().putFolder(FolderRecord(path)); publish(); NoteResult.Success(Unit)
+            state.notes().putFolder(FolderRecord(path))
+            val topic = path.substringBefore('/')
+            ensureTopic(topic)
+            publish(); NoteResult.Success(Unit)
         }
         override suspend fun relocateFolder(from: String, to: String): NoteResult<Unit> = access {
             require(LibraryPath.isValid(from) && LibraryPath.isValid(to) && !to.startsWith("$from/")) { "非法目标目录" }
@@ -1007,6 +1216,7 @@ class NotesStorage private constructor(
                 val bytes = documentFile(record).readBytes(); check(digest(bytes) == record.hash) { "正文校验失败" }
                 val raw = RawDocument.fromUtf8(bytes)
             val changed = RawDocument(DocumentAnalyzer.withTags(raw.text, tags))
+            require(tags.filterNot { it in DocumentAnalyzer.analyze(raw.text).propertyTags }.all(NoteOrganization::validTag)) { "新标签最多三级" }
             val result = commit(record.copy(version = UUID.randomUUID().toString(), hash = digest(changed.utf8()), modified = System.currentTimeMillis()), changed, null)
             if (result is NoteResult.Committed) NoteResult.Success(Unit) else NoteResult.StorageFailure("标签保存失败")
         }
@@ -1106,10 +1316,13 @@ class NotesStorage private constructor(
                 }
                 val unresolved = paths.filter { it.endsWith(".md", true) }.flatMap { path -> DocumentAnalyzer.analyze(RawDocument.fromUtf8(safeFile(directory, LibraryPath("files/$path")).readBytes()).text).links.filter { resolvePath(path, it.target, paths, it.syntax).isEmpty() && !Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(it.target) }.map { it.target } }.distinct()
                 atomicWrite(File(directory, "manifest.json"), json.encodeToString(ImportManifest(folder, paths, unresolved)).toByteArray())
-                NoteResult.Success(PreparedImport(token, folder, paths.count { it.endsWith(".md", true) }, paths.count { !it.endsWith(".md", true) }, unresolved))
+                val knownTags = index.projections().all().flatMap { DocumentAnalyzer.analyze(it.rawText).tags }.toSet()
+                val foreign = paths.filter { it.endsWith(".md", true) }.flatMap { path -> DocumentAnalyzer.analyze(RawDocument.fromUtf8(safeFile(directory, LibraryPath("files/$path")).readBytes()).text).tags }.distinct().filter { it !in knownTags }
+                NoteResult.Success(PreparedImport(token, folder, paths.count { it.endsWith(".md", true) }, paths.count { !it.endsWith(".md", true) }, unresolved, foreign, foreign.associateWith { if (NoteOrganization.validTag(it)) it else null }))
             } catch (e: Exception) { directory.deleteRecursively(); throw e }
         }
         override suspend fun commitImport(prepared: PreparedImport): NoteResult<Unit> = access {
+            require(prepared.foreignTags.all { prepared.tagDecisions.containsKey(it) } && prepared.tagDecisions.values.filterNotNull().all(NoteOrganization::validTag)) { "请确认新标签（最多三级）" }
             val directory = importDirectory(prepared.token)
             val manifest = json.decodeFromString<ImportManifest>(File(directory, "manifest.json").readText())
             require(manifest.folder == prepared.folder && LibraryPath.isValid(manifest.folder))
@@ -1123,7 +1336,7 @@ class NotesStorage private constructor(
                     val target = mapping.getValue(path)
                     if (path.endsWith(".md", true)) {
                         val bytes = safeFile(directory, LibraryPath("files/$path")).readBytes()
-                        val document = RawDocument(rewrite(RawDocument.fromUtf8(bytes).text, path, target, manifest.paths, mapping))
+                        val document = RawDocument(mapDocumentTags(rewrite(RawDocument.fromUtf8(bytes).text, path, target, manifest.paths, mapping), prepared.tagDecisions))
                         val now = System.currentTimeMillis()
                         val record = NoteRecord(UUID.randomUUID().toString(), target, LibraryPath(target).collisionKey, UUID.randomUUID().toString(), digest(document.utf8()), created = now, modified = now)
                         atomicWrite(documentFile(record), document.utf8()); state.notes().put(record); project(record)
@@ -1169,7 +1382,7 @@ class NotesStorage private constructor(
         override suspend fun snapshot(directory: File) {
             recover()
             val records = state.notes().all()
-            atomicWrite(File(directory, "state.json"), json.encodeToString(SnapshotState(format = 3, notes = records, folders = state.notes().folders())).toByteArray())
+            atomicWrite(File(directory, "state.json"), json.encodeToString(SnapshotState(format = 4, notes = records, folders = state.notes().folders(), topics = state.notes().topics())).toByteArray())
             val docDest = File(directory, "documents").also { check(it.mkdirs()) }
             val draftDest = File(directory, "drafts").also { check(it.mkdirs()) }
             // 只导出已登记正文和草稿；提交前退出遗留的暂存文件不是用户内容。
@@ -1191,7 +1404,8 @@ class NotesStorage private constructor(
             val stateFile = File(directory, "state.json")
             require(stateFile.length() in 1..(16 * 1024 * 1024))
             val content = json.decodeFromString<SnapshotState>(stateFile.readText())
-            require(content.format in 1..3)
+            require(content.format in 1..4)
+            require(content.topics.map { it.name }.distinct().size == content.topics.size && content.topics.all { NoteOrganization.validTopic(it.name) }) { "主题清单无效" }
             content.folders.forEach { require(LibraryPath.isValid(it.path)) }
             require(content.notes.map { it.id }.distinct().size == content.notes.size)
             require(content.notes.map { it.pathKey }.distinct().size == content.notes.size)
@@ -1239,6 +1453,8 @@ class NotesStorage private constructor(
             }
             val content = json.decodeFromString<SnapshotState>(File(directory, "state.json").readText())
             state.notes().replace(content.notes)
+            state.notes().clearTopics()
+            (content.topics.ifEmpty { NoteOrganization.initialTopics.mapIndexed { i, name -> TopicRecord(name, i) } }).forEach { state.notes().putTopic(it) }
             analysisCache.clear()
             state.notes().clearFolders()
             content.folders.forEach { state.notes().putFolder(it) }

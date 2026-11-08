@@ -44,6 +44,8 @@ interface NotesRepository {
     fun observeNotes(): Flow<List<NoteSummary>>
     suspend fun initialize(): NoteResult<Unit>
     suspend fun create(path: String, document: RawDocument): NoteResult<NoteSnapshot>
+    suspend fun createManaged(path: String, document: RawDocument, authored: Boolean = true): NoteResult<NoteSnapshot> = create(path, document)
+    suspend fun saveContent(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long? = null): NoteResult<NoteSnapshot> = save(id, expected, document, acknowledgedDraftRevision)
     suspend fun read(id: NoteId): NoteResult<NoteSnapshot>
     suspend fun save(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long? = null): NoteResult<NoteSnapshot>
     suspend fun readDraft(id: NoteId): NoteResult<Draft?>

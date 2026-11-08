@@ -76,7 +76,7 @@ class NoteCoverStorageTest {
             val current = (storage.repository.read(id) as NoteResult.Success).value
             assertTrue(storage.library.trash(id, current.summary.version) is NoteResult.Success)
             storage.backupParticipant.snapshot(backup)
-            assertEquals(3, JSONObject(File(backup, "state.json").readText()).getInt("format"))
+            assertEquals(4, JSONObject(File(backup, "state.json").readText()).getInt("format"))
             assertTrue(storage.library.restore(id, "其他/笔记.md") is NoteResult.Success)
             storage.library.setCover(id, NoteCover.Preset(CoverPreset.PAPER))
             storage.backupParticipant.restore(backup)
