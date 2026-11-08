@@ -116,6 +116,7 @@
 
 ## 8. 后续范围
 
-- [第二期](phase-2-ai-and-shared-capabilities.md)：AI 全搜索、自动调用资料，以及与见域共用能力。
+- [第二期](phase-2-ai-and-shared-capabilities.md)：单 App 内提供 Life 笔记与见域两个入口，见域现有功能和交互大部分保持不变，Markdown 处理与展示接入 Life 共用接口；见域侧不访问 Life 文档。
 - [第三期](phase-3-computer-obsidian.md)：电脑 Obsidian 协作、原始文件留存、AI 高级处理和修改结果回写。
+- [第五期](phase-5-knowledge-base.md)：Life 文档作为见域知识库，AI 全库搜索、自动调用资料及其他新增笔记与对话联动；仅记录方向。
 - 版本对比、关系图、手写暂不计划在 App 实现，不列入后续必做清单。
