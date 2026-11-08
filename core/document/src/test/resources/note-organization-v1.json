@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "cases": [
+    {"raw":"正文\n","created":"2026-11-09","updated":"2026-11-09T12:00:00+08:00","expected":"---\nlife_archive_updated_at: \"2026-11-09T12:00:00+08:00\"\nlife_archive_created_at: \"2026-11-09\"\n---\n正文\n"},
+    {"raw":"\uFEFF---\r\n# 保留\r\nunknown: [a, b]\r\n---\r\n正文\r\n","created":"2026-11-01","updated":null,"expected":"\uFEFF---\r\nlife_archive_created_at: \"2026-11-01\"\r\n# 保留\r\nunknown: [a, b]\r\n---\r\n正文\r\n"},
+    {"raw":"---\n{\"unknown\": {\"life_archive_updated_at\":\"原值\"}, \"life_archive_updated_at\":\"2026-11-01\"}\n---\n正文","created":null,"updated":"2026-11-09","expected":"---\n{\"unknown\": {\"life_archive_updated_at\":\"原值\"}, \"life_archive_updated_at\":\"2026-11-09\"}\n---\n正文"},
+    {"raw":"---\nlife_archive_created_at: '2026-11-01' # 原注释\ndate: 2020-01-01\n---\n正文","created":"2026-11-02","updated":null,"expected":"---\nlife_archive_created_at: \"2026-11-02\" # 原注释\ndate: 2020-01-01\n---\n正文"}
+  ],
+  "invalid": ["---\nlife_archive_created_at: 2026-02-29\n---\n正文","---\nlife_archive_updated_at: 2026-11-01\nlife_archive_updated_at: 2026-11-02\n---\n正文","---\nlife_archive_created_at: |\n  2026-11-01\n---\n正文","---\nunknown: 1","---\n- item\n---\n正文"],
+  "invalidTimes": ["2026-02-29","2026-11-09T12:00:00","2026-11-09T12:00:00+19:00","2026-11-09T24:00:00Z"]
+}

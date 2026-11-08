@@ -50,6 +50,19 @@ object NoteIdentity {
         }
         return raw.substring(0, at) + "$FIELD: $fallback$nl" + raw.substring(at)
     }
+    fun fresh(raw: String): String {
+        val id = read(raw) ?: return ensure(raw)
+        val replacement = UUID.randomUUID().toString()
+        val text = body(raw)!!
+        val at = raw.indexOf('\n') + 1
+        if (text.trimStart().startsWith('{')) {
+            val span = DocumentAnalyzer.jsonMembers(text, FIELD).single()
+            return raw.replaceRange(at + span.first, at + span.last + 1, "\"$replacement\"")
+        }
+        val field = key.find(text)!!
+        val offset = at + field.range.first + field.value.indexOf(id)
+        return raw.replaceRange(offset, offset + id.length, replacement)
+    }
 }
 
 fun isSyncPath(path: String): Boolean = LibraryPath.isValid(path) &&
