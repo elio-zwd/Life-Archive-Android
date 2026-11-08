@@ -14,6 +14,8 @@
 - [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：已确认同一 App 双入口，见域现有功能和交互大部分保持不变，Markdown 处理与展示接入 Life 共用接口；见域侧本期不访问 Life 文档，首页样式和技术设计待对齐，尚未实施。
 - [第三期：简化双向同步与 AI 修改前备份](plans/phase-3-computer-obsidian.md)：本期先行，含 ID、改名移动和初步交付门槛。
 - [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：仅记录两个方向，暂不详细规划。
+- [第四期优化：笔记分类与整理制度](plans/phase-4-note-organization.md)：独立实施主题／类型归档、三级标签、批量预览整理与真实内容时间；不强设 AI 内容第三类。
+- [分类整理交接](engineering/note-organization-handoff.md)：接口、备份迁移、工具用法、实际检查和产物；[独立真机清单](testing/note-organization-manual-acceptance.md)区分电脑与设备结果。
 - [第五期：知识库与资料联动](plans/phase-5-knowledge-base.md)：Life 文档作为见域知识库，承接原二期 AI 全库搜索、自动调用资料及其他新增笔记与对话联动；本次仅记录方向，不展开设计。
 
 一期范围及已确认交互以一期计划和决策为依据；三期按 2026-11-04 用户确认先行，计划、实现和验收分别记录。

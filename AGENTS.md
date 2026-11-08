@@ -8,7 +8,7 @@
 - 面向 Windows 10 x64，Windows 命令使用 `pwsh.exe`（PowerShell 7）。
 - 当前一期开发及验证已按用户确认完成，进入使用反馈与维护阶段；HTML 编辑与阅读设计已认可，首页已按最新确认更新，其他临时页面保留。阶段结论与交付证据见 [一期完成度核对与接手清单](docs/engineering/phase-1-completion-audit-20261031.md)和 [UI 优化计划](docs/plans/phase-1-ui-polish.md)。默认源码编辑与完整阅读，源码/实时预览均保留高亮，实时预览仍为实验项；阅读首屏优先并使用可丢弃的按需缓存。用户确认完成的项目不因历史未验证表要求全部重测；模拟器与真实手机的实测结果分别记录，后续按实际问题定向验证。输入约束见 [编辑器输入修复交接](docs/engineering/phase-1-editor-input-handoff.md)，工具用法见 [工具栏与回车续写交接](docs/engineering/phase-1-toolbar-handoff.md)，阅读机制见 [阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整范围及底层从 [一期功能交接](docs/engineering/phase-1-function-handoff.md)按需读取。
 - 产品只做 Android，技术方向为 Kotlin + Jetpack Compose。应用标识为 `com.elio.lifearchive`，显示名为 Life Archive。
-- 一期本地笔记已完成；原第二期后置，第三期先实施手动局域网双向同步及 AI 修改前备份。[二期](docs/plans/phase-2-ai-and-shared-capabilities.md)已收窄为单 App 内“Life 笔记”“见域”双入口与共用 Life Markdown 能力，见域现有功能和交互大部分保持不变，本期见域侧不查看、检索、调用或修改 Life 文档；首页样式和共用接口技术设计待对齐。[第五期](docs/plans/phase-5-knowledge-base.md)仅记录 Life 文档作为见域知识库、AI 全库搜索及其他新增资料联动方向。第四期仅记录 PC 阅读显示与修改差异方向。具体范围见 [文档索引](docs/README.md)。
+- 一期本地笔记已完成；原第二期后置，第三期先实施手动局域网双向同步及 AI 修改前备份。[二期](docs/plans/phase-2-ai-and-shared-capabilities.md)已收窄为单 App 内“Life 笔记”“见域”双入口与共用 Life Markdown 能力，见域现有功能和交互大部分保持不变，本期见域侧不查看、检索、调用或修改 Life 文档；首页样式和共用接口技术设计待对齐。[第五期](docs/plans/phase-5-knowledge-base.md)仅记录 Life 文档作为见域知识库、AI 全库搜索及其他新增资料联动方向。第四期的分类整理制度已确认实施，采用主题／类型目录、层级标签和可靠内容时间；PC 阅读显示与修改差异继续只记录方向。具体范围见 [文档索引](docs/README.md)。
 - 整体架构讨论必须读取[功能版图](docs/plans/overall-feature-roadmap.md)和[架构要求](docs/architecture/README.md)，再按需阅读对应阶段计划；新项目需求以本仓库记录为依据，不默认回查旧仓库或继承旧版功能。
 
 ## 2. 开始与编辑
@@ -25,7 +25,8 @@
 
 - Markdown 文件是正文事实来源，Room 不维护另一套独立正文；未知 YAML 属性及文档原文应保留。
 - 参与同步的笔记使用 YAML `life_archive_id` UUID 保持跨端身份，改名／移动不改 ID；仅定点补字段，不重排其他 YAML。同步通过笔记域公开接口和共享 StorageGate；设备凭据不进入 Git、正文或备份，恢复后重新配对并核对资料。规则见[第三期计划](docs/plans/phase-3-computer-obsidian.md)。
-- 独立笔记封面属于应用状态，状态库 v3 与 notes 备份快照 format=3 保留选择；自定义图片沿用附件公开接口，不写入 Markdown／YAML。首页左侧与阅读横幅共用封面，见[封面交接](docs/engineering/phase-1-note-cover-handoff-20261031.md)。
+- 独立笔记封面属于应用状态，自定义图片沿用附件公开接口，不写入 Markdown／YAML。首页左侧与阅读横幅共用封面，见[封面交接](docs/engineering/phase-1-note-cover-handoff-20261031.md)。四期状态库 v4、notes 快照 format=4 保留封面、时间待确认状态和主题顺序，兼容旧备份。
+- 分类以“主题/类型”目录为主归属，三级标签用于跨主题查找；历史笔记先预览再整理。`life_archive_created_at` 与 `life_archive_updated_at` 只记录可靠的内容时间，不能用导入、同步或文件系统时间冒充；维护标签、路径、ID 和链接不刷新内容时间。规则及接入见[分类整理制度](docs/plans/phase-4-note-organization.md)。
 - 文件名、正文标题和 YAML `title` 独立，不隐式同步。文件命名与链接维护按已确认计划实施。
 - 已选模块化单体架构，工程任务必须阅读 [ADR-001](docs/architecture/adr-001-android-architecture.md)。一个 APK，按真实职责建立 Gradle 模块；feature 不依赖 data 实现或其他 feature，纯 Kotlin domain 不依赖 Android。此前单 app 模块参考已被本决策替代。
 - 已接入 Compose + Material 3、ViewModel + UDF、Navigation 3、Hilt/KSP、Room 与 DataStore。版本集中固定到 `gradle/libs.versions.toml`；具体编辑/渲染库仍遵循样板门槛，不把未验证方案写成已兼容。

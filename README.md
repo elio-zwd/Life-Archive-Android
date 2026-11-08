@@ -1,5 +1,7 @@
 # Life Archive
 
+**第四期分类整理已初步交付：** Android 0.4.0 / PC 源码 1.2.0 增加主题优先归档、层级标签、预览确认整理与真实内容时间；统一检查及 314 项 Android、179 项 PC 检查通过，见[制度](docs/plans/phase-4-note-organization.md)和[交接](docs/engineering/note-organization-handoff.md)。旧笔记不自动搬动，手机实测另列；按用户要求不构建 PC 安装包。
+
 **三期已达到初步交付：** Android 0.3.0 与 PC 1.1.0 的局域网手动双向同步、笔记身份与改名移动、AI 修改前备份已完成电脑检查；产物、校验值及使用方式见[三期交接](docs/engineering/phase-3-sync-handoff.md)，真机验收待用户进行。
 
 面向个人使用的 Android 应用，第一期以本地 Markdown 笔记起步，按 Obsidian 官方内置文档语法规划文件兼容能力。整体功能范围仍在确认，架构须能承接后续选中的任务、生活管理、AI 和出行等能力。
@@ -26,7 +28,7 @@
 1. [第一期：本地笔记](docs/plans/phase-1-local-notes.md)：编辑、组织、搜索、附件、导入导出和简单备份恢复。交互与视觉以[已确认的决策文档](docs/plans/phase-1-editor-visual-decisions.md)为准。
 2. [第二期：单 App 整合与共用 Markdown](docs/plans/phase-2-ai-and-shared-capabilities.md)：一个 App 内提供“Life 笔记”“见域”两个入口，见域现有功能和交互大部分保持不变，Markdown 处理与展示接入 Life 共用接口；见域侧本期不查看、检索、调用或修改 Life 文档。范围已确认，首页样式和技术设计待对齐，尚未实施，暂不另定实施顺序。
 3. [第三期：简化双向同步](docs/plans/phase-3-computer-obsidian.md)：先实施局域网手动双向同步、YAML ID、改名移动及 AI 修改前备份；实现、检查和产物见[三期交接](docs/engineering/phase-3-sync-handoff.md)，随后由用户[真机验证](docs/testing/phase-3-manual-acceptance.md)。
-4. [第四期：电脑端阅读显示与修改差异](docs/plans/phase-4-pc-reading.md)：仅记录方向，暂不详细规划；笔记身份识别已重新归入第三期。
+4. 第四期优化：[电脑端阅读显示与修改差异](docs/plans/phase-4-pc-reading.md)继续只记录方向；[笔记分类与整理制度](docs/plans/phase-4-note-organization.md)独立实施，按主题／类型归档，支持三级标签、批量预览整理和真实内容时间，不新增 AI 分类或强制 AI 标记。笔记同步身份机制仍归第三期。
 5. [第五期：知识库与资料联动](docs/plans/phase-5-knowledge-base.md)：Life 文档作为见域知识库，承接原二期的 AI 全库搜索、自动调用资料及笔记与对话之间的其他新增联动；仅记录方向，本次不展开设计。
 
 目标范围、实现与验收分别记录。第一期不接入 AI、不抽取两款 App 的共享模块；旧数据库不迁移。Android App 内版本对比、关系图和手写暂不计划实现。
@@ -66,7 +68,7 @@
 
 2026-10-31 新增首页左侧封面、预设／自定义设置及阅读横幅；新旧笔记默认山野插画，完整备份保留选择，Markdown 原文不变。实现、两篇真实入库的隔离示例与验证边界见[封面交接](docs/engineering/phase-1-note-cover-handoff-20261031.md)。
 
-架构依据为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)。当前有十个实际模块，新增 feature:settings；职责和依赖见功能交接。Debug 与 Release 均接入真实笔记库，Debug 额外提供会话内正文保存失败模拟。默认源码编辑，实时预览仍为实验项；输入、阅读兼容和视觉分别验收。
+架构依据为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)。当前有十二个实际模块，含三期同步域；四期分类沿用既有模块，职责和依赖见架构说明。Debug 与 Release 均接入真实笔记库，Debug 额外提供会话内正文保存失败模拟。默认源码编辑，实时预览仍为实验项；输入、阅读兼容和视觉分别验收。
 
 进行整体架构选型时，先读 [AGENTS.md](AGENTS.md)，再读[整体功能版图](docs/plans/overall-feature-roadmap.md)、[一期范围](docs/plans/phase-1-local-notes.md)、[编辑器决策](docs/plans/phase-1-editor-visual-decisions.md)、第二/三期方向，最后核对[架构约束与待决事项](docs/architecture/README.md)。这些本仓库文档已足够开展架构讨论，不需要先查看旧项目。
 

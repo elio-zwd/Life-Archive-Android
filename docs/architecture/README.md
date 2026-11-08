@@ -1,5 +1,7 @@
 # 架构入口与实施边界
 
+2026-11-09 四期分类整理沿用十二个模块：笔记域提供分类预览／条件提交和内容编辑入口，data:notes 复用 StorageGate、链接维护与恢复。目录表示主归属，YAML 表示 ID、标签和真实内容时间；内部收录／活动时间保持独立。状态库显式 v3→v4，notes 快照 format=4 兼容 1／2／3，新增时间待确认状态和主题顺序随 notes 备份。正文同步仍原样传输，不生成内容时间。见[分类交接](../engineering/note-organization-handoff.md)。
+
 2026-11-09 二期范围确认：以 Life Archive 承载一个 App，首页提供“Life 笔记”“见域”两个内部入口；见域现有功能和交互大部分保持不变，Markdown 格式处理与展示接入 Life 共用接口。本期见域侧不查看、检索、调用或修改 Life 文档；知识库与新增资料联动归[第五期](../plans/phase-5-knowledge-base.md)，仅记录方向。延续模块化单体，首页样式和接口技术设计待对齐，尚未实施，不改变下文当前十二个模块的事实。详见[二期计划](../plans/phase-2-ai-and-shared-capabilities.md)。
 
 2026-11-04 三期同步增加 `domain:sync` 与 `data:sync`，共十二个实际模块；笔记域提供专用同步接口，共享原有存储门锁，feature 仅依赖领域接口。YAML `life_archive_id` 保持跨端身份；同步配置和附件回收站接入可兼容历史缺失域的备份参与者，凭据及基线不导出，恢复后重新配对。原有模块数量描述保留历史含义；当前规则和检查见[三期计划](../plans/phase-3-computer-obsidian.md)及[三期交接](../engineering/phase-3-sync-handoff.md)。
@@ -22,7 +24,7 @@
 - 已选 Navigation 3 稳定版、Hilt、Coroutines/StateFlow、Room 和 Preferences DataStore；采用 ViewModel + UDF，Repository 隔离数据，复杂操作按需使用 Use Case。
 - 仅针对小米 14 Ultra，约 500 篇笔记；测试数据和性能基线见 ADR-001。
 - 当前 namespace / applicationId 为 `com.elio.lifearchive`；项目与显示名为 Life Archive。
-- 笔记正文保存为 App 私有目录中的 UTF-8 `.md` 文件，文件夹对应笔记本，附件独立管理；通过系统文件选择器导入导出，后期再接电脑同步。
+- 笔记正文保存为 App 私有目录中的 UTF-8 `.md` 文件，文件夹对应笔记本，附件独立管理；通过系统文件选择器导入导出，并由手机手动发起局域网同步到电脑固定目录。
 - 正文始终以 Markdown 文件为准。Room 应用状态库保存内部 ID、路径映射等需备份的信息，独立索引库保存可重建的搜索/引用数据，两者不能混为缓存。
 - 文件名、正文标题、YAML 属性相互独立；文件兼容与保存保真遵循[一期计划](../plans/phase-1-local-notes.md)。
 

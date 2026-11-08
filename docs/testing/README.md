@@ -1,5 +1,9 @@
 # 当前验证方法
 
+## 四期分类整理（无设备）
+
+在 PowerShell 7、JDK 17 下运行 `./gradlew.bat verifyNoteOrganization --console=plain --max-workers=1`，包含三期回归、领域规则、元数据契约、分类存储及 Compose 测试、架构、Lint 和 APK 构建；不安装应用或连接手机。500 篇合成笔记仅在临时库验证整理，真实 Kotlin 客户端另通过临时 PC HTTP 服务验证分类后往返及电脑 AI 完成工具。PC 运行 `npm.cmd test`、`npm.cmd run test:contracts` 和其打包／冒烟入口。检查、日志及版本见[分类交接](../engineering/note-organization-handoff.md)，手机单列[真机清单](note-organization-manual-acceptance.md)。
+
 ## 三期同步（仅电脑、合成资料）
 
 ```powershell
