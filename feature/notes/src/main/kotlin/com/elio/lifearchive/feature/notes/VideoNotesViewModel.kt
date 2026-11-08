@@ -6,6 +6,9 @@ import com.elio.lifearchive.core.document.LibraryPath
 import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.core.document.NoteSource
 import com.elio.lifearchive.core.document.extractSharedWebLinks
+import com.elio.lifearchive.core.document.DocumentAnalyzer
+import com.elio.lifearchive.core.document.mapDocumentTags
+import com.elio.lifearchive.domain.notes.*
 import com.elio.lifearchive.core.designsystem.SourceLinkDialogState
 import com.elio.lifearchive.core.preferences.PreferencesRepository
 import com.elio.lifearchive.core.preferences.VideoPromptType
@@ -84,6 +87,11 @@ data class VideoNotesUiState(
     val error: String? = null,
     val warning: String? = null,
     val sourceLink: SourceLinkDialogState? = null,
+    val topic: String = "",
+    val kind: NoteKind? = null,
+    val topics: List<String> = NoteOrganization.initialTopics,
+    val pendingTags: List<String> = emptyList(),
+    val tagChoices: Map<String, String> = emptyMap(),
 ) {
     val busy get() = savingPrompt || savingNote || createdNote != null
     val hasUnsavedInput get() = name.isNotEmpty() || body.isNotEmpty() || source.isNotEmpty() || prompts != savedPrompts
@@ -102,16 +110,24 @@ class VideoNotesViewModel(
     private val preferences: PreferencesRepository,
     val folder: String?,
     val captureOnly: Boolean = false,
+    private val library: LibraryRepository? = null,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(VideoNotesUiState(tab = if (captureOnly) 1 else 0))
+    private val mutableState = MutableStateFlow(VideoNotesUiState(tab = if (captureOnly) 1 else 0, topic = folder?.substringBefore('/')?.takeIf { it != NoteOrganization.INBOX && NoteOrganization.validTopic(it) }.orEmpty(), kind = if (captureOnly) null else NoteKind.VIDEO))
     val state = mutableState.asStateFlow()
     private var readingPrompts = false
     private var initialPasteHandled = false
     private var manualName = false
     private var knownPaths: List<String> = emptyList()
+    private var knownTags: Set<String> = emptySet()
+    private val approvedTags = mutableSetOf<String>()
+    private fun targetFolder() = NoteOrganization.folder(state.value.topic.ifBlank { null }, state.value.kind)
 
     init {
         if (!captureOnly) loadPrompts()
+        if (library != null) viewModelScope.launch {
+            val listing = library.query()
+            if (listing is NoteResult.Success) { knownTags = listing.value.tags.toSet(); mutableState.value = state.value.copy(topics = listing.value.topics) }
+        }
         viewModelScope.launch {
             try { notes.observeNotes().collect { values -> knownPaths = values.map { it.path.value } } }
             catch (e: CancellationException) { throw e }
@@ -128,8 +144,8 @@ class VideoNotesViewModel(
 
     private fun uniqueName(base: String): String {
         for (index in 0..1000) {
-            val name = pastedFileName(base, folder, if (index == 0) "" else " ($index)")
-            val path = (folder?.let { "$it/" } ?: "") + "$name.md"
+            val name = pastedFileName(base, targetFolder(), if (index == 0) "" else " ($index)")
+            val path = targetFolder() + "/$name.md"
             if (!LibraryPath.conflicts(path, knownPaths)) return name
         }
         throw IllegalStateException("同名笔记过多，请修改名称")
@@ -166,6 +182,20 @@ class VideoNotesViewModel(
     fun name(value: String) { if (!state.value.busy) { manualName = value.isNotBlank(); mutableState.value = state.value.copy(name = value, error = null) } }
     fun body(value: String) { if (!state.value.busy) mutableState.value = state.value.copy(body = value, error = null) }
     fun source(value: String) { if (!state.value.busy) mutableState.value = state.value.copy(source = value, error = null) }
+    fun topic(value: String) { if (!state.value.busy) mutableState.value = state.value.copy(topic = value) }
+    fun kind(value: NoteKind?) { if (!state.value.busy) mutableState.value = state.value.copy(kind = value) }
+    fun tagChoice(tag: String, value: String) { mutableState.value = state.value.copy(tagChoices = state.value.tagChoices + (tag to value)) }
+    fun cancelTags() { mutableState.value = state.value.copy(pendingTags = emptyList()) }
+    fun confirmTags() {
+        try {
+            val decisions = state.value.pendingTags.associateWith { tag -> state.value.tagChoices[tag]?.trim()?.ifBlank { null } }
+            require(decisions.values.filterNotNull().all(NoteOrganization::validTag)) { "新标签最多三级，请修改或留空不采用" }
+            val text = mapDocumentTags(state.value.body, decisions)
+            approvedTags += decisions.values.filterNotNull()
+            mutableState.value = state.value.copy(body = text, pendingTags = emptyList())
+            create()
+        } catch (e: Exception) { error(e.message ?: "标签确认失败") }
+    }
 
     fun openSourceLink(read: () -> String?) {
         if (state.value.busy || state.value.body.isBlank()) return
@@ -245,6 +275,12 @@ class VideoNotesViewModel(
         if (state.value.body.isBlank()) { error("请先粘贴或填写总结正文"); return }
         val parsed = try { parsePastedNote(state.value.body, folder) }
         catch (e: Exception) { error("识别失败：${e.message}"); return }
+        val unknown = DocumentAnalyzer.analyze(parsed.body).tags.filter { it !in knownTags && it !in approvedTags }
+        if (library != null && unknown.isNotEmpty()) {
+            mutableState.value = state.value.copy(pendingTags = unknown, tagChoices = unknown.associateWith { if (NoteOrganization.validTag(it)) it else "" })
+            return
+        }
+        if (state.value.topic.isNotBlank() && !NoteOrganization.validTopic(state.value.topic)) { error("非法主题名称"); return }
         val name = try { state.value.name.ifBlank { uniqueName(parsed.name) } }
         catch (e: Exception) { error(e.message ?: "无法创建名称"); return }
         mutableState.value = state.value.copy(body = parsed.body, name = name, warning = parsed.warning)
@@ -259,9 +295,9 @@ class VideoNotesViewModel(
                 var candidate = current.name
                 var result: NoteResult<NoteSnapshot> = NoteResult.PathConflict
                 for (index in 0..100) {
-                    candidate = fitPastedFileName(current.name, folder, if (index == 0) "" else " ($index)")
-                    val path = (folder?.let { "$it/" } ?: "") + "$candidate.md"
-                    result = notes.create(path, RawDocument(videoSummaryBody(current.body, current.source)))
+                    candidate = fitPastedFileName(current.name, targetFolder(), if (index == 0) "" else " ($index)")
+                    val path = targetFolder() + "/$candidate.md"
+                    result = notes.createManaged(path, RawDocument(videoSummaryBody(current.body, current.source)), authored = false)
                     if (result != NoteResult.PathConflict) break
                 }
                 mutableState.value = state.value.copy(name = candidate)

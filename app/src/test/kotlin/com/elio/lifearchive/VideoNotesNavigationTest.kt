@@ -26,7 +26,7 @@ class VideoNotesNavigationTest {
     private fun open() {
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("home-more")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("home-more").performClick()
-        compose.onNodeWithText("视频摘记", substring = false).performClick()
+        compose.onAllNodesWithText("视频摘记", substring = false).onLast().performClick()
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("video-copy") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
 
@@ -37,20 +37,22 @@ class VideoNotesNavigationTest {
         }
     }
 
-    @Test fun captureSurvivesRecreationAndRenamesConflictWithoutOverwritingSelectedFolder() {
+    // 与现有命名对话框相同，避开 Robolectric #8460 的宽 dp 文本框持续布局问题。
+    @Test @Config(qualifiers = "w320dp-h960dp-mdpi") fun captureSurvivesRecreationAndRenamesConflictWithoutOverwritingSelectedFolder() {
         val folder = "视频技巧"
         val name = "摘记-${java.util.UUID.randomUUID().toString().take(6)}"
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("home-more")).fetchSemanticsNodes().isNotEmpty() }
         val existing = runBlocking {
             compose.activity.library.createFolder(folder)
-            (compose.activity.notes.create("$folder/$name.md", RawDocument("原笔记不能覆盖")) as NoteResult.Committed).value
+            (compose.activity.notes.create("$folder/视频摘记/$name.md", RawDocument("原笔记不能覆盖")) as NoteResult.Committed).value
         }
         val folderChip = hasText(folder, substring = true) and hasAnyAncestor(hasTestTag("folder-filters"))
-        compose.waitUntil(15000) { compose.onAllNodes(folderChip).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("note:${existing.summary.id.value}")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("folder-filters").performScrollToKey("topic:$folder")
         compose.onNode(folderChip).performClick()
         open()
         compose.onNodeWithTag("video-tab-1").performClick()
-        compose.onNodeWithText("保存到：$folder。已自动识别名称和标签，确认内容后保存；普通文本也可收录。").assertIsDisplayed()
+        compose.onNodeWithText("保存到：$folder/视频摘记。分类可以稍后完成；首次写作时间未知时不自动填写。").assertIsDisplayed()
         compose.onNodeWithTag("video-name").performTextInput(name)
         val body = "---\ntitle: YAML 标题独立\ntags: [学习, 生活]\ncustom: unchanged\n---\n# 正文标题独立\n\n普通总结，不要求固定章节。\n- 条件：中文 😀\n"
         clipboard(body)
@@ -61,10 +63,11 @@ class VideoNotesNavigationTest {
         compose.onNodeWithTag("video-body").performScrollTo().assertTextContains(body)
         compose.onNodeWithTag("video-source").performScrollTo().assertTextContains("原分享文字 https://example.test/video")
         compose.onNodeWithTag("video-save-note").performScrollTo().performClick()
-        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("reader-webview")).fetchSemanticsNodes().isNotEmpty() || runBlocking { compose.activity.notes.observeNotes().first().any { it.path.value == "$folder/$name (1).md" } } }
+        compose.onNodeWithText("确认标签并保存").performClick()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("reader-webview")).fetchSemanticsNodes().isNotEmpty() || runBlocking { compose.activity.notes.observeNotes().first().any { it.path.value == "$folder/视频摘记/$name (1).md" } } }
         assertEquals("原笔记不能覆盖", runBlocking { (compose.activity.notes.read(existing.summary.id) as NoteResult.Success).value.document.text })
-        val saved = runBlocking { compose.activity.notes.observeNotes().first().single { it.path.value == "$folder/$name (1).md" } }
-        assertEquals(body + "\n\n## 来源\n原分享文字 https://example.test/video", runBlocking { (compose.activity.notes.read(saved.id) as NoteResult.Success).value.document.text })
+        val saved = runBlocking { compose.activity.notes.observeNotes().first().single { it.path.value == "$folder/视频摘记/$name (1).md" } }
+        assertEquals(body + "\n\n## 来源\n原分享文字 https://example.test/video", withoutManagedFields(runBlocking { (compose.activity.notes.read(saved.id) as NoteResult.Success).value.document.text }))
         compose.onNodeWithContentDescription("返回").performClick()
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("video-name")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("video-name").performScrollTo().assertTextContains("")
@@ -72,7 +75,7 @@ class VideoNotesNavigationTest {
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("home-more")).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    @Test fun homePastePreviewsWithoutWritingThenCreatesIndexedNoteAndKeepsPreviewAcrossRecreation() {
+    @Test @Config(qualifiers = "w320dp-h960dp-mdpi") fun homePastePreviewsWithoutWritingThenCreatesIndexedNoteAndKeepsPreviewAcrossRecreation() {
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("home-paste")).fetchSemanticsNodes().isNotEmpty() }
         val title = "粘贴-${java.util.UUID.randomUUID().toString().take(6)}"
         val raw = "---\ntitle: $title\ntags:\n  - 编程\n  - 学习\nunknown: keep\n---\n# 独立正文\n\n**关键词**与==核心原理==\n"
@@ -88,9 +91,10 @@ class VideoNotesNavigationTest {
         compose.onNodeWithTag("video-name").assertTextContains(title)
         compose.onNodeWithTag("video-body").performScrollTo().assertTextContains(raw)
         compose.onNodeWithTag("video-save-note").performScrollTo().performClick()
+        compose.onNodeWithText("确认标签并保存").performClick()
         compose.waitUntil(15000) { runBlocking { compose.activity.notes.observeNotes().first().size == before + 1 } }
-        val note = runBlocking { compose.activity.notes.observeNotes().first().single { it.path.value == "$title.md" } }
-        assertEquals(raw, runBlocking { (compose.activity.notes.read(note.id) as NoteResult.Success).value.document.text })
+        val note = runBlocking { compose.activity.notes.observeNotes().first().single { it.path.value == "待整理/$title.md" } }
+        assertEquals(raw, withoutManagedFields(runBlocking { (compose.activity.notes.read(note.id) as NoteResult.Success).value.document.text }))
         val listing = runBlocking { compose.activity.library.query(com.elio.lifearchive.domain.notes.NotesQuery(tag = "编程")) }
         assertTrue((listing as NoteResult.Success).value.notes.any { it.summary.id == note.id && it.propertyTags == listOf("编程", "学习") })
         compose.onAllNodes(hasTestTag("editor-body")).assertCountEquals(0)

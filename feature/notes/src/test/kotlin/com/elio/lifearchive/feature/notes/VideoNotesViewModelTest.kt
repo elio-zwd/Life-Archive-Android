@@ -58,7 +58,7 @@ class VideoNotesViewModelTest {
             assertEquals("初始标题", model.state.value.name)
             model.name("独立文件名")
             model.create(); model.create(); runCurrent()
-            assertEquals(listOf("独立文件名.md", "独立文件名 (1).md"), repo.creates.map { it.first })
+            assertEquals(listOf("待整理/独立文件名.md", "待整理/独立文件名 (1).md"), repo.creates.map { it.first })
             assertTrue(repo.creates.last().second.text.contains("title: \"初始标题\""))
             val note = NoteSnapshot(NoteSummary(NoteId("new"), LibraryPath("独立文件名 (1).md"), DocumentVersion("v1"), false), repo.creates.last().second)
             repo.result = NoteResult.Committed(note, false)
@@ -117,7 +117,7 @@ class VideoNotesViewModelTest {
             val source = "分享原文\nhttps://example.test/video?a=1&b=2"
             model.name("文件名"); model.body(raw); model.source(source)
             model.create(); model.create(); runCurrent()
-            assertEquals(listOf("技巧/手机/文件名.md" to RawDocument(raw + "\r\n\r\n## 来源\r\n" + source)), repo.creates)
+            assertEquals(listOf("技巧/视频摘记/文件名.md" to RawDocument(raw + "\r\n\r\n## 来源\r\n" + source)), repo.creates)
             model.body("保存中不能替换"); model.paste("另一篇"); model.name("另一个名字")
             var left = false
             model.leave { left = true }
@@ -150,7 +150,7 @@ class VideoNotesViewModelTest {
             }
             repo.throwing = true; model.create(); runCurrent()
             assertTrue(model.state.value.error!!.contains("异常故障")); assertFalse(model.state.value.busy)
-            assertEquals("合法文件名.md", repo.creates.last().first)
+            assertEquals("待整理/视频摘记/合法文件名.md", repo.creates.last().first)
             assertEquals("首尾不变 \r\n", videoSummaryBody("首尾不变 \r\n", " \n"))
         } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
     }

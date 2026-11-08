@@ -69,12 +69,15 @@ fun NotesScreen(
     loadThumbnail: suspend (NoteId, String, LinkSyntax) -> ImageBitmap? = { _, _, _ -> null },
     onVideoNotes: () -> Unit = {},
     onPaste: () -> Unit = {},
+    onOrganize: () -> Unit = {},
 ) {
     var naming by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
     var more by remember { mutableStateOf(false) }
     var folderMenu by remember { mutableStateOf(false) }
     var tagPicker by remember { mutableStateOf(false) }
+    var grouping by rememberSaveable { mutableStateOf(NoteGrouping.TOPIC) }
+    var collapsed by rememberSaveable { mutableStateOf(listOf<String>()) }
     val colors = homeColors()
     val presentation = remember(state.notes, state.listing) { noteListPresentation(state.notes, state.listing) }
     // 行动作只读取最新回调；详情在一次列表快照中按 ID 关联。
@@ -82,24 +85,23 @@ fun NotesScreen(
     val currentOnManage by rememberUpdatedState(onManage)
     val open: (NoteId) -> Unit = remember { { id -> currentOnOpen(id) } }
     val manage: (NoteId) -> Unit = remember(presentation) { { id -> presentation.details[id]?.let(currentOnManage); Unit } }
-    val folders = remember(state.listing?.folders) { state.listing?.folders.orEmpty().filter { it.isNotBlank() }.distinct() }
-    val tags = remember(state.listing?.tags) { (listOf("全部标签") + state.listing?.tags.orEmpty()).distinct() }
-    val canCountFolders = state.query.folder == null && state.query.tag == null && state.query.text.isBlank() && !state.query.trash
-    val folderCounts = remember(presentation, canCountFolders) {
-        if (!canCountFolders) emptyMap<String, Int>() else buildMap<String, Int> {
-            presentation.rows.forEach { row ->
-                var folder = row.folder
-                while (folder.isNotEmpty()) {
-                    put(folder, (get(folder) ?: 0) + 1)
-                    folder = folder.substringBeforeLast('/', "")
-                }
-            }
+    val tags = remember(state.listing?.tags) { NoteOrganization.tagTree(state.listing?.tags.orEmpty()) }
+    val groups = remember(presentation, grouping, state.listing?.topics) {
+        val values = linkedMapOf<String, MutableList<NoteRowUi>>()
+        presentation.rows.forEach { row ->
+            val detail = presentation.details[NoteId(row.id)]
+            val names = if (grouping == NoteGrouping.TOPIC) listOf(NoteOrganization.placement("${row.folder}/${row.name}.md").topic ?: NoteOrganization.INBOX)
+                else detail?.tags?.takeIf { it.isNotEmpty() } ?: listOf("无标签")
+            names.forEach { values.getOrPut(it) { mutableListOf() }.add(row) }
         }
+        val order = listOf(NoteOrganization.INBOX) + state.listing?.topics.orEmpty()
+        values.entries.sortedWith(compareBy<Map.Entry<String, MutableList<NoteRowUi>>> { if (grouping == NoteGrouping.TOPIC) order.indexOf(it.key).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE else 0 }.thenBy { it.key })
     }
+    val canCountFolders = state.query.folder == null && state.query.tag == null && state.query.text.isBlank() && !state.query.trash && state.query.topic == null && state.query.kind == null && state.query.selectedTags.isEmpty()
     val visibleKeys by remember(listState) {
         derivedStateOf(structuralEqualityPolicy()) { listState.layoutInfo.visibleItemsInfo.mapTo(HashSet()) { it.key } }
     }
-    val clearFilters = { onQuery(state.query.copy(text = "", folder = null, tag = null)) }
+    val clearFilters = { onQuery(state.query.copy(text = "", folder = null, tag = null, topic = null, kind = null, selectedTags = emptyList())) }
     val newNote = { naming = true; onClearError() }
     Scaffold(
         containerColor = colors.background,
@@ -117,6 +119,8 @@ fun NotesScreen(
                         DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
                             DropdownMenuItem(text = { Text("快速记录") }, enabled = !state.query.trash && !state.creating, onClick = { more = false; onQuick() })
                             DropdownMenuItem(text = { Text("视频摘记") }, enabled = !state.query.trash, onClick = { more = false; onVideoNotes() })
+                            DropdownMenuItem(text = { Text("分类与整理") }, enabled = !state.query.trash, onClick = { more = false; onOrganize() })
+                            DropdownMenuItem(text = { Text(if (grouping == NoteGrouping.TOPIC) "改为按标签分组" else "改为按主题分组") }, onClick = { more = false; grouping = if (grouping == NoteGrouping.TOPIC) NoteGrouping.TAG else NoteGrouping.TOPIC; collapsed = emptyList() })
                             DropdownMenuItem(text = { Text("新建笔记本") }, onClick = { more = false; onFolder() })
                             if (state.query.folder != null) DropdownMenuItem(text = { Text("移动笔记本") }, onClick = { more = false; onFolderManage() })
                             DropdownMenuItem(text = { Column { Text("标签筛选"); Text(state.query.tag ?: "全部标签", style = MaterialTheme.typography.bodySmall) } }, onClick = { more = false; tagPicker = true })
@@ -137,13 +141,13 @@ fun NotesScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         item(key = "all-folders", contentType = "folder") {
-                            FolderChip("全部笔记", if (canCountFolders) state.notes.size else null, state.query.folder == null, colors) {
-                                onQuery(state.query.copy(folder = null))
+                            FolderChip("全部笔记", if (canCountFolders) state.notes.size else null, state.query.folder == null && state.query.topic == null, colors) {
+                                onQuery(state.query.copy(folder = null, topic = null))
                             }
                         }
-                        items(folders, key = { "folder:$it" }, contentType = { "folder" }) { folder ->
-                            FolderChip(folder, folderCounts[folder]?.takeIf { canCountFolders }, state.query.folder == folder, colors) {
-                                onQuery(state.query.copy(folder = folder))
+                        items(listOf(NoteOrganization.INBOX) + state.listing?.topics.orEmpty(), key = { "topic:$it" }, contentType = { "folder" }) { topic ->
+                            FolderChip(topic, null, state.query.topic == topic, colors) {
+                                onQuery(state.query.copy(topic = topic, folder = null))
                             }
                         }
                     }
@@ -154,6 +158,11 @@ fun NotesScreen(
                             if (state.query.folder != null) DropdownMenuItem(text = { Text("移动笔记本") }, onClick = { folderMenu = false; onFolderManage() })
                         }
                     }
+                }
+                LazyRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FilterChip(state.query.kind == null, { onQuery(state.query.copy(kind = null)) }, label = { Text("全部类型") }) }
+                    items(NoteKind.entries) { kind -> FilterChip(state.query.kind == kind, { onQuery(state.query.copy(kind = kind)) }, label = { Text(kind.folder) }) }
+                    item { TextButton(onClick = { tagPicker = true }) { Text("标签 ${state.query.selectedTags.size.takeIf { it > 0 } ?: ""}") } }
                 }
                 HorizontalDivider(color = colors.line)
             }
@@ -190,23 +199,39 @@ fun NotesScreen(
                 if (state.error != null && !naming) item(key = "retry", contentType = "action") { TextButton(onClick = onRebuild) { Text("重建索引并重试") } }
                 if (message != null) item(key = "message", contentType = "status") { Text(message, color = colors.blue, style = MaterialTheme.typography.bodySmall) }
                 if (!state.loading && !state.updating && state.notes.isEmpty()) item(key = "empty", contentType = "empty") {
-                    val filtered = state.query.text.isNotBlank() || state.query.folder != null || state.query.tag != null
+                    val filtered = state.query.text.isNotBlank() || state.query.folder != null || state.query.tag != null || state.query.topic != null || state.query.kind != null || state.query.selectedTags.isNotEmpty()
                     EmptyNotes(colors, filtered, state.query.trash, if (filtered) clearFilters else newNote)
                 }
-                items(presentation.rows, key = { "note:${it.id}" }, contentType = { "note" }) { row ->
+                groups.forEach { group ->
+                    item(key = "group:${group.key}", contentType = "group") {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { collapsed = if (group.key in collapsed) collapsed - group.key else collapsed + group.key }, modifier = Modifier.weight(1f)) { Text("${if (group.key in collapsed) "▸" else "▾"} ${group.key} · ${group.value.size}${if (grouping == NoteGrouping.TAG) "（同篇可见于多组）" else ""}") }
+                            if (grouping == NoteGrouping.TOPIC && group.key != NoteOrganization.INBOX) TextButton(onClick = { onQuery(state.query.copy(topic = group.key, folder = null)); newNote() }) { Text("新建") }
+                        }
+                    }
+                    if (group.key !in collapsed) items(group.value, key = { if (grouping == NoteGrouping.TOPIC) "note:${it.id}" else "tag:${group.key}/note:${it.id}" }, contentType = { "note" }) { row ->
                     NoteRow(
                         row = row, colors = colors, enabled = !state.updating,
-                        visible = "note:${row.id}" in visibleKeys, thumbnailEpoch = state.thumbnailEpoch,
+                        visible = (if (grouping == NoteGrouping.TOPIC) "note:${row.id}" else "tag:${group.key}/note:${row.id}") in visibleKeys, thumbnailEpoch = state.thumbnailEpoch,
                         loadThumbnail = loadThumbnail, onOpen = open, onManage = manage,
                     )
+                    }
                 }
             }
         }
     }
-    if (tagPicker) FilterPicker("筛选标签", tags, { tagPicker = false }) { selected ->
-        tagPicker = false
-        onQuery(state.query.copy(tag = selected.takeUnless { it == "全部标签" }))
-    }
+    if (tagPicker) AlertDialog(onDismissRequest = { tagPicker = false }, title = { Text("层级标签筛选") }, text = {
+        Column {
+            Row { FilterChip(state.query.tagMatch == TagMatch.ALL, { onQuery(state.query.copy(tagMatch = TagMatch.ALL)) }, label = { Text("全部符合") }); FilterChip(state.query.tagMatch == TagMatch.ANY, { onQuery(state.query.copy(tagMatch = TagMatch.ANY)) }, label = { Text("任一符合") }) }
+            Text("选择父标签包含下级；可跨主题筛选。")
+            LazyColumn(Modifier.heightIn(max = 340.dp).testTag("note-filter-choices")) { items(tags, key = { it }) { tag ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(tag in state.query.selectedTags, { checked -> onQuery(state.query.copy(tag = null, selectedTags = if (checked) state.query.selectedTags + tag else state.query.selectedTags - tag)) }, modifier = Modifier.testTag("tag-choice:$tag"))
+                    Text("  ".repeat(tag.count { it == '/' }) + tag.substringAfterLast('/'))
+                }
+            } }
+        }
+    }, confirmButton = { TextButton(onClick = { tagPicker = false }) { Text("完成") } }, dismissButton = { TextButton(onClick = { onQuery(state.query.copy(tag = null, selectedTags = emptyList())) }) { Text("清除标签") } })
     if (naming) AlertDialog(
         onDismissRequest = { if (!state.creating) naming = false },
         title = { Text("新建笔记") },
@@ -265,12 +290,15 @@ private fun FolderChip(label: String, count: Int?, selected: Boolean, colors: Ho
 private fun FilterSummary(state: NotesUiState, colors: HomeColors, clearFilters: () -> Unit, onQuery: (NotesQuery) -> Unit) {
     var sortMenu by remember { mutableStateOf(false) }
     val sortLabels = listOf("最近修改", "较早修改", "最近创建", "较早创建", "名称")
-    val filtered = state.query.text.isNotBlank() || state.query.folder != null || state.query.tag != null
+    val filtered = state.query.text.isNotBlank() || state.query.folder != null || state.query.tag != null || state.query.topic != null || state.query.kind != null || state.query.selectedTags.isNotEmpty()
     val summary = buildAnnotatedString {
         append("${state.notes.size} 篇")
         if (state.query.trash) append(" · 回收站")
         state.query.folder?.let { append(" · $it") }
         state.query.tag?.let { append(" · #$it") }
+        state.query.topic?.let { append(" · $it") }
+        state.query.kind?.let { append(" · ${it.folder}") }
+        if (state.query.selectedTags.isNotEmpty()) append(" · ${if (state.query.tagMatch == TagMatch.ALL) "全部" else "任一"}：${state.query.selectedTags.joinToString()}")
         if (state.query.text.isNotBlank()) append(" · 搜索结果")
     }
     Row(

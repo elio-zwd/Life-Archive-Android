@@ -111,7 +111,7 @@ class EditorPersistence(
                     repository.initialize()
                     val actual = repository.read(id)
                     if (actual is NoteResult.Success) {
-                        if (actual.value.document.text == capturedText) {
+                        if (actual.value.document.text == capturedText || runCatching { com.elio.lifearchive.core.document.NoteTimes.content(actual.value.document.text, false) == com.elio.lifearchive.core.document.NoteTimes.content(capturedText, false) }.getOrDefault(false)) {
                             version = actual.value.summary.version
                             committedText = capturedText
                             writtenRevision = -1

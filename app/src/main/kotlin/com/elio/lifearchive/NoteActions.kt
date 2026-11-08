@@ -5,7 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import com.elio.lifearchive.domain.notes.LibraryNote
 
-internal enum class NoteAction { PIN, COVER, RENAME, TAGS, TRASH, RESTORE, PURGE, MARKDOWN, ZIP }
+internal enum class NoteAction { PIN, COVER, RENAME, TAGS, ORGANIZE, TRASH, RESTORE, PURGE, MARKDOWN, ZIP }
 @Composable internal fun NoteActions(note: LibraryNote, onDismiss: () -> Unit, onAction: (NoteAction, String) -> Unit) {
     var editing by remember(note.summary.id) { mutableStateOf<NoteAction?>(null) }
     var text by remember(note.summary.id) { mutableStateOf("") }
@@ -25,6 +25,7 @@ internal enum class NoteAction { PIN, COVER, RENAME, TAGS, TRASH, RESTORE, PURGE
             } else {
                 TextButton(onClick = { onAction(NoteAction.PIN, "") }) { Text(if (note.pinned) "取消置顶" else "置顶") }
                 TextButton(onClick = { onAction(NoteAction.COVER, "") }) { Text("设置封面") }
+                TextButton(onClick = { onAction(NoteAction.ORGANIZE, "") }) { Text("分类整理／内容时间") }
                 TextButton(onClick = { editing = NoteAction.RENAME; text = note.summary.path.value }) { Text("重命名／移动") }
                 TextButton(onClick = { editing = NoteAction.TAGS; text = note.propertyTags.joinToString(", ") }) { Text("管理属性标签") }
                 TextButton(onClick = { onAction(NoteAction.MARKDOWN, "") }) { Text("导出 Markdown 原文") }

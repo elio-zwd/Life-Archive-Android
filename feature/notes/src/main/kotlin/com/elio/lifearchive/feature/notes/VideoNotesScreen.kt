@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.lifearchive.core.preferences.MAX_VIDEO_PROMPT_LENGTH
 import com.elio.lifearchive.core.preferences.VideoPromptType
 import com.elio.lifearchive.domain.notes.NoteId
+import com.elio.lifearchive.domain.notes.NoteKind
 import com.elio.lifearchive.core.document.DocumentAnalyzer
 import com.elio.lifearchive.core.designsystem.SourceLinkDialog
 
@@ -63,6 +65,7 @@ fun VideoNotesRoute(model: VideoNotesViewModel, active: Boolean = true, onBack: 
             } catch (e: Exception) { model.error("读取剪贴板失败：${e.message ?: "请手动粘贴"}") }
         },
         onCreate = model::create, onReload = model::loadPrompts,
+        onTopic = model::topic, onKind = model::kind,
         captureOnly = model.captureOnly,
         onUpdateSource = { model.openSourceLink { readClipboard(context) } },
     )
@@ -70,6 +73,13 @@ fun VideoNotesRoute(model: VideoNotesViewModel, active: Boolean = true, onBack: 
         onText = model::sourceLinkText, onSelect = model::selectSourceLink,
         onPaste = { model.pasteSourceLink { readClipboard(context) } },
         onConfirm = model::applySourceLink, onDismiss = model::dismissSourceLink) }
+    if (state.pendingTags.isNotEmpty()) AlertDialog(onDismissRequest = model::cancelTags, title = { Text("确认新标签") }, text = {
+        LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { Text("以下标签尚未使用。保留原值表示采用，也可改为已有标签；留空表示不采用。最多三级，确认后再保存。") }
+            items(state.pendingTags, key = { it }) { tag -> OutlinedTextField(state.tagChoices[tag].orEmpty(), { model.tagChoice(tag, it) }, label = { Text(tag) }, modifier = Modifier.fillMaxWidth()) }
+            state.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+        }
+    }, confirmButton = { TextButton(onClick = model::confirmTags) { Text("确认标签并保存") } }, dismissButton = { TextButton(onClick = model::cancelTags) { Text("返回编辑") } })
     if (state.pendingPaste != null) AlertDialog(
         onDismissRequest = { model.confirmPaste(false) }, title = { Text("替换已有正文？") },
         text = { Text("将重新解析这次复制的内容；手动修改的笔记名和来源保留。") },
@@ -100,6 +110,8 @@ fun VideoNotesScreen(
     onPaste: () -> Unit, onCreate: () -> Unit, onReload: () -> Unit,
     captureOnly: Boolean = false,
     onUpdateSource: () -> Unit = {},
+    onTopic: (String) -> Unit = {},
+    onKind: (NoteKind?) -> Unit = {},
 ) {
     val promptScroll = rememberScrollState()
     val captureScroll = rememberScrollState()
@@ -147,7 +159,13 @@ fun VideoNotesScreen(
                         TextButton(onClick = onRestorePrompt, enabled = ready, modifier = Modifier.weight(1f).testTag("video-restore-prompt")) { Text("恢复默认") }
                     }
                 } else {
-                    Text("保存到：${folder ?: "根目录"}。已自动识别名称和标签，确认内容后保存；普通文本也可收录。", style = MaterialTheme.typography.bodyMedium)
+                    Text("保存到：${com.elio.lifearchive.domain.notes.NoteOrganization.folder(state.topic.ifBlank { null }, state.kind)}。分类可以稍后完成；首次写作时间未知时不自动填写。", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(state.topic, onTopic, label = { Text("主主题（可留空）") }, enabled = !state.busy, modifier = Modifier.fillMaxWidth())
+                    LazyRow { items(state.topics) { topic -> TextButton(onClick = { onTopic(topic) }, enabled = !state.busy) { Text(topic) } } }
+                    Row {
+                        FilterChip(state.kind == null, { onKind(null) }, label = { Text("类型待定") }, enabled = !state.busy)
+                        NoteKind.entries.forEach { kind -> FilterChip(state.kind == kind, { onKind(kind) }, label = { Text(kind.folder) }, enabled = !state.busy) }
+                    }
                     OutlinedTextField(state.name, onName, label = { Text("笔记名（文件名，不含 .md）") }, singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("video-name"))
                     val tags = remember(state.body) { runCatching { DocumentAnalyzer.analyze(state.body).tags }.getOrDefault(emptyList()) }
                     Text(if (tags.isEmpty()) "标签：无（可直接保存）" else "标签：${tags.joinToString("、")}", modifier = Modifier.testTag("paste-tags"))

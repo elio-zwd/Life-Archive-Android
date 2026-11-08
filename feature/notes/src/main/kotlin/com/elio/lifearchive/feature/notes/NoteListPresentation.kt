@@ -42,7 +42,7 @@ internal fun noteListPresentation(notes: List<NoteSummary>, listing: LibraryList
             management = detail?.let { if (it.deleted != null) "恢复／永久删除" else if (it.pinned) "已置顶 · 管理" else "管理" },
             excerpt = detail?.excerpt.orEmpty(),
             folder = note.path.value.substringBeforeLast('/', ""),
-            modified = detail?.modified,
+            modified = detail?.takeUnless { it.timeUncertain }?.contentTimes?.updated?.let(com.elio.lifearchive.core.document.NoteTimes::epoch),
             pinned = detail?.pinned == true,
             thumbnailTarget = detail?.thumbnail?.target,
             thumbnailSyntax = detail?.thumbnail?.syntax,

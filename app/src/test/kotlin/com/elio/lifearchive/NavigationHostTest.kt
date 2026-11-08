@@ -1,6 +1,7 @@
 package com.elio.lifearchive
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -44,7 +45,7 @@ class NavigationHostTest {
         compose.onNodeWithTag("editor-body").performTextInput("中文输入与 Activity 重建")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("editor-body").assertIsDisplayed()
-        compose.onNodeWithText("中文输入与 Activity 重建").assertIsDisplayed()
+        compose.onNodeWithTag("editor-body").assertTextContains("中文输入与 Activity 重建", substring = true)
         compose.onNodeWithContentDescription("返回").performClick()
         compose.waitUntil(15000) { compose.onAllNodes(androidx.compose.ui.test.hasTestTag("new-note")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("new-note").assertIsDisplayed()
@@ -65,6 +66,6 @@ class NavigationHostTest {
         compose.onNodeWithTag("insert-target").assertIsDisplayed()
         compose.onNodeWithText("https://example.com/保留", substring = false).assertIsDisplayed()
         compose.onNodeWithText("取消", substring = false).performClick()
-        compose.onNodeWithText("保留正文", substring = false).assertIsDisplayed()
+        compose.onNodeWithTag("editor-body").assertTextContains("保留正文", substring = true)
     }
 }

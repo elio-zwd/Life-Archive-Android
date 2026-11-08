@@ -14,6 +14,7 @@ class NoteListPresentationTest {
             summary = summary, pinned = true, created = 10, modified = 20, deleted = null,
             tags = listOf("标签", "项目", "正文内联"), title = "独立 YAML 标题", propertyTags = listOf("标签", "项目"), excerpt = "正文摘要",
             thumbnail = ThumbnailReference("../图%20一.png", LinkSyntax.MARKDOWN),
+            contentTimes = com.elio.lifearchive.core.document.ContentTimes(updated = "1970-01-01T00:00:00.020Z"),
         )
         val presentation = noteListPresentation(listOf(summary), LibraryListing(listOf(detail), emptyList(), emptyList(), 0))
         val row = presentation.rows.single()

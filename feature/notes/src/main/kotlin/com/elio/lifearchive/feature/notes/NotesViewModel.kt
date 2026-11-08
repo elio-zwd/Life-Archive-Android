@@ -101,8 +101,10 @@ class NotesViewModel(private val repository: NotesRepository, private val librar
         }
         mutableState.value = mutableState.value.copy(creating = true, error = null)
         viewModelScope.launch {
-            val folder = mutableState.value.query.folder
-            val result = repository.create((if (folder == null) "" else "$folder/") + "$name.md", RawDocument(""))
+            val query = mutableState.value.query
+            val topic = query.topic?.takeUnless { it == NoteOrganization.INBOX } ?: query.folder?.let { NoteOrganization.placement("$it/_new.md").topic }
+            val folder = NoteOrganization.folder(topic, NoteKind.PERSONAL)
+            val result = repository.createManaged("$folder/$name.md", RawDocument(""))
             mutableState.value = mutableState.value.copy(creating = false, error = when (result) {
                 is NoteResult.Committed -> null
                 NoteResult.PathConflict -> "同名笔记已存在（含大小写冲突）"

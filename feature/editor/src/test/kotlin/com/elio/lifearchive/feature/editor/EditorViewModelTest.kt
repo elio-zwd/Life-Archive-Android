@@ -14,6 +14,19 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class EditorViewModelTest {
+    @Test fun newManagedNoteStartsTypingAfterFrontmatterInsteadOfBreakingItsIdentity() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val raw = NoteTimes.withTimes(NoteIdentity.ensure(""), ContentTimes("2026-11-09", "2026-11-09"))
+        val repo = MemoryNotes().apply { note = note.copy(document = RawDocument(raw)) }
+        val model = EditorViewModel(repo, repo.note.summary.id, true)
+        try {
+            runCurrent()
+            assertEquals(raw.length, model.session!!.text.selection.start)
+            model.session!!.insert("正文开始")
+            assertEquals(raw + "正文开始", model.session!!.content.source)
+            assertEquals(NoteIdentity.read(raw), NoteIdentity.read(model.session!!.content.source))
+        } finally { model.viewModelScope.coroutineContext[Job]!!.cancelAndJoin(); Dispatchers.resetMain() }
+    }
     @Test fun sourceUpdateThrownWriteCanRetryAfterTheRealWriteLockIsReleased() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val repo = object : MemoryNotes() {

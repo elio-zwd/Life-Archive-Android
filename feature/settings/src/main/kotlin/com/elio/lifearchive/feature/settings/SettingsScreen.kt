@@ -2,6 +2,8 @@ package com.elio.lifearchive.feature.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -13,7 +15,7 @@ import com.elio.lifearchive.core.designsystem.LocalDocumentTheme
 import com.elio.lifearchive.core.designsystem.label
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun SettingsScreen(state: SettingsUiState, preferences: UserPreferences, onBack: () -> Unit, onTheme: () -> Unit, onFont: (Float) -> Unit, onRemote: (RemoteLoading) -> Unit, onClearCache: () -> Unit, onImportFiles: () -> Unit, onImportDirectory: () -> Unit, onExport: () -> Unit, onBackup: () -> Unit, onPickRestore: () -> Unit, onRestore: () -> Unit, onCancelRestore: () -> Unit, onImport: () -> Unit, onCancelImport: () -> Unit, onClearReaderCache: () -> Unit = {}, syncContent: @Composable () -> Unit = {}) {
+@Composable fun SettingsScreen(state: SettingsUiState, preferences: UserPreferences, onBack: () -> Unit, onTheme: () -> Unit, onFont: (Float) -> Unit, onRemote: (RemoteLoading) -> Unit, onClearCache: () -> Unit, onImportFiles: () -> Unit, onImportDirectory: () -> Unit, onExport: () -> Unit, onBackup: () -> Unit, onPickRestore: () -> Unit, onRestore: () -> Unit, onCancelRestore: () -> Unit, onImport: () -> Unit, onCancelImport: () -> Unit, onClearReaderCache: () -> Unit = {}, onImportTag: (String, String) -> Unit = { _, _ -> }, syncContent: @Composable () -> Unit = {}) {
     BackHandler(enabled = state.busy) { }
     Scaffold(topBar = { TopAppBar(title = { Text("设置与资料管理") }, navigationIcon = { TextButton(onClick = onBack, enabled = !state.busy) { Text("返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -46,5 +48,11 @@ import com.elio.lifearchive.core.designsystem.label
         }
     }
     state.restore?.let { AlertDialog(onDismissRequest = { if (!state.busy) onCancelRestore() }, title = { Text("替换现有资料？") }, text = { Text("已验证备份。继续将替换笔记、附件、草稿、回收站和设置；当前编辑会话会结束。") }, confirmButton = { TextButton(onClick = onRestore, enabled = !state.busy) { Text("确认替换并恢复") } }, dismissButton = { TextButton(onClick = onCancelRestore, enabled = !state.busy) { Text("取消") } }) }
-    state.importing?.let { prepared -> AlertDialog(onDismissRequest = { if (!state.busy) onCancelImport() }, title = { Text("确认导入") }, text = { Text("${prepared.notes} 篇笔记、${prepared.attachments} 个附件\n目标：${prepared.folder}\n未解析引用 ${prepared.unresolved.size} 个：${prepared.unresolved.take(8).joinToString("、")}\n原有文件不覆盖。") }, confirmButton = { TextButton(onClick = onImport, enabled = !state.busy) { Text("导入") } }, dismissButton = { TextButton(onClick = onCancelImport, enabled = !state.busy) { Text("取消") } }) }
+    state.importing?.let { prepared -> AlertDialog(onDismissRequest = { if (!state.busy) onCancelImport() }, title = { Text("确认导入与新标签") }, text = {
+        LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { Text("${prepared.notes} 篇笔记、${prepared.attachments} 个附件\n目标：${prepared.folder}\n未解析引用 ${prepared.unresolved.size} 个：${prepared.unresolved.take(8).joinToString("、")}\n原有文件不覆盖。原始写作时间未知时不补写。") }
+            if (prepared.foreignTags.isNotEmpty()) item { Text("确认外来新标签：保留为采用，可映射为已有标签，留空为不采用。最多三级。") }
+            items(prepared.foreignTags, key = { it }) { tag -> OutlinedTextField(prepared.tagDecisions[tag].orEmpty(), { onImportTag(tag, it) }, label = { Text(tag) }, enabled = !state.busy) }
+        }
+    }, confirmButton = { TextButton(onClick = onImport, enabled = !state.busy) { Text("确认标签并导入") } }, dismissButton = { TextButton(onClick = onCancelImport, enabled = !state.busy) { Text("取消") } }) }
 }

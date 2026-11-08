@@ -83,11 +83,12 @@ class SettingsViewModel(private val preferences: PreferencesRepository, private 
         }
     }
     fun prepareImport(entries: List<ImportEntry>) = run {
-        val result = library.prepareImport(entries, "导入-${UUID.randomUUID().toString().take(8)}")
+        val result = library.prepareImport(entries, "待整理/导入-${UUID.randomUUID().toString().take(8)}")
         check(result is NoteResult.Success) { result.failureMessage() }; mutable.value = state.value.copy(importing = result.value)
         "资料已暂存，确认后导入"
     }
     fun cancelImport() = run { state.value.importing?.let { library.discardImport(it) }; mutable.value = state.value.copy(importing = null); "已取消导入，资料库未改变" }
+    fun importTag(tag: String, value: String) { if (!state.value.busy) mutable.value = state.value.copy(importing = state.value.importing?.let { it.copy(tagDecisions = it.tagDecisions + (tag to value.trim().ifBlank { null })) }) }
     fun commitImport() = run { val prepared = state.value.importing ?: error("请先选择资料"); val result = library.commitImport(prepared); check(result is NoteResult.Success) { result.failureMessage() }; mutable.value = state.value.copy(importing = null); "导入完成：${prepared.folder}" }
     fun exportLibrary(open: () -> OutputStream?, ids: Set<NoteId>? = null) = run { val result = withContext(Dispatchers.IO) { (open() ?: error("无法创建导出文件")).use { library.export(it, ids) } }; check(result is NoteResult.Success) { result.failureMessage() }; "便携 ZIP 导出成功" }
     fun exportMarkdown(id: NoteId, open: () -> OutputStream?) = run {

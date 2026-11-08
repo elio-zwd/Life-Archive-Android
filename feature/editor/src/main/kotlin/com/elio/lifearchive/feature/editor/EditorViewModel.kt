@@ -54,7 +54,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
     fun openElapsedMs(): Long = (System.nanoTime() - openedAt) / 1_000_000
     private val sessionRepository = object : NotesRepository by repository {
         override suspend fun save(id: NoteId, expected: DocumentVersion, document: RawDocument, acknowledgedDraftRevision: Long?): NoteResult<NoteSnapshot> =
-            if (simulateFailure) NoteResult.StorageFailure("样板模拟：正文写入失败") else repository.save(id, expected, document, acknowledgedDraftRevision)
+            if (simulateFailure) NoteResult.StorageFailure("样板模拟：正文写入失败") else repository.saveContent(id, expected, document, acknowledgedDraftRevision)
     }
 
     init {
@@ -69,6 +69,14 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
             entryOffset = readingOffset
             val newSession = EditorSession(read.value.document.text)
             if (location != null) newSession.edit { selection = TextRange(location.coerceIn(0, length)) }
+            else if (startEditing) {
+                val raw = read.value.document.text
+                val bodyStart = com.elio.lifearchive.core.document.DocumentAnalyzer.yaml(raw)?.last?.plus(1)
+                if (bodyStart != null && raw.substring(bodyStart).isBlank()) {
+                    newSession.edit { selection = TextRange(bodyStart) }
+                    readingOffset = bodyStart; entryOffset = bodyStart
+                }
+            }
             session = newSession
             persistence = EditorPersistence(sessionRepository, read.value, viewModelScope, draft?.revision ?: 0)
             val pending = draft?.takeIf { it.document != read.value.document }
@@ -146,7 +154,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
         if (retired || mutableState.value.busy) return
         mutableState.value = mutableState.value.copy(busy = true)
         viewModelScope.launch {
-            val result = repository.create("恢复的草稿-${UUID.randomUUID().toString().take(8)}.md", document)
+            val result = repository.createManaged("待整理/个人笔记/恢复的草稿-${UUID.randomUUID().toString().take(8)}.md", com.elio.lifearchive.core.document.RawDocument(com.elio.lifearchive.core.document.NoteIdentity.fresh(document.text)))
             mutableState.value = mutableState.value.copy(busy = false, message = if (result is NoteResult.Committed) "草稿已另存，原笔记与原草稿均保留" else result.explanation())
             if (result is NoteResult.Committed) onCreated(result.value.summary.id)
         }

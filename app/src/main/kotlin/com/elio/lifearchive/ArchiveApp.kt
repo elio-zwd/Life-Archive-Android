@@ -56,6 +56,7 @@ import kotlinx.serialization.Serializable
 @Serializable internal data class NotesHome(val generation: String = UUID.randomUUID().toString()) : NavKey
 @Serializable internal data class NoteDestination(val id: String, val editing: Boolean = false, val offset: Int? = null, val entry: String = UUID.randomUUID().toString()) : NavKey
 @Serializable internal data object SettingsDestination : NavKey
+@Serializable internal data class OrganizationDestination(val ids: List<String> = emptyList(), val entry: String = UUID.randomUUID().toString()) : NavKey
 @Serializable internal data class VideoNotesDestination(val folder: String?, val entry: String = UUID.randomUUID().toString(), val captureOnly: Boolean = false) : NavKey
 @Serializable internal data class OnlineDestination(val url: String) : NavKey
 
@@ -246,8 +247,9 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                     onQuery = model::query, onSettings = { if (settings != null) backStack.add(SettingsDestination) },
                     onBackup = { if (settings != null) pickExport("backup") }, loadThumbnail = model::loadThumbnail,
                     onQuick = { model.quick { if (backStack.lastOrNull() == key) backStack.add(NoteDestination(it.value, true)) } }, onManage = { managed = it },
-                    onVideoNotes = { if (backStack.lastOrNull() == key) backStack.add(VideoNotesDestination(state.query.folder)) },
-                    onPaste = { if (backStack.lastOrNull() == key) backStack.add(VideoNotesDestination(state.query.folder, captureOnly = true)) },
+                    onOrganize = { if (library != null) backStack.add(OrganizationDestination()) },
+                    onVideoNotes = { if (backStack.lastOrNull() == key) backStack.add(VideoNotesDestination(state.query.topic?.takeUnless { it == NoteOrganization.INBOX } ?: state.query.folder)) },
+                    onPaste = { if (backStack.lastOrNull() == key) backStack.add(VideoNotesDestination(state.query.topic?.takeUnless { it == NoteOrganization.INBOX } ?: state.query.folder, captureOnly = true)) },
                     onFolder = { folderPrompt = ""; folderText = "" }, onFolderManage = { folderPrompt = state.query.folder; folderText = state.query.folder.orEmpty() }, onRebuild = model::rebuild,
                 )
             }
@@ -274,9 +276,17 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                     )
                 }
             }
+            entry<OrganizationDestination> { key ->
+                SideEffect { activeEditor = null }
+                if (library != null) {
+                    val factory = remember(library, key) { viewModelFactory { initializer { OrganizationViewModel(library, key.ids.map(::NoteId).toSet()) } } }
+                    val model: OrganizationViewModel = viewModel(factory = factory)
+                    OrganizationRoute(model) { if (!model.state.value.busy) backStack.removeLastOrNull() }
+                }
+            }
             entry<VideoNotesDestination> { key ->
                 SideEffect { if (backStack.lastOrNull() == key) activeEditor = null }
-                val factory = remember(notes, preferences, key) { viewModelFactory { initializer { VideoNotesViewModel(notes, preferences, key.folder, key.captureOnly) } } }
+                val factory = remember(notes, preferences, library, key) { viewModelFactory { initializer { VideoNotesViewModel(notes, preferences, key.folder, key.captureOnly, library) } } }
                 val model: VideoNotesViewModel = viewModel(factory = factory)
                 VideoNotesRoute(model, active = backStack.lastOrNull() == key,
                     onBack = { if (backStack.lastOrNull() == key) backStack.removeLastOrNull() },
@@ -293,7 +303,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                     val state by settings.state.collectAsStateWithLifecycle()
                     val syncBusy = settings.sync?.state?.collectAsStateWithLifecycle()?.value?.busy == true
                     SettingsScreen(state.copy(busy = state.busy || syncBusy), values, onBack = { backStack.removeLastOrNull() }, onTheme = { themePicker = true }, onFont = settings::font, onRemote = settings::remote,
-                        onClearCache = settings::clearCache, onClearReaderCache = settings::clearReaderCache, onImportFiles = { importPicker.launch(arrayOf("text/markdown", "text/plain", "application/octet-stream")) },
+                        onClearCache = settings::clearCache, onClearReaderCache = settings::clearReaderCache, onImportTag = settings::importTag, onImportFiles = { importPicker.launch(arrayOf("text/markdown", "text/plain", "application/octet-stream")) },
                         onImportDirectory = { directoryPicker.launch(null) }, onExport = { pickExport("zip") }, onBackup = { pickExport("backup") },
                         onPickRestore = { backupPicker.launch(arrayOf("application/zip", "application/octet-stream")) }, onRestore = { settings.restore(beforeRestore = {
                             val sessions = editors.values.toList()
@@ -329,7 +339,11 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
     managed?.let { note -> NoteActions(note, onDismiss = { managed = null }) { action, text ->
         val origin = backStack.lastOrNull()
         val current = activeEditor?.takeIf { it.id == note.summary.id }
-        if (action == NoteAction.COVER) {
+        if (action == NoteAction.ORGANIZE) {
+            managed = null
+            val open = { backStack.add(OrganizationDestination(listOf(note.summary.id.value))); Unit }
+            if (current != null) current.leave(open) else open()
+        } else if (action == NoteAction.COVER) {
             managed = null; openCover(note)
         } else if (action == NoteAction.MARKDOWN || action == NoteAction.ZIP) {
             val choose = { managed = null; pickExport(if (action == NoteAction.MARKDOWN) "markdown" else "zip", note.summary.id.value) }

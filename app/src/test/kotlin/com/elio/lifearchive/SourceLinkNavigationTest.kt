@@ -29,7 +29,7 @@ class SourceLinkNavigationTest {
         compose.onNodeWithText("更新链接", substring = false).performClick()
     }
 
-    @Test fun previewAndReaderShareLinkDialogSurvivesRecreationThenSavesOnlySource() {
+    @Test @Config(qualifiers = "w320dp-h960dp-mdpi") fun previewAndReaderShareLinkDialogSurvivesRecreationThenSavesOnlySource() {
         compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("home-paste")).fetchSemanticsNodes().isNotEmpty() }
         val title = "视频来源-${java.util.UUID.randomUUID().toString().take(6)}"
         val raw = "---\ntitle: $title\ntags: [生活, 摄影]\nsource: \"https://wrong.test/video\"\nunknown: keep\n---\n# 正文不变\n\n**关键词**与==原理==\n"
@@ -45,10 +45,11 @@ class SourceLinkNavigationTest {
         compose.onNodeWithTag("video-message").assertTextContains("链接已应用，保存笔记后生效", substring = true)
         assertEquals(before, runBlocking { compose.activity.notes.observeNotes().first().size })
         compose.onNodeWithTag("video-save-note").performScrollTo().performClick()
-        compose.waitUntil(15000) { runBlocking { compose.activity.notes.observeNotes().first().any { it.path.value == "$title.md" } } }
-        val note = runBlocking { compose.activity.notes.observeNotes().first().single { it.path.value == "$title.md" } }
+        compose.onNodeWithText("确认标签并保存").performClick()
+        compose.waitUntil(15000) { runBlocking { compose.activity.notes.observeNotes().first().any { it.path.value == "待整理/$title.md" } } }
+        val note = runBlocking { compose.activity.notes.observeNotes().first().single { it.path.value == "待整理/$title.md" } }
         val first = raw.replace("https://wrong.test/video", "https://xhslink.cn/o/6va5s9Fs9CN")
-        assertEquals(first, runBlocking { (compose.activity.notes.read(note.id) as NoteResult.Success).value.document.text })
+        assertEquals(first, withoutManagedFields(runBlocking { (compose.activity.notes.read(note.id) as NoteResult.Success).value.document.text }))
         compose.waitUntil(15000) { compose.onAllNodes(hasContentDescription("更多")).fetchSemanticsNodes().isNotEmpty() }
         moreUpdate()
         compose.onNodeWithTag("source-link-confirm").performClick()
@@ -56,10 +57,10 @@ class SourceLinkNavigationTest {
         compose.onNodeWithText("链接已更新", substring = false).assertIsDisplayed()
         compose.onAllNodes(hasTestTag("editor-body")).assertCountEquals(0)
         val second = first.replace("https://xhslink.cn/o/6va5s9Fs9CN", "https://v.douyin.com/ySydEn8zeT8/")
-        assertEquals(second, runBlocking { (compose.activity.notes.read(note.id) as NoteResult.Success).value.document.text })
+        assertEquals(second, withoutManagedFields(runBlocking { (compose.activity.notes.read(note.id) as NoteResult.Success).value.document.text }))
         compose.onNodeWithContentDescription("更多").performClick()
         compose.onNodeWithText("编辑笔记", substring = false).performClick()
-        compose.onNodeWithTag("editor-body").assertTextContains(second)
+        compose.onNodeWithTag("editor-body").assertTextContains("https://v.douyin.com/ySydEn8zeT8/", substring = true)
         clipboard("https://example.test/v?a=1&b=2#part"); moreUpdate()
         compose.onNodeWithTag("source-link-confirm").performClick()
         compose.waitUntil(15000) { runBlocking { NoteSource.read((compose.activity.notes.read(note.id) as NoteResult.Success).value.document.text) == "https://example.test/v?a=1&b=2#part" } }

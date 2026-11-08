@@ -113,7 +113,7 @@ class NotesScreenTest {
     }
 
     @Test fun largeTagAndFolderPickersComposeOnlyVisibleChoicesAndCanReachTheEnd() {
-        val listing = LibraryListing(emptyList(), List(500) { "笔记本$it" }, List(500) { "标签$it" }, 0)
+        val listing = LibraryListing(emptyList(), List(500) { "笔记本$it" }, List(500) { "标签$it" }, 0, topics = List(500) { "笔记本$it" })
         var ui by mutableStateOf(NotesUiState(loading = false, listing = listing))
         compose.setContent {
             MaterialTheme { NotesScreen(ui, {}, { _, _ -> }, {}, {}, "浅色", {}, onQuery = { ui = ui.copy(query = it) }) }
@@ -122,16 +122,17 @@ class NotesScreenTest {
         compose.onNodeWithText("全部标签").performClick()
         compose.onNodeWithText("标签499").assertDoesNotExist()
         compose.onNodeWithTag("note-filter-choices").performScrollToKey("标签499")
-        compose.onNodeWithText("标签499").performClick()
+        compose.onNodeWithTag("tag-choice:标签499").performClick()
+        compose.onNodeWithText("完成").performClick()
         compose.onNodeWithTag("note-filter-choices").assertDoesNotExist()
         compose.onNodeWithText("笔记本499").assertDoesNotExist()
-        compose.onNodeWithTag("folder-filters").performScrollToKey("folder:笔记本499")
+        compose.onNodeWithTag("folder-filters").performScrollToKey("topic:笔记本499")
         compose.onNodeWithText("笔记本499").performClick()
-        compose.runOnIdle { assertEquals("标签499", ui.query.tag); assertEquals("笔记本499", ui.query.folder) }
+        compose.runOnIdle { assertEquals(listOf("标签499"), ui.query.selectedTags); assertEquals("笔记本499", ui.query.topic) }
     }
 
     @Test fun visibleNoteShowsRealMetadataAndSearchClearsOnlyTheText() {
-        val entry = note(1).copy(excerpt = "记录中的真实摘要", pinned = true, modified = 1_761_264_000_000L)
+        val entry = note(1).copy(excerpt = "记录中的真实摘要", pinned = true, modified = 1_761_264_000_000L, contentTimes = com.elio.lifearchive.core.document.ContentTimes(updated = java.time.Instant.ofEpochMilli(1_761_264_000_000L).toString()))
         var ui by mutableStateOf(NotesUiState(notes = listOf(entry.summary), loading = false,
             listing = LibraryListing(listOf(entry), listOf("笔记本"), listOf("标签1"), 0),
             query = NotesQuery(text = "记录", folder = "笔记本", tag = "标签1")))
