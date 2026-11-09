@@ -12,12 +12,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
-    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/readerAssets"))
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 kotlin { jvmToolchain(17) }
 dependencies {
     implementation(libs.androidx.webkit)
+    api(project(":core:markdown"))
     implementation(project(":domain:notes"))
     implementation(project(":core:document"))
     implementation(project(":core:designsystem"))
@@ -39,19 +39,5 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
-val readerDirectory = rootProject.layout.projectDirectory.dir("reader")
-val installReader by tasks.registering(Exec::class) {
-    workingDir(readerDirectory)
-    commandLine("cmd", "/c", "npm.cmd", "ci", "--ignore-scripts", "--no-audit", "--no-fund")
-    inputs.files(readerDirectory.file("package.json"), readerDirectory.file("package-lock.json"))
-    outputs.file(readerDirectory.file("node_modules/.package-lock.json"))
-}
-val readerAssets by tasks.registering(Exec::class) {
-    dependsOn(installReader)
-    workingDir(readerDirectory)
-    commandLine("node", "sync-assets.mjs")
-    inputs.files(readerDirectory.file("package-lock.json"), readerDirectory.file("sync-assets.mjs"))
-    outputs.dir(layout.buildDirectory.dir("generated/readerAssets"))
-}
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach { dependsOn(readerAssets) }
-tasks.matching { it.name.contains("Lint") || it.name.startsWith("lint") }.configureEach { dependsOn(readerAssets) }
+// 保留已有验证入口，实际资源只由共用渲染模块生成一次。
+tasks.register("readerAssets") { dependsOn(":core:markdown:readerAssets") }

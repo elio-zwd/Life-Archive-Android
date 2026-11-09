@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { readerResilience } from './reader-resilience.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fixtures = JSON.parse(await fs.readFile(path.join(root, 'core/document/build/reader-fixtures.json'), 'utf8'));
-const assetRoots = [path.join(root, 'feature/editor/src/main/assets'), path.join(root, 'feature/editor/build/generated/readerAssets'), path.join(root, 'core/designsystem/src/main/assets')];
+const assetRoots = [path.join(root, 'core/markdown/src/main/assets'), path.join(root, 'core/markdown/build/generated/readerAssets'), path.join(root, 'core/designsystem/src/main/assets')];
 const pdfPadding = 50 * 1024 * 1024;
 const pdfObjects = [
   '<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>',

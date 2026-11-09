@@ -17,7 +17,7 @@ const output = path.resolve(value);
 const compact = process.argv.includes('--compact');
 const documents = JSON.parse(await fs.readFile(path.join(output, 'documents.json'), 'utf8'));
 assert.equal(documents.length, 2);
-const assets = ['feature/editor/src/main/assets', 'feature/editor/build/generated/readerAssets', 'core/designsystem/src/main/assets'].map(p => path.join(root, p));
+const assets = ['core/markdown/src/main/assets', 'core/markdown/build/generated/readerAssets', 'core/designsystem/src/main/assets'].map(p => path.join(root, p));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };
 const custom = await fs.readFile(path.join(output, 'custom-cover.png'));
 const errors = [];

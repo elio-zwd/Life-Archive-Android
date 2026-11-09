@@ -19,3 +19,4 @@ include(":app", ":core:designsystem", ":core:document", ":core:backup", ":core:p
 include(":feature:notes", ":feature:editor")
 include(":feature:settings")
 include(":domain:sync", ":data:sync")
+include(":core:markdown")

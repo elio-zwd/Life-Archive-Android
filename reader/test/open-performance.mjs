@@ -35,8 +35,8 @@ if (fixtures['50MiBPDF']) {
   await file.close(); pdfBytes = position;
 }
 const rounds = Math.max(20, Number(process.env.LIFE_ARCHIVE_PERF_ROUNDS) || 20);
-const generated = path.join(root, 'feature/editor/build/generated/readerAssets');
-const current = path.join(root, 'feature/editor/src/main/assets');
+const generated = path.join(root, 'core/markdown/build/generated/readerAssets');
+const current = path.join(root, 'core/markdown/src/main/assets');
 const browserPath = process.env.LIFE_ARCHIVE_BROWSER || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.woff': 'font/woff', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.svg': 'image/svg+xml' };
 let active; let activeAssets; let namespace; let projectionSeen = false;

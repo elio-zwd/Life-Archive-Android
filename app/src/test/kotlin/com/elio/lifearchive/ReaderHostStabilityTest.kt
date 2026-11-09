@@ -32,8 +32,8 @@ class ReaderHostStabilityTest {
     @Suppress("UNCHECKED_CAST")
     private inline fun <reified T> unused(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { proxy, method, args -> when (method.name) { "equals" -> proxy === args?.firstOrNull(); "hashCode" -> System.identityHashCode(proxy); "toString" -> T::class.java.simpleName; else -> error("不应调用 ${method.name}") } } as T
     private fun find(view: View): WebView? = if (view is WebView) view else (view as? ViewGroup)?.let { group -> (0 until group.childCount).firstNotNullOfOrNull { find(group.getChildAt(it)) } }
-    private fun request(revision: String, type: String) = object : WebResourceRequest {
-        override fun getUrl() = Uri.parse("https://appassets.androidplatform.net/reader/action?type=$type&value=目标&revision=$revision")
+    private fun request(revision: String, type: String, origin: String = "https://appassets.androidplatform.net") = object : WebResourceRequest {
+        override fun getUrl() = Uri.parse("$origin/reader/action?type=$type&value=目标&revision=$revision")
         override fun isForMainFrame() = true
         override fun isRedirect() = false
         override fun hasGesture() = false
@@ -103,6 +103,9 @@ class ReaderHostStabilityTest {
             shadow.webViewClient.shouldOverrideUrlLoading(view, request("first", "link")); assertTrue(links.isEmpty())
             shadow.webViewClient.shouldOverrideUrlLoading(view, request("second", "ready")); assertEquals(1f, view.alpha, 0f)
             shadow.webViewClient.shouldOverrideUrlLoading(view, request("second", "link")); assertEquals(1, links.size)
+            val external = request("second", "cache", "https://example.com")
+            shadow.webViewClient.shouldOverrideUrlLoading(view, external)
+            assertEquals(external.url.toString(), links.last())
         }
     }
 }

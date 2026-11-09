@@ -1,12 +1,13 @@
 package com.elio.lifearchive.feature.editor
 
 import com.elio.lifearchive.domain.notes.*
+import com.elio.lifearchive.core.markdown.MarkdownProtocol
 import org.json.JSONObject
 
 /** 不向笔记 HTML 或离线网页框架开放私有路径，只允许本地主页面提交有界派生物。 */
 internal object ReaderCacheMessages {
     fun allowed(mainFrame: Boolean, origin: String, revision: String, message: JSONObject): Boolean =
-        mainFrame && origin == "https://appassets.androidplatform.net" && message.optString("revision") == revision
+        MarkdownProtocol.acceptsMessage(mainFrame, origin, revision, message)
 
     suspend fun put(message: JSONObject, cache: ReaderCacheRepository): Boolean {
         val kind = runCatching { ReaderArtifactKind.valueOf(message.getString("kind")) }.getOrNull() ?: return false

@@ -2,7 +2,7 @@ import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.dirname(fileURLToPath(import.meta.url));
-const target = path.resolve(root, '../feature/editor/build/generated/readerAssets/reader');
+const target = path.resolve(root, '../core/markdown/build/generated/readerAssets/reader');
 await mkdir(target, { recursive: true });
 for (const [name, from] of [['mathjax', 'mathjax'], ['mermaid', 'mermaid/dist'], ['pdfjs', 'pdfjs-dist'], ['purify', 'dompurify/dist']]) {
   await cp(path.join(root, 'node_modules', from), path.join(target, name), { recursive: true, filter: p => !p.endsWith('.map') });

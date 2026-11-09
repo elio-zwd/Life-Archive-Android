@@ -29,8 +29,8 @@ data class ReaderSnapshot(val source: String, val revision: String = java.util.U
     val digest: String by lazy { com.elio.lifearchive.core.document.documentDigest(source) }
 }
 
-enum class ReaderLoadPhase { BODY, FIRST_SCREEN, IDLE }
-data class ReaderLoadEvent(val phase: ReaderLoadPhase, val revision: String, val elapsedMs: Long, val cacheHit: Boolean, val artifactHits: Int = 0)
+typealias ReaderLoadPhase = com.elio.lifearchive.core.markdown.MarkdownLoadPhase
+typealias ReaderLoadEvent = com.elio.lifearchive.core.markdown.MarkdownLoadEvent
 interface ReaderRenderer {
     @Composable fun Content(document: ReaderSnapshot, fontScale: Float, initialOffset: Int, onOffset: (Int) -> Unit, loadImage: suspend (String) -> ByteArray?, onLink: (String) -> Unit, services: ReaderServices? = null)
 }

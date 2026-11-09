@@ -14,12 +14,13 @@ val allowedModules = mapOf(
     ":app" to setOf(":core:designsystem", ":core:preferences", ":core:backup", ":domain:notes", ":data:notes", ":core:document", ":domain:sync", ":data:sync"),
     ":core:designsystem" to emptySet(),
     ":core:document" to emptySet(),
+    ":core:markdown" to emptySet(),
     ":core:backup" to emptySet(),
     ":core:preferences" to setOf(":core:backup"),
     ":domain:notes" to setOf(":core:document"),
     ":data:notes" to setOf(":domain:notes", ":core:document", ":core:backup"),
     ":feature:notes" to setOf(":domain:notes", ":core:designsystem", ":core:preferences"),
-    ":feature:editor" to setOf(":domain:notes", ":core:document", ":core:designsystem", ":core:preferences"),
+    ":feature:editor" to setOf(":domain:notes", ":core:document", ":core:designsystem", ":core:preferences", ":core:markdown"),
     ":feature:settings" to setOf(":domain:notes", ":domain:sync", ":core:preferences", ":core:backup", ":core:designsystem"),
     ":domain:sync" to setOf(":domain:notes"),
     ":data:sync" to setOf(":domain:sync", ":domain:notes", ":data:notes", ":core:document", ":core:backup"),
@@ -61,7 +62,7 @@ tasks.register("verifyFoundation") {
     group = "verification"
     description = "仅电脑验证架构、核心底层与编辑样板、Lint 和 APK 构建，不连接设备"
     dependsOn(
-        "checkArchitecture", ":core:document:test", ":core:backup:test",
+        "checkArchitecture", ":core:document:test", ":core:backup:test", ":core:markdown:testDebugUnitTest", ":core:markdown:lintDebug",
         ":data:notes:testDebugUnitTest", ":core:preferences:testDebugUnitTest", ":app:testDebugUnitTest",
         ":app:lintDebug", ":core:designsystem:lintDebug", ":data:notes:lintDebug", ":core:preferences:lintDebug",
         ":app:assembleDebug", ":app:assembleDebugAndroidTest", ":app:compileReleaseKotlin",
