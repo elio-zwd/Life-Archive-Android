@@ -1,5 +1,17 @@
 # 当前验证方法
 
+## 二期共用 Markdown 宿主（无设备）
+
+当前只验证共享宿主及 Life 适配，不代表见域接入、悬浮切换、历史迁移或流式消息性能通过。实现与结果见[阶段记录](../engineering/phase-2-shared-markdown-handoff.md)。Windows 10 x64、PowerShell 7、JDK 17 下运行：
+
+```powershell
+./gradlew.bat checkArchitecture :core:markdown:testDebugUnitTest :feature:editor:testDebugUnitTest --console=plain --max-workers=1
+./gradlew.bat :app:testDebugUnitTest --tests '*SharedMarkdownHostTest' --tests '*ReaderHostStabilityTest' --tests '*NavigationHostTest' --tests '*OrganizationNavigationTest' --tests '*FoundationRuntimeTest' --console=plain --max-workers=1
+./gradlew.bat :core:markdown:lintDebug :feature:editor:lintDebug :app:lintDebug :app:assembleDebug testReader --console=plain --max-workers=1
+```
+
+reader 源资源与生成资源现由 `core:markdown` 提供；原 `:feature:editor:readerAssets` 入口转交该模块。浏览器及 Robolectric 结果不代替真实 System WebView 和目标机验收，不安装或连接手机。
+
 ## 四期分类整理（无设备）
 
 在 PowerShell 7、JDK 17 下运行 `./gradlew.bat verifyNoteOrganization --console=plain --max-workers=1`，包含三期回归、领域规则、元数据契约、分类存储及 Compose 测试、架构、Lint 和 APK 构建；不安装应用或连接手机。500 篇合成笔记仅在临时库验证整理，真实 Kotlin 客户端另通过临时 PC HTTP 服务验证分类后往返及电脑 AI 完成工具。PC 运行 `npm.cmd test`、`npm.cmd run test:contracts` 和其打包／冒烟入口。检查、日志及版本见[分类交接](../engineering/note-organization-handoff.md)，手机单列[真机清单](note-organization-manual-acceptance.md)。

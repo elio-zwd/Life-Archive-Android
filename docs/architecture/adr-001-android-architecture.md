@@ -12,6 +12,8 @@
 
 ## 1. 选型结论与比较
 
+2026-11-09 二期架构补充：现有 Life `app` 作为唯一宿主，默认进入 Life，悬浮按钮切换平级的笔记／见域业务域。见域按需初始化并按 domain／data／feature 依赖边界接入，共用渲染不依赖笔记库；切换不销毁生成任务，两域恢复分别换代失效会话。本期备份保持独立，不要求见域接入 Life 的备份包；由 app 显式装配各域备份能力，统一整 App 备份留第五期。当前已新增 `core:markdown` 并由 Life 使用，见域生产模块与切换尚未接入；现有十三个模块的边界见下表。具体交互、进入条件和验收见[二期计划](../plans/phase-2-ai-and-shared-capabilities.md)。
+
 2026-11-09 四期补充：目录 `主题/类型` 是主归属，标签最多三级并支持交集／并集查询。`createManaged/saveContent` 与原样传输接口分开，内容时间仅在可靠写录／内容修改或人工确认时写入 YAML，整理维护不刷新；批量预览后按版本、草稿、路径复核，复用文件恢复。状态库 v4 增加时间待确认标志和主题顺序，notes 快照 format=4 兼容历史格式，不丢封面、置顶和阅读位置。依赖边界及十二模块数量不变，见[分类交接](../engineering/note-organization-handoff.md)。
 
 2026-11-04 三期同步补充：新增纯 Kotlin `domain:sync` 与 Android `data:sync`；设置功能仅依赖同步领域接口，App 显式装配。笔记域增加 `NotesSyncRepository`，由现有 `data:notes` 在共享门锁内实现，不开放私有路径或 DAO。同步配置、同步附件回收站分别作为可选历史备份参与者；凭据与基线不导出。外层备份仍为 v1，notes 快照仍为 format=3，状态库仍为 v3。新增可选域缺失时显式重置，未知域继续拒绝。具体协议及验证见[三期交接](../engineering/phase-3-sync-handoff.md)。
@@ -62,13 +64,14 @@ MVVM/UDF 描述界面状态流，模块化描述工程边界，Repository/Use Ca
 | --- | --- | --- |
 | `:app` | 启动、导航组装、Hilt 装配、系统入口；不承载笔记业务 | 实际启用的 feature、data 和 core 模块 |
 | `:core:document` | 纯 Kotlin 文档类型、路径/引用模型、语法处理适配边界；保留原文 | 无业务模块依赖 |
+| `:core:markdown` | 受控 WebView、共享渲染静态资源、修订校验与原文定位；资源和动作通过宿主回调提供 | 无项目模块依赖 |
 | `:core:designsystem` | 主题、排版、通用组件 | 无业务模块依赖 |
 | `:core:preferences` | 设置访问接口和 DataStore 实现 | 无业务模块依赖 |
 | `:core:backup` | 简单备份包读写、恢复流程及数据参与接口 | 无 feature/data/notes 依赖 |
 | `:domain:notes` | 纯 Kotlin 笔记模型、Repository 接口、必要 Use Case | `core:document` |
 | `:data:notes` | Repository 实现，文件、附件、草稿、Room、索引与恢复协调；提供笔记备份参与实现 | `domain:notes`、`core:document`；接备份后依赖 `core:backup` |
 | `:feature:notes` | 笔记列表、目录/标签、本地搜索、视频摘记的 Route、ViewModel、Screen | `domain:notes`、`core:designsystem`、`core:preferences` |
-| `:feature:editor` | 阅读、源码/实时预览编辑、输入与渲染适配、保存 UI 状态 | `domain:notes`、`core:document`、`core:designsystem`、`core:preferences` |
+| `:feature:editor` | 阅读、源码/实时预览编辑、输入与笔记渲染适配、保存 UI 状态 | `domain:notes`、`core:document`、`core:markdown`、`core:designsystem`、`core:preferences` |
 | `:feature:settings` | 外观、导入导出、备份恢复和电脑同步的 UI | `core:preferences`、`core:backup`、`core:designsystem`、`domain:notes`、`domain:sync` |
 | `:domain:sync` | 纯 Kotlin 同步状态、冲突选择及变化判断 | `domain:notes` |
 | `:data:sync` | HTTP、基线、连接配置和配置备份参与者 | `domain:sync`、`domain:notes`、`core:document`、`core:backup`；仅集成测试可依赖 `data:notes` |
@@ -134,7 +137,7 @@ Screen 主要接收状态与动作回调；Route 获取 ViewModel 并收集状�
 
 - **任务/习惯/目标**：获准后增加对应 domain/data/feature 业务域，通过笔记公开接口和 NoteId 关联资料，不直接查询笔记 DAO；有自己的规则与权威数据，不塞进 Note 对象。增加入口由 app 装配；新增数据域须同时接入备份，避免备份遗漏。
 - **中山公交出行**：保持独立业务规则与数据归属，公交/地图服务位于该域数据适配层；通过接口关联笔记。是否独立交付仍待定；现阶段不创建模块、Provider 或时刻表 Schema。
-- **二期单 App 与共用 Markdown**：2026-11-09 用户确认以 Life Archive 承载一个 App，首页提供“Life 笔记”“见域”两个内部入口。见域现有功能和交互大部分保持不变，仅作整合必要适配；Markdown 格式处理与展示接入 Life 已有能力，通过共用接口维护一份实现。笔记与 AI 对话保持业务和数据边界，feature 不直接依赖其他 feature；见域侧本期不查看、检索、调用或修改 Life 文档。具体首页样式、共用接口、模块与迁移方式后续对齐；新增权威数据同时接入备份，不提前建立跨 App SDK 或空模块。详见[二期计划](../plans/phase-2-ai-and-shared-capabilities.md)。
+- **二期单 App 与共用 Markdown**：以 Life 现有 app 为唯一宿主，默认进入 Life，可拖动悬浮按钮切换并保留各自底栏、导航与输入状态；见域按需初始化，两域各自拥有数据、外观和独立备份。保留见域现有业务与大部分交互，按 domain／data／feature 接入；共用 Markdown 通过不依赖笔记域的公开能力维护一份实现。见域本期不访问 Life 文档，feature 不依赖其他 feature 或 data。流式渲染样板与历史迁移协议按子任务细化并验证，不提前建立跨 App SDK 或空模块。详见[二期计划](../plans/phase-2-ai-and-shared-capabilities.md)。
 - **五期知识库与资料联动**：Life 文档作为见域知识库，AI 全库搜索、自动调用资料及其他新增笔记与对话联动归本期；当前仅记录方向，不展开接口或实现设计。未来资料访问仍须遵守笔记域公开接口与数据归属约束，不直接访问私有文件或 DAO。详见[五期方向](../plans/phase-5-knowledge-base.md)。
 - **三期电脑同步**：同步适配器经笔记域条件写入接口提交结果，网络不占用存储门锁；共同基线判定变化，双端冲突由用户选一端或跳过。同步前暂停外部编辑并处理草稿，电脑每轮 AI 修改前按文件列表留副本；具体范围以第三期计划为准。
 - **提醒**：业务域提供提醒意图，未来独立调度适配处理系统权限和恢复；届时区别精确时间提醒和可延迟后台任务，不在一期预建调度平台。

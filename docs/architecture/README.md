@@ -2,7 +2,7 @@
 
 2026-11-09 四期分类整理沿用十二个模块：笔记域提供分类预览／条件提交和内容编辑入口，data:notes 复用 StorageGate、链接维护与恢复。目录表示主归属，YAML 表示 ID、标签和真实内容时间；内部收录／活动时间保持独立。状态库显式 v3→v4，notes 快照 format=4 兼容 1／2／3，新增时间待确认状态和主题顺序随 notes 备份。正文同步仍原样传输，不生成内容时间。见[分类交接](../engineering/note-organization-handoff.md)。
 
-2026-11-09 二期范围确认：以 Life Archive 承载一个 App，首页提供“Life 笔记”“见域”两个内部入口；见域现有功能和交互大部分保持不变，Markdown 格式处理与展示接入 Life 共用接口。本期见域侧不查看、检索、调用或修改 Life 文档；知识库与新增资料联动归[第五期](../plans/phase-5-knowledge-base.md)，仅记录方向。延续模块化单体，首页样式和接口技术设计待对齐，尚未实施，不改变下文当前十二个模块的事实。详见[二期计划](../plans/phase-2-ai-and-shared-capabilities.md)。
+2026-11-09 二期架构确认：沿用 Life 唯一宿主，默认进入 Life，以可拖动悬浮按钮切换 Life／见域，保留各自底栏、状态与外观。见域按需初始化，按 domain／data／feature 整理业务边界，共用渲染不依赖笔记库；见域侧本期不访问 Life 文档。两域备份独立，统一备份与知识库、新增资料联动留[第五期](../plans/phase-5-knowledge-base.md)。当前新增 `core:markdown` 并由 Life 使用，共十三个实际模块；见域生产模块和悬浮切换尚未接入。源码事实见[整合基线](../engineering/phase-2-integration-baseline.md)，当前实现见[共用宿主阶段记录](../engineering/phase-2-shared-markdown-handoff.md)，完整范围见[二期计划](../plans/phase-2-ai-and-shared-capabilities.md)。
 
 2026-11-04 三期同步增加 `domain:sync` 与 `data:sync`，共十二个实际模块；笔记域提供专用同步接口，共享原有存储门锁，feature 仅依赖领域接口。YAML `life_archive_id` 保持跨端身份；同步配置和附件回收站接入可兼容历史缺失域的备份参与者，凭据及基线不导出，恢复后重新配对。原有模块数量描述保留历史含义；当前规则和检查见[三期计划](../plans/phase-3-computer-obsidian.md)及[三期交接](../engineering/phase-3-sync-handoff.md)。
 
@@ -40,8 +40,9 @@
 | `data:notes` | 文件、附件、草稿、Room、索引协调与笔记备份参与实现 |
 | `domain:sync` / `data:sync` | 纯 Kotlin 同步规则与公开接口 / HTTP、基线、连接配置及备份参与实现；正式代码不依赖笔记 data 实现 |
 | `core` | 文档、设计系统、设置、备份等实际使用的基础能力；不依赖具体业务域 |
+| `core:markdown` | 受控 WebView、渲染静态资源、修订与消息校验、原文定位；通过回调接收文档与资源，不依赖笔记业务模块 |
 
-上表是当前实施边界，共 app、四个 core、domain:notes、data:notes、三个 feature，以及 domain:sync、data:sync 十二个模块；包名以 `com.elio.lifearchive` 为根按职责区分。依赖由 `checkArchitecture` 检查；一期接口见功能交接，三期接口和验证见三期交接。
+上表是当前实施边界，共 app、五个 core、domain:notes、data:notes、三个 feature，以及 domain:sync、data:sync 十三个模块；包名以 `com.elio.lifearchive` 为根按职责区分。依赖由 `checkArchitecture` 检查；一期接口见功能交接，三期接口和验证见三期交接。
 
 ## 本阶段边界
 
@@ -67,6 +68,6 @@
 | 首页与导航 | 整体页面组织尚未冻结，需能逐步接入新业务；已有编辑器页面规则继续有效 |
 | 生活与重要档案范围 | 用户尚未选择；可作为候选扩展场景分析，不提前实施，不要求为了架构讨论确认全部远期细节 |
 
-见域整合的二期范围已确认，首页具体样式和 Markdown 共用接口技术设计仍待对齐；Life 文档知识库与新增资料联动留第五期，仅记录方向。出行交付形态继续后置。电脑同步协议及初步交付以三期交接为准，不再列为待定。它们都不追溯扩大一期范围。
+见域整合的二期宿主、悬浮切换、状态与独立备份边界已确认；共用 Markdown 的流式样板和历史迁移协议按子任务细化后接入。Life 文档知识库、新增资料联动及统一备份留第五期，仅记录方向。出行交付形态继续后置。电脑同步协议及初步交付以三期交接为准，不再列为待定。它们都不追溯扩大一期范围。
 
 实施交付需报告真实依赖图、测试及设备结果，对照 ADR-001 检查扩展边界，不以“架构强”或层数多代替证据。

@@ -8,7 +8,7 @@
 - 面向 Windows 10 x64，Windows 命令使用 `pwsh.exe`（PowerShell 7）。
 - 当前一期开发及验证已按用户确认完成，进入使用反馈与维护阶段；HTML 编辑与阅读设计已认可，首页已按最新确认更新，其他临时页面保留。阶段结论与交付证据见 [一期完成度核对与接手清单](docs/engineering/phase-1-completion-audit-20261031.md)和 [UI 优化计划](docs/plans/phase-1-ui-polish.md)。默认源码编辑与完整阅读，源码/实时预览均保留高亮，实时预览仍为实验项；阅读首屏优先并使用可丢弃的按需缓存。用户确认完成的项目不因历史未验证表要求全部重测；模拟器与真实手机的实测结果分别记录，后续按实际问题定向验证。输入约束见 [编辑器输入修复交接](docs/engineering/phase-1-editor-input-handoff.md)，工具用法见 [工具栏与回车续写交接](docs/engineering/phase-1-toolbar-handoff.md)，阅读机制见 [阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整范围及底层从 [一期功能交接](docs/engineering/phase-1-function-handoff.md)按需读取。
 - 产品只做 Android，技术方向为 Kotlin + Jetpack Compose。应用标识为 `com.elio.lifearchive`，显示名为 Life Archive。
-- 一期本地笔记已完成；原第二期后置，第三期先实施手动局域网双向同步及 AI 修改前备份。[二期](docs/plans/phase-2-ai-and-shared-capabilities.md)已收窄为单 App 内“Life 笔记”“见域”双入口与共用 Life Markdown 能力，见域现有功能和交互大部分保持不变，本期见域侧不查看、检索、调用或修改 Life 文档；首页样式和共用接口技术设计待对齐。[第五期](docs/plans/phase-5-knowledge-base.md)仅记录 Life 文档作为见域知识库、AI 全库搜索及其他新增资料联动方向。第四期的分类整理制度已确认实施，采用主题／类型目录、层级标签和可靠内容时间；PC 阅读显示与修改差异继续只记录方向。具体范围见 [文档索引](docs/README.md)。
+- 一期本地笔记已完成；第三期同步及第四期分类整理已初步交付。[二期](docs/plans/phase-2-ai-and-shared-capabilities.md)沿用 Life 唯一宿主，默认进入 Life，以可拖动悬浮按钮切换 Life／见域、保留各自底栏与状态；见域按需初始化，共用 Markdown 能力，本期不访问 Life 文档。两域保持独立数据、外观和备份，整 App 统一备份留[第五期](docs/plans/phase-5-knowledge-base.md)，与知识库、AI 全库搜索及新增资料联动一并只记录方向。二期已开始基线与接入工作，不代表整合完成；具体范围及状态见计划。第四期采用主题／类型目录、层级标签和可靠内容时间；PC 阅读显示与修改差异继续只记录方向。具体范围见 [文档索引](docs/README.md)。
 - 整体架构讨论必须读取[功能版图](docs/plans/overall-feature-roadmap.md)和[架构要求](docs/architecture/README.md)，再按需阅读对应阶段计划；新项目需求以本仓库记录为依据，不默认回查旧仓库或继承旧版功能。
 
 ## 2. 开始与编辑
@@ -31,7 +31,7 @@
 - 已选模块化单体架构，工程任务必须阅读 [ADR-001](docs/architecture/adr-001-android-architecture.md)。一个 APK，按真实职责建立 Gradle 模块；feature 不依赖 data 实现或其他 feature，纯 Kotlin domain 不依赖 Android。此前单 app 模块参考已被本决策替代。
 - 已接入 Compose + Material 3、ViewModel + UDF、Navigation 3、Hilt/KSP、Room 与 DataStore。版本集中固定到 `gradle/libs.versions.toml`；具体编辑/渲染库仍遵循样板门槛，不把未验证方案写成已兼容。
 - 一个活动库只装配一个存储运行实例，共享 `StorageGate`；先装配备份恢复协调器，再公开 Repository。业务不得直接读写私有文件、DAO 或备份参与者；状态库禁止破坏性重建，索引可重建。
-- 新模块必须更新并通过根工程 `checkArchitecture`；新增权威数据必须同时实现备份参与者，并由 app 显式装配。底层可以独立测试先行，正式编辑器仍须通过交互样板与真机门槛。
+- 新模块必须更新并通过根工程 `checkArchitecture`；新增权威数据必须同时实现备份能力，并由 app 显式装配。笔记域沿用备份参与者；二期见域保持独立备份，不接入 Life 备份包，统一整 App 备份留第五期。底层可以独立测试先行，正式编辑器仍须通过交互样板与真机门槛。
 - 用户选择 App 管理私有笔记库，外部通过导入导出和后期同步交换；目标仅小米 14 Ultra，约 500 篇笔记。索引可重建不等于应用状态可丢弃；文件可靠性和备份按 ADR-001 执行。
 - 业务域明确数据所有权和依赖方向，通过公开能力接口协作，避免循环依赖及跨域直接操作内部存储；系统能力和外部服务与业务规则分离，支持独立验证。
 - 待确定、不排期的功能用于检验架构扩展能力，不构成实现授权；不提前建立空模块、无调用方的抽象或庞大插件体系。具体候选及隐私范围以功能版图为准，不在本文件复制功能清单。

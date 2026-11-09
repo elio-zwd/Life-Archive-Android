@@ -11,12 +11,12 @@
 - [第一期：UI 优化实施计划](plans/phase-1-ui-polish.md)：首页及已认可编辑／阅读视觉的 Android 移植、保护边界和分层验证。
 - [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
 - [第一期：工具栏增强与回车续写](plans/phase-1-editor-toolbar.md)：标题手势、格式／插入面板、选区保护与输入事务约定。
-- [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：已确认同一 App 双入口，见域现有功能和交互大部分保持不变，Markdown 处理与展示接入 Life 共用接口；见域侧本期不访问 Life 文档，首页样式和技术设计待对齐，尚未实施。
+- [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：Life 唯一宿主、默认 Life、可拖动悬浮切换、各自底栏与状态保留；见域按需初始化和共用 Markdown，不访问 Life 文档。数据、外观及备份独立；已记录整合基线，生产模块尚未接入。
 - [第三期：简化双向同步与 AI 修改前备份](plans/phase-3-computer-obsidian.md)：本期先行，含 ID、改名移动和初步交付门槛。
 - [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：仅记录两个方向，暂不详细规划。
 - [第四期优化：笔记分类与整理制度](plans/phase-4-note-organization.md)：独立实施主题／类型归档、三级标签、批量预览整理与真实内容时间；不强设 AI 内容第三类。
 - [分类整理交接](engineering/note-organization-handoff.md)：接口、备份迁移、工具用法、实际检查和产物；[独立真机清单](testing/note-organization-manual-acceptance.md)区分电脑与设备结果。
-- [第五期：知识库与资料联动](plans/phase-5-knowledge-base.md)：Life 文档作为见域知识库，承接原二期 AI 全库搜索、自动调用资料及其他新增笔记与对话联动；本次仅记录方向，不展开设计。
+- [第五期：知识库与资料联动](plans/phase-5-knowledge-base.md)：Life 文档知识库、AI 全库搜索、自动调用资料、其他新增笔记与对话联动及整 App 统一备份；仅记录方向，不展开设计。
 
 一期范围及已确认交互以一期计划和决策为依据；三期按 2026-11-04 用户确认先行，计划、实现和验收分别记录。
 
@@ -34,6 +34,9 @@
 功能细节在计划中维护，README 和 AGENTS 通过链接引用。只在定位、入口或长期规则变化时同步摘要，避免多份完整清单发生冲突。整体架构已由 ADR-001 选定；模块、存储和状态管理按该文实施，编辑器样板和未定产品细节仍须完成各自门槛。
 
 ## 工程与资料
+
+- [二期整合基线](engineering/phase-2-integration-baseline.md)：Life 与见域源码版本、入口、模块及依赖差异、渲染与迁移缺口，以及实际基线检查。
+- [二期共用 Markdown 宿主阶段记录](engineering/phase-2-shared-markdown-handoff.md)：共享资源与 WebView 的独立边界、Life 适配及验证；不代表见域流式样板或整合完成。
 
 - [三期同步实现与初步交付](engineering/phase-3-sync-handoff.md)：双向同步、备份脚本、恢复兼容、产物和实际检查；[真机验收清单](testing/phase-3-manual-acceptance.md)单独记录手机结果。
 

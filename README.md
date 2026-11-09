@@ -26,10 +26,10 @@
 整体产品范围还在梳理，参见[整体功能版图与旧版迁移评估](docs/plans/overall-feature-roadmap.md)。其中后期候选等待确认，不自动扩充以下阶段。
 
 1. [第一期：本地笔记](docs/plans/phase-1-local-notes.md)：编辑、组织、搜索、附件、导入导出和简单备份恢复。交互与视觉以[已确认的决策文档](docs/plans/phase-1-editor-visual-decisions.md)为准。
-2. [第二期：单 App 整合与共用 Markdown](docs/plans/phase-2-ai-and-shared-capabilities.md)：一个 App 内提供“Life 笔记”“见域”两个入口，见域现有功能和交互大部分保持不变，Markdown 处理与展示接入 Life 共用接口；见域侧本期不查看、检索、调用或修改 Life 文档。范围已确认，首页样式和技术设计待对齐，尚未实施，暂不另定实施顺序。
+2. [第二期：单 App 整合与共用 Markdown](docs/plans/phase-2-ai-and-shared-capabilities.md)：已确认 Life 唯一宿主、默认 Life、可拖动悬浮切换和各自底栏及状态保留。当前[共用渲染宿主](docs/engineering/phase-2-shared-markdown-handoff.md)已抽取并接入 Life；见域生产模块、悬浮切换和历史迁移尚未接入。两域外观、数据与备份保持独立，见域本期不访问 Life 文档，统一备份留第五期。
 3. [第三期：简化双向同步](docs/plans/phase-3-computer-obsidian.md)：先实施局域网手动双向同步、YAML ID、改名移动及 AI 修改前备份；实现、检查和产物见[三期交接](docs/engineering/phase-3-sync-handoff.md)，随后由用户[真机验证](docs/testing/phase-3-manual-acceptance.md)。
 4. 第四期优化：[电脑端阅读显示与修改差异](docs/plans/phase-4-pc-reading.md)继续只记录方向；[笔记分类与整理制度](docs/plans/phase-4-note-organization.md)独立实施，按主题／类型归档，支持三级标签、批量预览整理和真实内容时间，不新增 AI 分类或强制 AI 标记。笔记同步身份机制仍归第三期。
-5. [第五期：知识库与资料联动](docs/plans/phase-5-knowledge-base.md)：Life 文档作为见域知识库，承接原二期的 AI 全库搜索、自动调用资料及笔记与对话之间的其他新增联动；仅记录方向，本次不展开设计。
+5. [第五期：知识库与资料联动](docs/plans/phase-5-knowledge-base.md)：Life 文档作为见域知识库，承接 AI 全库搜索、自动调用资料、其他新增联动及整 App 统一备份；仅记录方向，未展开设计。
 
 目标范围、实现与验收分别记录。第一期不接入 AI、不抽取两款 App 的共享模块；旧数据库不迁移。Android App 内版本对比、关系图和手写暂不计划实现。
 
