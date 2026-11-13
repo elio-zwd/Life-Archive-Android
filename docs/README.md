@@ -12,6 +12,7 @@
 - [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
 - [第一期：工具栏增强与回车续写](plans/phase-1-editor-toolbar.md)：标题手势、格式／插入面板、选区保护与输入事务约定。
 - [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：Life 唯一宿主、默认 Life、可拖动悬浮切换、各自底栏与状态保留；见域按需初始化和共用 Markdown，不访问 Life 文档。数据、外观及备份独立；已记录整合基线，生产模块尚未接入。
+- [二期剩余实施计划](plans/phase-2-remaining-implementation.md)：真实见域接入、悬浮入口、生命周期、流式渲染、历史迁移与独立备份的任务顺序和完成门槛；规划与实际完成状态分开记录。
 - [第三期：简化双向同步与 AI 修改前备份](plans/phase-3-computer-obsidian.md)：本期先行，含 ID、改名移动和初步交付门槛。
 - [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：仅记录两个方向，暂不详细规划。
 - [第四期优化：笔记分类与整理制度](plans/phase-4-note-organization.md)：独立实施主题／类型归档、三级标签、批量预览整理与真实内容时间；不强设 AI 内容第三类。
