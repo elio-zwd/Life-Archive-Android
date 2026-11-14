@@ -8,7 +8,7 @@
 - 面向 Windows 10 x64，Windows 命令使用 `pwsh.exe`（PowerShell 7）。
 - 当前一期开发及验证已按用户确认完成，进入使用反馈与维护阶段；HTML 编辑与阅读设计已认可，首页已按最新确认更新，其他临时页面保留。阶段结论与交付证据见 [一期完成度核对与接手清单](docs/engineering/phase-1-completion-audit-20261031.md)和 [UI 优化计划](docs/plans/phase-1-ui-polish.md)。默认源码编辑与完整阅读，源码/实时预览均保留高亮，实时预览仍为实验项；阅读首屏优先并使用可丢弃的按需缓存。用户确认完成的项目不因历史未验证表要求全部重测；模拟器与真实手机的实测结果分别记录，后续按实际问题定向验证。输入约束见 [编辑器输入修复交接](docs/engineering/phase-1-editor-input-handoff.md)，工具用法见 [工具栏与回车续写交接](docs/engineering/phase-1-toolbar-handoff.md)，阅读机制见 [阅读提速交接](docs/engineering/phase-1-reader-performance-handoff.md)，完整范围及底层从 [一期功能交接](docs/engineering/phase-1-function-handoff.md)按需读取。
 - 产品只做 Android，技术方向为 Kotlin + Jetpack Compose。应用标识为 `com.elio.lifearchive`，显示名为 Life Archive。
-- 一期本地笔记已完成；第三期同步及第四期分类整理已初步交付。[二期](docs/plans/phase-2-ai-and-shared-capabilities.md)沿用 Life 唯一宿主，默认进入 Life，以可拖动悬浮按钮切换 Life／见域、保留各自底栏与状态；见域按需初始化，共用 Markdown 能力，本期不访问 Life 文档。两域保持独立数据、外观和备份，整 App 统一备份留[第五期](docs/plans/phase-5-knowledge-base.md)，与知识库、AI 全库搜索及新增资料联动一并只记录方向。二期已开始基线与接入工作，不代表整合完成；具体范围及状态见计划。第四期采用主题／类型目录、层级标签和可靠内容时间；PC 阅读显示与修改差异继续只记录方向。具体范围见 [文档索引](docs/README.md)。
+- 一期本地笔记已完成；第三期同步及第四期分类整理已初步交付。[二期](docs/plans/phase-2-ai-and-shared-capabilities.md)沿用 Life 唯一宿主，默认进入 Life，以可拖动悬浮按钮切换 Life／见域、保留各自底栏与状态；见域按需初始化，共用 Markdown 能力，本期不访问 Life 文档。两域保持独立数据、外观和备份，整 App 统一备份留[第五期](docs/plans/phase-5-knowledge-base.md)，与知识库、AI 全库搜索及新增资料联动一并只记录方向。真实见域模块、宿主入口和共用消息渲染已接入开发包；完整迁移／独立恢复及设备验收仍未完成，实际证据与限制见[宿主交接](docs/engineering/phase-2-business-host-handoff.md)，不代表整合完成。第四期采用主题／类型目录、层级标签和可靠内容时间；PC 阅读显示与修改差异继续只记录方向。具体范围见 [文档索引](docs/README.md)。
 - 整体架构讨论必须读取[功能版图](docs/plans/overall-feature-roadmap.md)和[架构要求](docs/architecture/README.md)，再按需阅读对应阶段计划；新项目需求以本仓库记录为依据，不默认回查旧仓库或继承旧版功能。
 
 ## 2. 开始与编辑

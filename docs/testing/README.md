@@ -1,5 +1,18 @@
 # 当前验证方法
 
+## 二期见域业务与双域入口（无设备）
+
+真实入口、模块边界和未完成项见[宿主交接](../engineering/phase-2-business-host-handoff.md)。Windows / PowerShell 7 / JDK 17 下运行：
+
+```powershell
+./gradlew.bat checkArchitecture :domain:jianyu:test :data:jianyu:testDebugUnitTest :app:testDebugUnitTest --tests '*BusinessHostViewModelTest' --tests '*BusinessSwitcherTest' --tests '*VisibilityLifecycleOwnerTest' --console=plain --max-workers=1
+./gradlew.bat :app:testDebugUnitTest --tests '*BusinessHostUiTest' --tests '*NavigationHostTest' --tests '*OrganizationNavigationTest' --tests '*ReaderHostStabilityTest' --console=plain --max-workers=1
+./gradlew.bat :app:assembleDebug :app:lintDebug :data:jianyu:lintDebug :feature:jianyu:lintDebug --console=plain --max-workers=1
+node reader/test/fragment.test.mjs
+```
+
+浏览器样板需先运行 `:core:document:test` 生成真实投影及已有 reader 资源任务。上述结果不表示历史完整迁入、独立恢复和手机流式长列表性能通过；不操作真实数据或手机。
+
 ## 二期共用 Markdown 宿主（无设备）
 
 当前只验证共享宿主及 Life 适配，不代表见域接入、悬浮切换、历史迁移或流式消息性能通过。实现与结果见[阶段记录](../engineering/phase-2-shared-markdown-handoff.md)。Windows 10 x64、PowerShell 7、JDK 17 下运行：

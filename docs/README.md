@@ -11,7 +11,7 @@
 - [第一期：UI 优化实施计划](plans/phase-1-ui-polish.md)：首页及已认可编辑／阅读视觉的 Android 移植、保护边界和分层验证。
 - [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
 - [第一期：工具栏增强与回车续写](plans/phase-1-editor-toolbar.md)：标题手势、格式／插入面板、选区保护与输入事务约定。
-- [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：Life 唯一宿主、默认 Life、可拖动悬浮切换、各自底栏与状态保留；见域按需初始化和共用 Markdown，不访问 Life 文档。数据、外观及备份独立；已记录整合基线，生产模块尚未接入。
+- [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：Life 唯一宿主、默认 Life；真实见域模块和悬浮入口已接入开发代码，完整迁入／独立恢复、共用消息渲染正式替换和手机验收仍在实施。
 - [二期剩余实施计划](plans/phase-2-remaining-implementation.md)：真实见域接入、悬浮入口、生命周期、流式渲染、历史迁移与独立备份的任务顺序和完成门槛；规划与实际完成状态分开记录。
 - [第三期：简化双向同步与 AI 修改前备份](plans/phase-3-computer-obsidian.md)：本期先行，含 ID、改名移动和初步交付门槛。
 - [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：仅记录两个方向，暂不详细规划。
@@ -38,6 +38,8 @@
 
 - [二期整合基线](engineering/phase-2-integration-baseline.md)：Life 与见域源码版本、入口、模块及依赖差异、渲染与迁移缺口，以及实际基线检查。
 - [二期共用 Markdown 宿主阶段记录](engineering/phase-2-shared-markdown-handoff.md)：共享资源与 WebView 的独立边界、Life 适配及验证；不代表见域流式样板或整合完成。
+- [二期业务接入与双域宿主](engineering/phase-2-business-host-handoff.md)：十六模块的真实接入、悬浮入口、运行租约与状态保留、电脑证据及剩余迁移／渲染门槛。
+- [见域完整迁移与恢复契约](engineering/phase-2-complete-transfer-contract.md)：38 表、设置、音频与用户文件的覆盖矩阵、独立格式和提交／回滚设计；实现与验收另记。
 
 - [三期同步实现与初步交付](engineering/phase-3-sync-handoff.md)：双向同步、备份脚本、恢复兼容、产物和实际检查；[真机验收清单](testing/phase-3-manual-acceptance.md)单独记录手机结果。
 

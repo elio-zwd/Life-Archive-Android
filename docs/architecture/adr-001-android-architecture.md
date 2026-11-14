@@ -14,6 +14,8 @@
 
 2026-11-09 二期架构补充：现有 Life `app` 作为唯一宿主，默认进入 Life，悬浮按钮切换平级的笔记／见域业务域。见域按需初始化并按 domain／data／feature 依赖边界接入，共用渲染不依赖笔记库；切换不销毁生成任务，两域恢复分别换代失效会话。本期备份保持独立，不要求见域接入 Life 的备份包；由 app 显式装配各域备份能力，统一整 App 备份留第五期。当前已新增 `core:markdown` 并由 Life 使用，见域生产模块与切换尚未接入；现有十三个模块的边界见下表。具体交互、进入条件和验收见[二期计划](../plans/phase-2-ai-and-shared-capabilities.md)。
 
+2026-11-14 接入进展：新增见域 domain／data／feature，共十六个实际模块。Room 模型留 data，纯 Kotlin 契约与公开能力供 feature 使用；app 显式装配并按需初始化，通过世代租约协调闭库。`core:markdown` 的消息样板新增对纯 `core:document` 的依赖，继续不依赖笔记库。生产入口已接入；完整迁移／独立恢复、消息渲染正式替换和真机验收仍未完成，详见[宿主交接](../engineering/phase-2-business-host-handoff.md)。上方十三模块描述为 11 月 9 日基线。
+
 2026-11-09 四期补充：目录 `主题/类型` 是主归属，标签最多三级并支持交集／并集查询。`createManaged/saveContent` 与原样传输接口分开，内容时间仅在可靠写录／内容修改或人工确认时写入 YAML，整理维护不刷新；批量预览后按版本、草稿、路径复核，复用文件恢复。状态库 v4 增加时间待确认标志和主题顺序，notes 快照 format=4 兼容历史格式，不丢封面、置顶和阅读位置。依赖边界及十二模块数量不变，见[分类交接](../engineering/note-organization-handoff.md)。
 
 2026-11-04 三期同步补充：新增纯 Kotlin `domain:sync` 与 Android `data:sync`；设置功能仅依赖同步领域接口，App 显式装配。笔记域增加 `NotesSyncRepository`，由现有 `data:notes` 在共享门锁内实现，不开放私有路径或 DAO。同步配置、同步附件回收站分别作为可选历史备份参与者；凭据与基线不导出。外层备份仍为 v1，notes 快照仍为 format=3，状态库仍为 v3。新增可选域缺失时显式重置，未知域继续拒绝。具体协议及验证见[三期交接](../engineering/phase-3-sync-handoff.md)。
