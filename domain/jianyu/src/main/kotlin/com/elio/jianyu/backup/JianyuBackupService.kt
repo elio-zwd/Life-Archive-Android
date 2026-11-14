@@ -6,6 +6,7 @@ object JianyuBackupFormat {
 }
 
 interface JianyuBackupService {
+    val complete: JianyuCompleteBackup
     fun listSnapshots(): List<SnapshotCatalogEntry>
     suspend fun createDeviceSnapshot(): String
     fun deleteSnapshot(snapshotId: String)

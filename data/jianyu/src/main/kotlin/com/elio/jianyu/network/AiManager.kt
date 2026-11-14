@@ -39,6 +39,12 @@ object AiManager {
         return configurationRepository
     }
 
+    @Synchronized
+    internal fun reloadConfiguration(context: Context) {
+        initialize(context)
+        configurationRepository = AiConfigurationRepository(context.applicationContext)
+    }
+
     fun keys(context: Context, provider: AiProvider): ProviderKeyRepository {
         initialize(context)
         return when (provider) {

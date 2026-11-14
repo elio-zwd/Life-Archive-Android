@@ -93,6 +93,8 @@ class EncryptedApiKeyStore(
     fun clear(): Boolean = synchronized(lock) {
         return@synchronized try {
             atomicFile.delete()
+            check(!atomicFile.baseFile.exists() && !File(atomicFile.baseFile.absolutePath + ".bak").exists() &&
+                !File(atomicFile.baseFile.absolutePath + ".new").exists())
             lastError = null
             true
         } catch (error: Exception) {

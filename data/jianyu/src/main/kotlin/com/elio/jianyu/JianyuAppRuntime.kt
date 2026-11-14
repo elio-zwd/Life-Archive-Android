@@ -457,7 +457,9 @@ internal object JianyuAppRuntimeProvider {
     private fun createValidatedRuntime(context: Context): JianyuAppRuntime {
         val candidate = create(
             context = context,
-            recoverPendingOperations = false,
+            // 显式重试也是重新公开数据的入口，须先处理遗留替换日志。
+            // 只有同一次维护内的候选重开允许跳过恢复，交给其 afterReopen 核对。
+            recoverPendingOperations = true,
         )
         try {
             validateRuntimeHealth(candidate)
@@ -493,6 +495,7 @@ internal object JianyuAppRuntimeProvider {
         context: Context,
         recoverPendingOperations: Boolean,
     ): JianyuAppRuntime {
+        if (recoverPendingOperations) com.elio.jianyu.backup.complete.CompleteTransferRecovery.recover(context)
         val catalogRuntimeResult = createOfficialSkillCatalogRuntime(context)
         val database = RoundtableDatabase.getDatabase(
             context = context,

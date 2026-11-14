@@ -27,7 +27,8 @@ class DefaultJianyuDataMaintenance(
     private val conversation: ConversationSession,
 ) : JianyuDataMaintenance {
     private val context = context.applicationContext
-    override suspend fun clearAll(): String {
+    override suspend fun clearAll(): String = com.elio.jianyu.backup.complete.AndroidJianyuCompleteBackup.forContext(context).clearOwned {
+        var databaseCleared = false
         val preferences = (runtime.officialSkillCatalogRuntimeResult as? OfficialSkillCatalogRuntimeResult.Success)?.runtime?.preferences
         val result = clearAllLocalData(context, runtime.repository, preferences, {
             conversation.prepareForLocalDataDeletion()
@@ -39,10 +40,10 @@ class DefaultJianyuDataMaintenance(
                     "见域任务尚未停止"
                 }
             }
-        }, conversation::clearLocalPreferencesAfterDataDeletion)
-        if (result != "本地数据已清除") return result
-        return if (UserAvatarRepository(context).resetToDefault() == UserAvatarMutationResult.Success) result
-            else "会话已清除，但头像清理失败，请重试。"
+        }, conversation::clearLocalPreferencesAfterDataDeletion, { databaseCleared = true })
+        val message = if (!databaseCleared || UserAvatarRepository(context).resetToDefault() == UserAvatarMutationResult.Success) result
+            else "$result；头像清理失败，请重试。"
+        message to databaseCleared
     }
 }
 
@@ -52,6 +53,7 @@ private suspend fun clearAllLocalData(
     officialSkillPreferences: OfficialSkillPreferences?,
     onPrepareForLocalDataDeletion: (suspend () -> Unit)?,
     onClearConversationPreferences: (() -> Boolean)?,
+    onDatabaseCleared: () -> Unit,
 ): String {
     return try {
         onPrepareForLocalDataDeletion?.invoke()
@@ -62,6 +64,7 @@ private suspend fun clearAllLocalData(
         BackupOperationGate.forContext(context).withWriteLock {
             when (repository.clearAllData()) {
                 is RepositoryResult.Success -> {
+                    onDatabaseCleared()
                     val keyResults = AiProvider.entries.map { provider ->
                         AiManager.keys(context, provider).clear()
                     }
