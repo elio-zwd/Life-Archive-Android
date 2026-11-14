@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.jianyu.backup.BackupErrorCode
 import com.elio.jianyu.backup.BackupException
 import com.elio.jianyu.backup.JianyuBackupFormat
@@ -49,7 +50,7 @@ object BackupTestTags {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BackupRoute(
+internal fun LegacyBackupManagement(
     backup: com.elio.jianyu.backup.JianyuBackupService,
     @Suppress("UNUSED_PARAMETER") repository: JianyuRepository,
     onBack: () -> Unit,
@@ -57,7 +58,9 @@ fun BackupRoute(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var passwordSheet by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
+    var localBusy by remember { mutableStateOf(false) }
+    val fullOperation by backup.complete.operation.collectAsStateWithLifecycle()
+    val busy = localBusy || fullOperation is com.elio.jianyu.backup.JianyuCompleteOperation.Busy
     var message by remember { mutableStateOf<String?>(null) }
     var pendingTarget by remember { mutableStateOf<android.net.Uri?>(null) }
     var snapshots by remember { mutableStateOf(backup.listSnapshots()) }
@@ -75,9 +78,9 @@ fun BackupRoute(
     }
 
     JianyuPageShell(
-        title = "备份与恢复",
+        title = "历史见域备份管理",
         level = JianyuTopBarLevel.SECONDARY,
-        subtitle = "正式加密导出与设备绑定快照",
+        subtitle = "旧格式覆盖有限，完整备份请返回上一页",
         onBack = onBack,
         contentScrollable = true,
         modifier = Modifier.testTag(BackupTestTags.SCREEN),
@@ -98,7 +101,7 @@ fun BackupRoute(
             actionTestTag = BackupTestTags.SNAPSHOT_CREATE,
             onAction = {
                 if (!busy) {
-                    busy = true
+                    localBusy = true
                     scope.launch {
                         try {
                             val result = backup.createDeviceSnapshot()
@@ -109,7 +112,7 @@ fun BackupRoute(
                         } catch (error: Throwable) {
                             message = formatBackupError(error)
                         } finally {
-                            busy = false
+                            localBusy = false
                         }
                     }
                 }
@@ -128,7 +131,7 @@ fun BackupRoute(
                 TextButton(
                     onClick = {
                         scope.launch {
-                            busy = true
+                            localBusy = true
                             message = withContext(Dispatchers.IO) {
                                 runCatching {
                                     backup.deleteSnapshot(entry.snapshotId)
@@ -136,7 +139,7 @@ fun BackupRoute(
                                     "设备快照已删除。"
                                 }.getOrElse(::formatBackupError)
                             }
-                            busy = false
+                            localBusy = false
                         }
                     },
                     enabled = !busy,
@@ -171,14 +174,14 @@ fun BackupRoute(
             onDismiss = { if (!busy) { passwordSheet = false; pendingTarget = null } },
             onConfirm = { password ->
                 scope.launch {
-                    busy = true
+                    localBusy = true
                     message = withContext(Dispatchers.IO) {
                         runCatching {
                             backup.exportPortable(password, requireNotNull(pendingTarget).toString())
                             "可移植备份已加密、完整验证并保存。"
                         }.getOrElse(::formatBackupError)
                     }
-                    busy = false
+                    localBusy = false
                     passwordSheet = false
                     pendingTarget = null
                 }
@@ -189,8 +192,8 @@ fun BackupRoute(
     if (showImportInfo) {
         AlertDialog(
             onDismissRequest = { showImportInfo = false },
-            title = { Text("导入尚未开放") },
-            text = { Text("为了避免未经预览就合并或替换当前数据，Portable 导入、冲突预览和数据库替换会在后续 PR09-14A/14B 通过隔离校验后开放。已有备份文件不会被删除。") },
+            title = { Text("旧格式不能完整迁入") },
+            text = { Text("旧有限导出与设备绑定快照不包含完整迁入承诺。请返回上一页，使用完整见域备份（.jyfull）预览和恢复；已有历史文件会保留。") },
             confirmButton = { TextButton(onClick = { showImportInfo = false }) { Text("知道了") } },
         )
     }
@@ -233,7 +236,7 @@ private fun BackupPasswordSheet(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var password by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(BackupTestTags.PASSWORD_SHEET),

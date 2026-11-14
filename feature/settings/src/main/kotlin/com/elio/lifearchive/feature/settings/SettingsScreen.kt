@@ -41,13 +41,14 @@ import com.elio.lifearchive.core.designsystem.label
             OutlinedButton(onClick = onImportDirectory, enabled = !state.busy) { Text("导入目录（含附件）") }
             OutlinedButton(onClick = onExport, enabled = !state.busy) { Text("导出全部笔记与附件 ZIP") }
             Text("便携导出用于普通文件交换；完整备份另外保留应用状态、草稿和回收站。")
-            HorizontalDivider(); Text("完整备份与恢复", style = MaterialTheme.typography.titleMedium)
+            HorizontalDivider(); Text("Life 笔记备份与恢复", style = MaterialTheme.typography.titleMedium)
+            Text("覆盖 Life 笔记、附件、草稿、回收站和 Life 设置；不包含见域数据或见域设置。")
             Button(onClick = onBackup, enabled = !state.busy) { Text("导出完整备份") }
             OutlinedButton(onClick = onPickRestore, enabled = !state.busy) { Text("选择备份并验证") }
             Spacer(Modifier.height(30.dp))
         }
     }
-    state.restore?.let { AlertDialog(onDismissRequest = { if (!state.busy) onCancelRestore() }, title = { Text("替换现有资料？") }, text = { Text("已验证备份。继续将替换笔记、附件、草稿、回收站和设置；当前编辑会话会结束。") }, confirmButton = { TextButton(onClick = onRestore, enabled = !state.busy) { Text("确认替换并恢复") } }, dismissButton = { TextButton(onClick = onCancelRestore, enabled = !state.busy) { Text("取消") } }) }
+    state.restore?.let { AlertDialog(onDismissRequest = { if (!state.busy) onCancelRestore() }, title = { Text("替换现有 Life 笔记资料？") }, text = { Text("已验证备份。继续将替换 Life 笔记、附件、草稿、回收站和 Life 设置；当前笔记编辑会话会结束。见域数据与设置不会被替换。") }, confirmButton = { TextButton(onClick = onRestore, enabled = !state.busy) { Text("确认替换并恢复") } }, dismissButton = { TextButton(onClick = onCancelRestore, enabled = !state.busy) { Text("取消") } }) }
     state.importing?.let { prepared -> AlertDialog(onDismissRequest = { if (!state.busy) onCancelImport() }, title = { Text("确认导入与新标签") }, text = {
         LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { Text("${prepared.notes} 篇笔记、${prepared.attachments} 个附件\n目标：${prepared.folder}\n未解析引用 ${prepared.unresolved.size} 个：${prepared.unresolved.take(8).joinToString("、")}\n原有文件不覆盖。原始写作时间未知时不补写。") }

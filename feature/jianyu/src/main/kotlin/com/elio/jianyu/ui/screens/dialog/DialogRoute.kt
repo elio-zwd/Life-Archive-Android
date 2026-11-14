@@ -76,8 +76,9 @@ fun DialogRoute(
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val appPreferences by preferencesStore.state.collectAsStateWithLifecycle()
 
+    val contentEpoch = com.elio.jianyu.ui.LocalJianyuContentEpoch.current
     val localModel = com.elio.jianyu.ui.lifecycle.sessionViewModel<DialogStateViewModel>(
-        factory = remember { DialogStateViewModel.Factory(initialUiState) })
+        factory = remember(contentEpoch) { DialogStateViewModel.Factory(initialUiState, contentEpoch) })
     var localState by localModel.state
     var showArchivedSessions by remember { mutableStateOf(false) }
     var renameTitle by remember { mutableStateOf<String?>(null) }
@@ -85,6 +86,7 @@ fun DialogRoute(
     var showReferenceDialog by remember { mutableStateOf(false) }
     var messageActionId by remember { mutableStateOf<String?>(null) }
     androidx.compose.runtime.SideEffect {
+        DialogDraftMemory.save(contentEpoch, localState.composerState)
         onDetailChanged(localState.activeOverlay != DialogOverlayType.NONE || localState.expandedAnswerIds.isNotEmpty() ||
             localState.isMoreMenuOpen || renameTitle != null || contextConfirmation != null || showReferenceDialog || messageActionId != null)
     }

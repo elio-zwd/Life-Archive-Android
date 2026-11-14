@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
+import org.junit.After
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -14,6 +15,12 @@ import org.robolectric.shadows.ShadowLog
 @Config(sdk = [34], application = LifeArchiveApplication::class)
 class BusinessHostUiTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @After fun closeRuntime() {
+        val context = compose.activity.applicationContext
+        compose.activityRule.scenario.close()
+        resetJianyuRuntimeForTest(context)
+    }
 
     @Test fun realEntryAndUnsentInputSurviveSwitchingAndActivityRecreation() {
         compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }

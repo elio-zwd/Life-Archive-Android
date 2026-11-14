@@ -15,8 +15,8 @@ android {
         applicationId = "com.elio.lifearchive"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.5.0-dev.1"
+        versionCode = 12
+        versionName = "0.5.0-dev.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
