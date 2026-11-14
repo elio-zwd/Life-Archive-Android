@@ -1,5 +1,17 @@
 # 当前验证方法
 
+## 二期完整迁移与独立恢复（无设备）
+
+支持范围、互通夹具来源与失败保护见[完整迁移交接](../engineering/phase-2-complete-backup-handoff.md)。完整见域测试与真实装配入口：
+
+```powershell
+./gradlew.bat :data:jianyu:testDebugUnitTest :feature:jianyu:testDebugUnitTest :app:testDebugUnitTest --tests '*CompleteBackupIntegrationTest' --tests '*BusinessHostUiTest' --console=plain --max-workers=1
+```
+
+数据测试包含来源 App 生成的合成 `.jyfull` 夹具、实际 Schema／正文／附件、替换日志中断、提交后补清理以及重开校验失败后的显式重试回滚。真实 App 测试包含备份不丢输入、非空目标先备份、替换／清理失效旧输入与会话、两域互不覆盖。测试间显式关闭见域运行实例，避免 Robolectric 类加载器复用后跨临时目录持有旧 Room。
+
+旧来源完整导出在来源仓库定向测试与构建，命令及身份见其 `docs/guides/life-complete-migration.md`。所有上述操作仅用电脑合成资料；硬件 Keystore、系统文件选择器、实际迁入和设备性能仍按[二期真机清单](phase-2-manual-acceptance.md)记录。
+
 ## 二期见域业务与双域入口（无设备）
 
 真实入口、模块边界和未完成项见[宿主交接](../engineering/phase-2-business-host-handoff.md)。Windows / PowerShell 7 / JDK 17 下运行：
@@ -11,7 +23,7 @@
 node reader/test/fragment.test.mjs
 ```
 
-浏览器样板需先运行 `:core:document:test` 生成真实投影及已有 reader 资源任务。上述结果不表示历史完整迁入、独立恢复和手机流式长列表性能通过；不操作真实数据或手机。
+浏览器样板需先运行 `:core:document:test` 生成真实投影及已有 reader 资源任务。上述宿主检查不单独证明完整迁入／恢复，数据闭环见上节；手机流式长列表性能另验，不操作真实数据或手机。
 
 ## 二期共用 Markdown 宿主（无设备）
 

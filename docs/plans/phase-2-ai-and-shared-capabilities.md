@@ -2,9 +2,9 @@
 
 记录日期：2026-10-17；架构与实施顺序确认：2026-11-09。
 
-状态：用户已确认架构、悬浮切换交互和实施顺序，并要求开始实施。已记录[整合基线](../engineering/phase-2-integration-baseline.md)，共用 Markdown 宿主已抽取到 `core:markdown` 并接入 Life，见[阶段实现记录](../engineering/phase-2-shared-markdown-handoff.md)。目前尚未接入见域生产模块或悬浮切换，不代表整合完成；迁移协议和见域 Markdown 流式样板仍需按子任务细化、验证后接入。
+状态：二期开发代码已接入真实见域业务、悬浮切换、共用消息渲染、完整迁移与独立恢复，电脑定向交付检查通过；小米 14 Ultra 验收尚未进行，不能标记整期完成。初始差距保留在[整合基线](../engineering/phase-2-integration-baseline.md)，Life 共用渲染的早期实现见[阶段记录](../engineering/phase-2-shared-markdown-handoff.md)。
 
-2026-11-14 已开始执行[剩余实施计划](phase-2-remaining-implementation.md)：真实见域业务模块、独立存储及按需运行、双域宿主与可拖动入口已接入开发代码，电脑端实际 MainActivity 切换及重建输入保留测试通过，见[交接与未完成项](../engineering/phase-2-business-host-handoff.md)。完整迁移／独立恢复和共用消息渲染正式替换仍在实施；不得把原有限导出当成完整备份。尚未安装或验收手机。
+2026-11-14 执行[剩余实施计划](phase-2-remaining-implementation.md)：三个见域模块、独立存储及按需运行、双域状态与入口已接入，电脑实际 MainActivity 切换及重建输入保留测试通过，见[宿主交接](../engineering/phase-2-business-host-handoff.md)。生产消息已统一调用共用渲染，旧渲染依赖已删除；`.jyfull` 全量导出、预览、换库回滚和独立恢复已实现，见[迁移交接](../engineering/phase-2-complete-backup-handoff.md)。原有限 `.jybak` 不作完整备份。尚未安装或验收手机。
 
 2026-11-04 调整为第三期先行；三期及四期分类整理已初步交付后，现按用户要求开始本期。Life 文档知识库、AI 全库搜索、新增资料联动及整 App 统一备份留第五期。
 
@@ -46,7 +46,7 @@
 
 - 旧见域会话、角色、资料、可迁移设置及相关附件需迁入，保留标识和关联；API Key 在新包内重新配置，不复制旧 App 私有目录或设备绑定密钥。
 - 通过受控导出、校验、预览和导入完成迁移；开始写入前核对支持范围，明确报告遗漏、不支持或失效的外部资源。失败、取消或损坏时保留原数据，不静默部分成功。
-- 旧见域现有可移植导出不等于迁入功能完成：当前无正式导入入口，且现有导出会拒绝部分旧会话。完整迁移需先细化数据映射及兼容方案，再实现并验证；不据此提前修改旧手机数据。
+- 旧见域原有限可移植导出会拒绝部分旧会话，不等于完整迁入。当前新增独立 `.jyfull` 格式及正式导入入口，支持范围和验证以[完整契约](../engineering/phase-2-complete-transfer-contract.md)为准；不把未知历史包或真实手机迁入写成已验证。
 - 二期保留两套独立备份，入口明确标注“Life 笔记备份”“见域备份”及各自恢复范围。Life 备份不自动加入见域内容，见域备份也不包含 Life 文档。
 - 整 App 统一备份整合归[第五期](phase-5-knowledge-base.md)，本期不改变 Life 备份外层格式或建设跨域恢复事务。
 

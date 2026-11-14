@@ -43,7 +43,7 @@
 | `core` | 文档、设计系统、设置、备份等实际使用的基础能力；不依赖具体业务域 |
 | `core:markdown` | 受控 WebView、渲染静态资源、修订与消息校验、原文定位；通过回调接收文档与资源，不依赖笔记业务模块 |
 
-2026-11-14 新增 `domain:jianyu`、`data:jianyu`、`feature:jianyu`，当前共十六个实际模块。见域沿用 `com.elio.jianyu` 业务命名空间，应用标识仍为 `com.elio.lifearchive`。app 按需装配见域并持有运行租约，feature 只见公开领域契约；Room 持久化模型留 data。双域入口和状态机制见[交接](../engineering/phase-2-business-host-handoff.md)，完整迁移／独立恢复仍在实现。`core:markdown` 消息样板依赖纯 `core:document` 的投影，不引入笔记域。依赖由 `checkArchitecture` 检查；上方十三模块描述为 11 月 9 日历史状态。
+2026-11-14 新增 `domain:jianyu`、`data:jianyu`、`feature:jianyu`，当前共十六个实际模块。见域沿用 `com.elio.jianyu` 业务命名空间，应用标识仍为 `com.elio.lifearchive`。app 按需装配见域并持有运行租约，feature 只见公开领域契约；Room 持久化模型留 data。双域入口和状态机制见[交接](../engineering/phase-2-business-host-handoff.md)，完整迁移／独立恢复见[数据闭环交接](../engineering/phase-2-complete-backup-handoff.md)。`core:markdown` 消息模式依赖纯 `core:document` 的投影，不引入笔记域。依赖由 `checkArchitecture` 检查；上方十三模块描述为 11 月 9 日历史状态。
 
 ## 本阶段边界
 
