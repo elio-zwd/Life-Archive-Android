@@ -18,6 +18,7 @@ android {
 }
 kotlin { jvmToolchain(17) }
 dependencies {
+    implementation(project(":core:document"))
     implementation(libs.androidx.webkit)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.foundation)

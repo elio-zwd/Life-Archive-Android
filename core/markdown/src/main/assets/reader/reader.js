@@ -3,6 +3,8 @@ import { ReaderWork } from './reader-work.js';
 if (window.readerStartupError || typeof DOMPurify === 'undefined') throw Error('阅读组件未能启动');
 window.readerStarted = true;
 const params = new URLSearchParams(location.search);
+const fragment = params.get('fragment') === 'true';
+document.documentElement.classList.toggle('reader-fragment', fragment);
 const rootId = params.get('note');
 let auto = params.get('auto') === 'true';
 let revision = params.get('rev') || 'initial';
@@ -80,6 +82,11 @@ function preparedMedia(node, context) {
   });
 }
 async function remote(node, url, page, refreshOnly = false, context = activeContext) {
+  if (fragment) {
+    const box = element('div', '远程资源需在系统中打开。', 'resource');
+    box.append(button('系统打开', () => action('link', url)));
+    context.mutate(() => node.replaceWith(box)); return;
+  }
   const box = element('div', null, 'resource');
   box.dataset.resourceUrl = url; box.dataset.resourcePage = String(page);
   const original = node.cloneNode(false);
@@ -328,6 +335,13 @@ function decorate(root, stack, context, work) {
     box.dataset.source = code.parentElement.dataset.source || '0'; box.dataset.diagramSource = source; code.parentElement.replaceWith(box);
     box.style.minHeight = '160px'; register(work, box, 'diagram', () => renderDiagram(box, context), context);
   }
+  if (fragment) for (const pre of root.querySelectorAll('pre')) {
+    const code = pre.querySelector(':scope>code'); if (!code) continue;
+    const copy = button('复制代码', () => {
+      try { window.ReaderFragment?.postMessage(JSON.stringify({ revision: context.revision, copy: code.textContent })); } catch {}
+    });
+    copy.className = 'code-copy'; pre.after(copy);
+  }
   // 块标识保留定位信息，但不作为正文可见文字。
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); const texts = []; let text;
   while ((text = walker.nextNode())) if (!text.parentElement.closest('pre,code,.math,.mermaid')) texts.push(text);
@@ -416,23 +430,29 @@ window.readerReload = async () => {
   const staging = element('main', null, 'reader-staging');
   staging.style.width = `${content.getBoundingClientRect().width}px`; document.body.append(staging);
   try {
-    const restoreOffset = content.dataset.note ? window.readerOffset() : Number(params.get('offset')) || 0;
+    const restoreOffset = fragment ? 0 : content.dataset.note ? window.readerOffset() : Number(params.get('offset')) || 0;
     window.readerReady = false;
     status.textContent = '';
-    const data = await json('document', { note: rootId, revision: capturedRevision });
+    const data = await json(fragment ? 'fragment' : 'document', { note: rootId, revision: capturedRevision });
     if (captured !== generation) return;
     context.namespace = data.cacheNamespace; context.projectionKey = data.projectionKey;
     context.metrics = { cacheHit: !!data.cacheHit, body: performance.now(), layoutWidth: Math.round(content.getBoundingClientRect().width) }; window.readerMetrics = context.metrics;
     staging.dataset.note = rootId; staging.innerHTML = safeContent(data.html);
-    addDocumentMetadata(staging, { metadata: currentMetadata || data.metadata });
+    if (!fragment) addDocumentMetadata(staging, { metadata: currentMetadata || data.metadata });
     phase(context, 'BODY');
     if (context.projectionKey && staging.querySelector('.math,.embed,img,audio,video,pre>code.language-mermaid')) {
       context.layoutKey = await cacheKey(`layout|${context.projectionKey}|${environment()}`);
       context.layout = layoutFromCache(await cached('GEOMETRY', context.layoutKey, context));
     }
     decorate(staging, [rootId], context, work);
+    const folded = fragment ? [...content.querySelectorAll('details[data-source]')].map(node => [node.dataset.source, node.open]) : [];
+    for (const [source, open] of folded) { const node = [...staging.querySelectorAll('details[data-source]')].find(node => node.dataset.source === source); if (node) node.open = open; }
     await work.first(staging, restoreOffset);
     if (captured !== generation) return;
+    if (fragment && !window.getSelection()?.isCollapsed) {
+      window.readerDeferredFragment = window.readerFragmentConfiguration || { revision: capturedRevision, dark, scale: Number(params.get('scale')) || 1 };
+      window.readerReady = true; return;
+    }
     rootBlocks = data.blocks; content.dataset.note = rootId; content.replaceChildren(...staging.childNodes);
     document.documentElement.classList.remove('reader-preparing');
     const offset = restoreOffset;
@@ -441,6 +461,7 @@ window.readerReload = async () => {
     work.mount(content);
     window.readerReady = true;
     window.readerRevision = capturedRevision;
+    if (fragment) fragmentSize();
     context.metrics.firstScreen = performance.now();
     action('ready', String(Math.round(context.metrics.firstScreen)));
   } catch (e) { if (captured === generation && e.name !== 'AbortError') { status.textContent = `阅读加载失败：${e.message}`; document.documentElement.classList.remove('reader-preparing'); status.append(button('重试', () => window.readerReload())); action('error', e.message); } }
@@ -462,6 +483,9 @@ async function refreshDisplay() {
 let lastWidth = Math.round(content.getBoundingClientRect().width);
 window.addEventListener('resize', () => { const width = Math.round(content.getBoundingClientRect().width); if (width !== lastWidth) { lastWidth = width; refreshDisplay(); } });
 window.readerUpdate = async config => {
+  if (fragment) window.readerFragmentConfiguration = config;
+  // 流式追加不能销毁用户正在复制的选区；只保留最后一个待展示修订。
+  if (fragment && !window.getSelection()?.isCollapsed) { window.readerDeferredFragment = config; return; }
   const changed = config.revision && config.revision !== revision;
   const nextTheme = validTheme(config.theme) ? config.theme : (config.dark ? 'legacy-dark' : 'legacy-light');
   const themeChanged = theme !== nextTheme;
@@ -474,8 +498,8 @@ window.readerUpdate = async config => {
   if (validTheme(theme)) document.documentElement.dataset.pageTheme = theme; else delete document.documentElement.dataset.pageTheme;
   document.documentElement.classList.toggle('dark', dark);
   document.documentElement.style.fontSize = `${17 * (Number(config.scale) || 1)}px`;
-  if (changed) { rendering = window.readerReload(); return rendering; }
-  if (metadataChanged && window.readerReady) {
+  if (changed || (fragment && window.readerRevision !== revision)) { rendering = window.readerReload(); return rendering; }
+  if (!fragment && metadataChanged && window.readerReady) {
     const anchor = [...content.querySelectorAll('[data-source]')].find(node => !node.closest('.properties,.embedded-note') && node.getBoundingClientRect().bottom >= 0);
     const before = anchor?.getBoundingClientRect().top;
     addDocumentMetadata(content, { metadata: currentMetadata });
@@ -487,6 +511,19 @@ window.readerUpdate = async config => {
   }
   return rendering;
 };
+function fragmentSize() {
+  if (!fragment || !window.readerReady) return;
+  try { window.ReaderFragment?.postMessage(JSON.stringify({ revision, height: Math.ceil(content.getBoundingClientRect().height) })); } catch {}
+}
+if (fragment) {
+  if (typeof ResizeObserver === 'function') new ResizeObserver(fragmentSize).observe(content);
+  else { window.addEventListener('resize', fragmentSize); content.addEventListener('toggle', fragmentSize, true); }
+  document.addEventListener('selectionchange', () => {
+    if (window.getSelection()?.isCollapsed && window.readerDeferredFragment) {
+      const next = window.readerDeferredFragment; delete window.readerDeferredFragment; window.readerUpdate(next);
+    }
+  });
+}
 // 原生配置可能先于模块完成加载；只用最后一次配置开始首屏任务。
 if (window.readerPendingConfiguration) { await window.readerUpdate(window.readerPendingConfiguration); delete window.readerPendingConfiguration; }
 if (!rendering) rendering = window.readerReload();

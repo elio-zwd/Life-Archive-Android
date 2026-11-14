@@ -14,7 +14,7 @@ val allowedModules = mapOf(
     ":app" to setOf(":core:designsystem", ":core:preferences", ":core:backup", ":domain:notes", ":data:notes", ":core:document", ":domain:sync", ":data:sync"),
     ":core:designsystem" to emptySet(),
     ":core:document" to emptySet(),
-    ":core:markdown" to emptySet(),
+    ":core:markdown" to setOf(":core:document"),
     ":core:backup" to emptySet(),
     ":core:preferences" to setOf(":core:backup"),
     ":domain:notes" to setOf(":core:document"),
@@ -81,6 +81,12 @@ tasks.register<Exec>("testReader") {
     dependsOn(":feature:editor:readerAssets", ":core:document:test")
     workingDir(layout.projectDirectory.dir("reader"))
     commandLine("node", "test/reader.test.mjs")
+}
+tasks.register<Exec>("testMarkdownFragments") {
+    group = "verification"
+    dependsOn(":core:markdown:readerAssets", ":core:document:test")
+    workingDir(layout.projectDirectory.dir("reader"))
+    commandLine("node", "test/fragment.test.mjs")
 }
 tasks.register("verifyPhaseOne") {
     group = "verification"
