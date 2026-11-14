@@ -1,5 +1,7 @@
 package com.elio.lifearchive.feature.notes
 
+import androidx.compose.ui.layout.onSizeChanged
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,6 +72,8 @@ fun NotesScreen(
     onVideoNotes: () -> Unit = {},
     onPaste: () -> Unit = {},
     onOrganize: () -> Unit = {},
+    onBottomBarMeasured: (Int) -> Unit = {},
+    onModalVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     var naming by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -78,6 +82,7 @@ fun NotesScreen(
     var tagPicker by remember { mutableStateOf(false) }
     var grouping by rememberSaveable { mutableStateOf(NoteGrouping.TOPIC) }
     var collapsed by rememberSaveable { mutableStateOf(listOf<String>()) }
+    androidx.compose.runtime.SideEffect { onModalVisibilityChanged(naming || more || folderMenu || tagPicker) }
     val colors = homeColors()
     val presentation = remember(state.notes, state.listing) { noteListPresentation(state.notes, state.listing) }
     // 行动作只读取最新回调；详情在一次列表快照中按 ID 关联。
@@ -167,7 +172,7 @@ fun NotesScreen(
                 HorizontalDivider(color = colors.line)
             }
         },
-        bottomBar = { HomeBottomBar(colors, onSettings) },
+        bottomBar = { Box(Modifier.onSizeChanged { onBottomBarMeasured(it.height) }) { HomeBottomBar(colors, onSettings) } },
         floatingActionButton = {
             Box(
                 Modifier.size(56.dp).clip(CircleShape).background(colors.fab)

@@ -27,6 +27,7 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject internal lateinit var switchPositions: SwitchPositionStore
     @Inject internal lateinit var variant: VariantRuntime
     @Inject internal lateinit var notes: NotesRepository
     @Inject internal lateinit var preferences: PreferencesRepository
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val model = ViewModelProvider(this)[AppViewModel::class.java]
+        val businessHost = ViewModelProvider(this)[BusinessHostViewModel::class.java]
         setContent {
             val state by model.state.collectAsStateWithLifecycle()
             val dark = when (state.preferences.theme) {
@@ -53,11 +55,14 @@ class MainActivity : ComponentActivity() {
                 DocumentTheme.GRAPHITE -> DocumentPalette.GRAPHITE
             }
             DocumentPageTheme(palette) {
+              DualBusinessHost(businessHost, switchPositions, palette == DocumentPalette.GRAPHITE) { onSwitcher, onBottomBar ->
                 when {
                     state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
                     !state.ready -> Scaffold { Text("正在恢复本地状态…", modifier = androidx.compose.ui.Modifier.padding(it)) }
-                    else -> ArchiveApp(notes, preferences, state.preferences, variant.debugControls, library, remote, backup, readerCache, sync)
+                    else -> ArchiveApp(notes, preferences, state.preferences, variant.debugControls, library, remote, backup, readerCache, sync,
+                        onSwitcherAvailabilityChanged = onSwitcher, onBottomBarMeasured = onBottomBar)
                 }
+              }
             }
         }
     }

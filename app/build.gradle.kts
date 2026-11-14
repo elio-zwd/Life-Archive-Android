@@ -15,8 +15,8 @@ android {
         applicationId = "com.elio.lifearchive"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.4.0"
+        versionCode = 11
+        versionName = "0.5.0-dev.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -36,6 +36,11 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":domain:jianyu"))
+    implementation(project(":data:jianyu"))
+    implementation(project(":feature:jianyu"))
+    implementation(libs.datastore.preferences)
+    implementation(libs.work.runtime)
     implementation(project(":domain:sync"))
     implementation(project(":data:sync"))
     implementation(project(":feature:settings"))

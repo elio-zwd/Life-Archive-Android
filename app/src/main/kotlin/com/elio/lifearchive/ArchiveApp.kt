@@ -61,7 +61,7 @@ import kotlinx.serialization.Serializable
 @Serializable internal data class OnlineDestination(val url: String) : NavKey
 
 @Composable
-internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesRepository, values: UserPreferences, debugControls: Boolean, library: LibraryRepository? = null, remote: RemoteCacheRepository? = null, backup: BackupEngine? = null, readerCache: ReaderCacheRepository? = null, sync: com.elio.lifearchive.domain.sync.SyncRepository? = null) {
+internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesRepository, values: UserPreferences, debugControls: Boolean, library: LibraryRepository? = null, remote: RemoteCacheRepository? = null, backup: BackupEngine? = null, readerCache: ReaderCacheRepository? = null, sync: com.elio.lifearchive.domain.sync.SyncRepository? = null, onSwitcherAvailabilityChanged: (Boolean) -> Unit = {}, onBottomBarMeasured: (Int) -> Unit = {}) {
     val backStack = rememberNavBackStack(remember { NotesHome() })
     val scope = rememberCoroutineScope()
     val pendingTransfers = remember { mutableSetOf<Job>() }
@@ -154,6 +154,12 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
     var exportType by rememberSaveable { mutableStateOf("backup") }
     var exportId by rememberSaveable { mutableStateOf<String?>(null) }
     var attachmentEntry by rememberSaveable { mutableStateOf<String?>(null) }
+    var homeModalOpen by remember { mutableStateOf(false) }
+    SideEffect {
+        onSwitcherAvailabilityChanged(backStack.lastOrNull() is NotesHome && !homeModalOpen && !themePicker &&
+            managed == null && coverNote == null && coverPickerRequest == null && folderPrompt == null &&
+            deleteFolder == null && attachmentEntry == null)
+    }
     val outputPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null && settings != null) {
             val open = { context.contentResolver.openOutputStream(uri, "wt") }
@@ -223,6 +229,7 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 SideEffect { homes[key] = model; if (backStack.lastOrNull() == key) activeEditor = null }
                 val state by model.state.collectAsStateWithLifecycle()
                 NotesScreen(
+                    onBottomBarMeasured = onBottomBarMeasured, onModalVisibilityChanged = { homeModalOpen = it },
                     state = state, onOpen = { id ->
                         val detail = state.listing?.notes?.find { it.summary.id == id }
                         if (detail?.deleted != null) managed = detail else backStack.add(NoteDestination(id.value, offset = if (state.query.text.isNotBlank()) detail?.matchOffset else null))
