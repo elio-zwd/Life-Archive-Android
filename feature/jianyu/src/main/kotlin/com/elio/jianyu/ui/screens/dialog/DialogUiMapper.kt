@@ -1,0 +1,332 @@
+package com.elio.jianyu.ui.screens.dialog
+
+import com.elio.jianyu.domain.Character
+import com.elio.jianyu.domain.CharacterGroup
+import com.elio.jianyu.domain.ChatSession
+import com.elio.jianyu.domain.Message
+import com.elio.jianyu.domain.MessageAnswerStatus
+import com.elio.jianyu.skill.catalog.OfficialSkillDefinition
+import com.elio.jianyu.skill.role.officialSkillVisualAssetPath
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import androidx.compose.ui.graphics.Color
+
+internal fun mapDialogUiState(
+    localState: DialogUiState,
+    sessions: List<ChatSession>,
+    currentSession: ChatSession?,
+    messages: List<Message>,
+    characters: List<Character>,
+    officialSkills: List<OfficialSkillDefinition> = emptyList(),
+    participantIds: List<String>,
+    archivedSessionIds: Set<Long>,
+    showArchivedSessions: Boolean,
+    isGenerating: Boolean,
+    searchEnabled: Boolean,
+    thinkingIntensity: String,
+    showMessageTimestamps: Boolean = true,
+    characterGroups: List<CharacterGroup> = emptyList(),
+): DialogUiState {
+    val legacyRoleById = characters.associate { character ->
+        character.id to character.toSkillRoleUiModel(character.id in participantIds)
+    }
+    val officialRoles = officialSkills.map { skill ->
+        skill.toSkillRoleUiModel(skill.id in participantIds)
+    }
+    val officialRoleById = officialRoles.associateBy(SkillRoleUiModel::id)
+    // OfficialSkillCatalog 是用户侧完整角色事实源；legacy Character 只为历史会话/执行兼容兜底。
+    val roleById = legacyRoleById + officialRoleById
+    val activeRoles = participantIds.mapNotNull(roleById::get)
+    val allRoles = if (officialRoles.isNotEmpty()) {
+        officialRoles
+    } else {
+        characters.map { character -> legacyRoleById.getValue(character.id) }
+    }
+    val skillSearchQuery = localState.addSkillCatalog.searchQuery.trim()
+    val visibleRoles = allRoles.filter { role ->
+        skillSearchQuery.isEmpty() ||
+            role.name.contains(skillSearchQuery, ignoreCase = true) ||
+            role.shortDescription.contains(skillSearchQuery, ignoreCase = true)
+    }
+    val visibleRoleGroups = characterGroups.mapNotNull { group ->
+        val groupRoles = group.characterIds
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .mapNotNull(roleById::get)
+        val matchesSearch = skillSearchQuery.isEmpty() ||
+            group.name.contains(skillSearchQuery, ignoreCase = true) ||
+            group.description.contains(skillSearchQuery, ignoreCase = true) ||
+            groupRoles.any { role ->
+                role.name.contains(skillSearchQuery, ignoreCase = true) ||
+                    role.shortDescription.contains(skillSearchQuery, ignoreCase = true)
+            }
+        groupRoles.takeIf { it.isNotEmpty() && matchesSearch }?.let { roles ->
+            SkillRoleGroupUiModel(
+                id = group.id,
+                name = group.name,
+                description = group.description,
+                roles = roles,
+            )
+        }
+    }
+    val selectedRole = localState.selectedSkillDetail?.role?.id?.let(roleById::get)
+    val composerState = localState.composerState.copy(
+        targetRole = localState.composerState.targetRole
+            ?.takeIf { role -> role.id in participantIds },
+        isMultiRoleAnswer = localState.composerState.isMultiRoleAnswer && activeRoles.size > 1,
+        isGenerating = isGenerating,
+    )
+
+    return localState.copy(
+        session = DialogSessionInfo(
+            id = currentSession?.id?.toString().orEmpty(),
+            title = currentSession?.title ?: "新建对话",
+            roleCount = activeRoles.size,
+        ),
+        activeRoles = activeRoles,
+        messages = messages.map { message ->
+            message.toDialogMessage(roleById, showMessageTimestamps)
+        },
+        visibleMessages = buildDialogTimeline(messages, roleById, showMessageTimestamps),
+        searchState = DialogSearchState(
+            enabled = searchEnabled,
+            statusText = if (searchEnabled) "已开" else "已关",
+        ),
+        thinkingIntensity = thinkingIntensity,
+        composerState = composerState,
+        selectedSkillDetail = selectedRole?.let(::buildSkillRoleDetail),
+        drawerData = ConversationDrawerUiModel(
+            currentSessionId = currentSession?.id?.toString().orEmpty(),
+            searchQuery = localState.drawerData.searchQuery,
+            groups = buildConversationGroups(
+                sessions = sessions,
+                currentSessionId = currentSession?.id,
+                query = localState.drawerData.searchQuery,
+                archivedSessionIds = archivedSessionIds,
+                showArchivedSessions = showArchivedSessions,
+                currentRoleCount = activeRoles.size,
+            ),
+            archivedCount = archivedSessionIds.size,
+            isShowingArchived = showArchivedSessions,
+        ),
+        addSkillCatalog = AddSkillCatalogUiModel(
+            searchQuery = skillSearchQuery,
+            groups = visibleRoleGroups,
+            recentUsed = activeRoles.filter { role -> role in visibleRoles }.take(5),
+            recommended = visibleRoles.filterNot { role -> role.id in participantIds }.take(8),
+            // “全部角色”必须保留完整查询结果，不能复用推荐区的数量上限。
+            allSkills = visibleRoles,
+        ),
+    )
+}
+
+internal fun buildDialogTimeline(
+    messages: List<Message>,
+    roleById: Map<String, SkillRoleUiModel>,
+    showTimestamps: Boolean,
+): List<DialogTimelineItem> {
+    val result = mutableListOf<DialogTimelineItem>()
+    val groups = linkedMapOf<Long, MutableList<DialogMessageItem.SkillMessage>>()
+    val userMessageIds = messages.asSequence().filter { it.senderId == "user" }.map { it.id }.toSet()
+    messages.forEach { message ->
+        val mapped = message.toDialogMessage(roleById, showTimestamps)
+        val questionId = message.questionMessageId
+        if (mapped is DialogMessageItem.SkillMessage && questionId != null &&
+            message.responseMode == "INDEPENDENT" &&
+            questionId in userMessageIds
+        ) {
+            val replies = groups[questionId]
+            if (replies == null) {
+                val newReplies = mutableListOf(mapped)
+                groups[questionId] = newReplies
+                result += DialogTimelineItem.Answers(questionId.toString(), newReplies)
+            } else {
+                // 同一角色重试产生新消息时仍占原分页位置，最新版本从预览和开头阅读。
+                val existingIndex = replies.indexOfFirst { it.role.id == mapped.role.id }
+                if (existingIndex >= 0) replies[existingIndex] = mapped else replies += mapped
+            }
+        } else {
+            result += DialogTimelineItem.Single(mapped)
+        }
+    }
+    return result
+}
+
+internal fun Character.toSkillRoleUiModel(inCurrentSession: Boolean): SkillRoleUiModel =
+    SkillRoleUiModel(
+        id = id,
+        name = name,
+        shortDescription = tagline,
+        avatarUrl = avatar,
+        avatarText = name.take(2),
+        tintBg = roleColors(id).background,
+        tintBorder = roleColors(id).border,
+        accentColor = roleColors(id).accent,
+        isInCurrentSession = inCurrentSession,
+    )
+
+internal fun OfficialSkillDefinition.toSkillRoleUiModel(inCurrentSession: Boolean): SkillRoleUiModel =
+    SkillRoleUiModel(
+        id = id,
+        name = nameZh,
+        shortDescription = summary,
+        avatarUrl = officialSkillVisualAssetPath(this),
+        avatarText = nameZh.take(2),
+        tintBg = roleColors(id).background,
+        tintBorder = roleColors(id).border,
+        accentColor = roleColors(id).accent,
+        isInCurrentSession = inCurrentSession,
+    )
+
+private fun Message.toDialogMessage(
+    roleById: Map<String, SkillRoleUiModel>,
+    showTimestamp: Boolean,
+): DialogMessageItem = if (senderId == "user") {
+    DialogMessageItem.UserMessage(
+        id = id.toString(),
+        text = text,
+        timestamp = if (showTimestamp) formatMessageTime(timestamp) else "",
+    )
+} else {
+    val role = roleById[senderId] ?: SkillRoleUiModel(
+        id = senderId,
+        name = senderName,
+        shortDescription = "历史 Skill 角色",
+        avatarUrl = avatar,
+        avatarText = senderName.take(2),
+        tintBg = roleColors(senderId).background,
+        tintBorder = roleColors(senderId).border,
+        accentColor = roleColors(senderId).accent,
+    )
+    DialogMessageItem.SkillMessage(
+        id = id.toString(),
+        role = role,
+        text = if (isPending && text == "正在思考中...") "正在思考…"
+            else if (isPending && text == "正在生成...") "正在生成…" else text,
+        timestamp = if (showTimestamp) formatMessageTime(timestamp) else "",
+        isStreaming = isPending,
+        questionId = questionMessageId?.takeIf { responseMode == "INDEPENDENT" }?.toString(),
+        answerStatus = when (answerStatus) {
+            MessageAnswerStatus.WAITING -> DialogAnswerStatus.WAITING
+            MessageAnswerStatus.GENERATING -> DialogAnswerStatus.GENERATING
+            MessageAnswerStatus.STOPPED -> DialogAnswerStatus.STOPPED
+            MessageAnswerStatus.FAILED -> DialogAnswerStatus.FAILED
+            else -> DialogAnswerStatus.COMPLETED
+        },
+    )
+}
+
+private fun buildSkillRoleDetail(role: SkillRoleUiModel): SkillRoleDetailUiModel =
+    SkillRoleDetailUiModel(
+        role = role,
+        isInCurrentSession = role.isInCurrentSession,
+        fullDescription = role.shortDescription,
+        capabilities = listOf(
+            SkillCapabilityItem("擅长", role.shortDescription, SkillCapabilityIconType.CUBE),
+            SkillCapabilityItem("思维特点", "按自身角色设定独立形成判断。", SkillCapabilityIconType.NETWORK),
+            SkillCapabilityItem("表达特点", "保持稳定身份与表达风格，并说明关键条件。", SkillCapabilityIconType.CHAT),
+        ),
+        identityDisclosure = if (role.id in PERSON_PERSPECTIVE_IDS) {
+            "AI 模拟角色，基于可获得资料构建，不代表本人，也不保证复现本人当前或完整观点。"
+        } else {
+            null
+        },
+    )
+
+private fun buildConversationGroups(
+    sessions: List<ChatSession>,
+    currentSessionId: Long?,
+    query: String,
+    archivedSessionIds: Set<Long>,
+    showArchivedSessions: Boolean,
+    currentRoleCount: Int,
+): List<ConversationGroupUiModel> {
+    val normalizedQuery = query.trim()
+    val visible = sessions.filter { session ->
+        val archived = session.id in archivedSessionIds
+        archived == showArchivedSessions &&
+            (normalizedQuery.isEmpty() || session.title.contains(normalizedQuery, ignoreCase = true))
+    }
+    val calendar = Calendar.getInstance()
+    val todayStart = calendar.apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    val yesterdayStart = todayStart - 24L * 60L * 60L * 1000L
+    val grouped = linkedMapOf(
+        "今天" to mutableListOf<SessionSummaryUiModel>(),
+        "昨天" to mutableListOf(),
+        "更早" to mutableListOf(),
+    )
+    visible.forEach { session ->
+        val group = when {
+            session.createdAt >= todayStart -> "今天"
+            session.createdAt >= yesterdayStart -> "昨天"
+            else -> "更早"
+        }
+        grouped.getValue(group) += SessionSummaryUiModel(
+            id = session.id.toString(),
+            title = session.title,
+            previewText = if (showArchivedSessions) "已归档会话" else "点击继续这段对话",
+            time = formatSessionTime(session.createdAt),
+            roleAvatars = emptyList(),
+            roleCountText = if (session.id == currentSessionId) {
+                "$currentRoleCount 个 Skill 角色"
+            } else {
+                "已保存会话"
+            },
+            isSelected = session.id == currentSessionId,
+        )
+    }
+    return grouped.mapNotNull { (name, items) ->
+        items.takeIf(List<SessionSummaryUiModel>::isNotEmpty)
+            ?.let { ConversationGroupUiModel(name, it) }
+    }
+}
+
+private fun formatMessageTime(timestamp: Long): String =
+    SimpleDateFormat("HH:mm", Locale.CHINA).format(Date(timestamp))
+
+private fun formatSessionTime(timestamp: Long): String =
+    SimpleDateFormat("MM-dd", Locale.CHINA).format(Date(timestamp))
+
+private data class RoleColors(
+    val background: Color,
+    val border: Color,
+    val accent: Color,
+)
+
+private fun roleColors(id: String): RoleColors = when ((id.hashCode() and Int.MAX_VALUE) % 4) {
+    0 -> RoleColors(Color(0xFFF7F5FE), Color(0xFFE7E1FB), Color(0xFF6340F8))
+    1 -> RoleColors(Color(0xFFF0FAF6), Color(0xFFCDEDE2), Color(0xFF28B383))
+    2 -> RoleColors(Color(0xFFF4F7FB), Color(0xFFDCE5F2), Color(0xFF176DFF))
+    else -> RoleColors(Color(0xFFFFF9F0), Color(0xFFFDE8C7), Color(0xFFE68A00))
+}
+
+private val PERSON_PERSPECTIVE_IDS = setOf(
+    "zhang_xuefeng",
+    "elon_musk",
+    "richard_feynman",
+    "charlie_munger",
+    "naval_ravikant",
+    "steve_jobs",
+    "nassim_taleb",
+    "andrej_karpathy",
+    "zhang_yiming",
+    "paul_graham",
+    "ilya_sutskever",
+    "donald_trump",
+    "mr_beast",
+    "justin_sun",
+    "sigmund_freud",
+    "feng_ge",
+    "changpeng_zhao",
+    "duan_yongping",
+    "tim_cook",
+)

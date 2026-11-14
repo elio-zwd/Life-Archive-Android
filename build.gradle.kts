@@ -11,10 +11,13 @@ plugins {
 
 // 编译依赖是架构边界；新模块必须在这里声明允许的直接依赖。
 val allowedModules = mapOf(
-    ":app" to setOf(":core:designsystem", ":core:preferences", ":core:backup", ":domain:notes", ":data:notes", ":core:document", ":domain:sync", ":data:sync"),
+    ":app" to setOf(":core:designsystem", ":core:preferences", ":core:backup", ":domain:notes", ":data:notes", ":core:document", ":domain:sync", ":data:sync", ":domain:jianyu", ":data:jianyu"),
     ":core:designsystem" to emptySet(),
     ":core:document" to emptySet(),
     ":core:markdown" to setOf(":core:document"),
+    ":domain:jianyu" to emptySet(),
+    ":data:jianyu" to setOf(":domain:jianyu"),
+    ":feature:jianyu" to setOf(":domain:jianyu", ":core:markdown"),
     ":core:backup" to emptySet(),
     ":core:preferences" to setOf(":core:backup"),
     ":domain:notes" to setOf(":core:document"),
@@ -82,6 +85,7 @@ tasks.register<Exec>("testReader") {
     workingDir(layout.projectDirectory.dir("reader"))
     commandLine("node", "test/reader.test.mjs")
 }
+
 tasks.register<Exec>("testMarkdownFragments") {
     group = "verification"
     dependsOn(":core:markdown:readerAssets", ":core:document:test")

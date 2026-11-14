@@ -1,0 +1,2 @@
+# 迁入的角色资料保留原文及 Markdown 硬换行，代码空白检查不改写资料正文。
+data/jianyu/src/main/assets/skills/**/*.md whitespace=-blank-at-eol,-blank-at-eof

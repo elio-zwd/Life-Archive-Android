@@ -1,0 +1,292 @@
+package com.elio.jianyu.ui.navigation
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
+import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
+
+@Composable
+fun AppNavHost(
+    navController: NavHostController,
+    modifier: Modifier = Modifier,
+    homeContent: @Composable () -> Unit,
+    issuesContent: @Composable (issueId: String?, stageId: String?) -> Unit,
+    issueContent: @Composable (issueId: String?, stageId: String?) -> Unit,
+    skillsContent: @Composable () -> Unit,
+    skillSearchContent: @Composable () -> Unit,
+    skillFavoritesContent: @Composable () -> Unit,
+    skillRecentContent: @Composable () -> Unit,
+    skillDetailContent: @Composable (skillId: String?) -> Unit,
+    resourcesContent: @Composable (ResourceTab) -> Unit,
+    mineContent: @Composable () -> Unit,
+    settingsContent: @Composable () -> Unit,
+    aiManagementContent: @Composable () -> Unit,
+    telemetryContent: @Composable () -> Unit,
+    personalContextContent: @Composable () -> Unit = {},
+    aboutContent: @Composable () -> Unit = {},
+    dataPrivacyContent: @Composable () -> Unit = {},
+    backupContent: @Composable () -> Unit = {},
+) {
+    NavHost(
+        navController = navController,
+        startDestination = AppDestination.startDestination.routePattern,
+        modifier = modifier,
+    ) {
+        composable(AppDestination.HOME.routePattern) {
+            homeContent()
+        }
+        navigation(
+            route = JianyuNavigationRoutes.ISSUES_GRAPH,
+            startDestination = AppDestination.ISSUES.routePattern,
+        ) {
+            composable(
+                route = AppDestination.ISSUES.routePattern,
+                arguments = listOf(
+                    navArgument(JianyuNavigationRoutes.ISSUE_ID_ARGUMENT) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(JianyuNavigationRoutes.STAGE_ID_ARGUMENT) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+                deepLinks = listOf(
+                    navDeepLink {
+                        uriPattern = JianyuNavigationRoutes.ISSUE_DEEP_LINK_PATTERN
+                    },
+                ),
+            ) { entry ->
+                issuesContent(
+                    entry.arguments?.getString(JianyuNavigationRoutes.ISSUE_ID_ARGUMENT),
+                    entry.arguments?.getString(JianyuNavigationRoutes.STAGE_ID_ARGUMENT),
+                )
+            }
+            composable(
+                route = JianyuNavigationRoutes.ISSUE_DETAIL_PATTERN,
+                arguments = listOf(
+                    navArgument(JianyuNavigationRoutes.ISSUE_ID_ARGUMENT) {
+                        type = NavType.StringType
+                    },
+                    navArgument(JianyuNavigationRoutes.STAGE_ID_ARGUMENT) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry ->
+                issueContent(
+                    entry.arguments?.getString(JianyuNavigationRoutes.ISSUE_ID_ARGUMENT),
+                    entry.arguments?.getString(JianyuNavigationRoutes.STAGE_ID_ARGUMENT),
+                )
+            }
+        }
+        navigation(
+            route = JianyuNavigationRoutes.SKILLS_GRAPH,
+            startDestination = AppDestination.SKILLS.routePattern,
+        ) {
+            composable(AppDestination.SKILLS.routePattern) {
+                skillsContent()
+            }
+            composable(AppDestination.SKILL_SEARCH.routePattern) {
+                skillSearchContent()
+            }
+            composable(AppDestination.SKILL_FAVORITES.routePattern) {
+                skillFavoritesContent()
+            }
+            composable(AppDestination.SKILL_RECENT.routePattern) {
+                skillRecentContent()
+            }
+            composable(
+                route = JianyuNavigationRoutes.SKILL_DETAIL_PATTERN,
+                arguments = listOf(
+                    navArgument(JianyuNavigationRoutes.SKILL_ID_ARGUMENT) {
+                        type = NavType.StringType
+                    },
+                ),
+                deepLinks = listOf(
+                    navDeepLink {
+                        uriPattern = JianyuNavigationRoutes.SKILL_DEEP_LINK_PATTERN
+                    },
+                ),
+            ) { entry ->
+                skillDetailContent(
+                    entry.arguments?.getString(JianyuNavigationRoutes.SKILL_ID_ARGUMENT),
+                )
+            }
+        }
+        composable(
+            route = AppDestination.RESOURCES.routePattern,
+            arguments = listOf(
+                navArgument(JianyuNavigationRoutes.RESOURCE_TAB_ARGUMENT) {
+                    type = NavType.StringType
+                    defaultValue = ResourceTab.MATERIALS.routeValue
+                },
+            ),
+            deepLinks = listOf(
+                navDeepLink {
+                    uriPattern = JianyuNavigationRoutes.RESOURCES_DEEP_LINK_PATTERN
+                },
+            ),
+        ) { entry ->
+            resourcesContent(
+                ResourceTab.fromRouteValue(
+                    entry.arguments?.getString(JianyuNavigationRoutes.RESOURCE_TAB_ARGUMENT),
+                ),
+            )
+        }
+        composable(AppDestination.MINE.routePattern) {
+            mineContent()
+        }
+        composable(AppDestination.SETTINGS.routePattern) {
+            settingsContent()
+        }
+
+        composable(AppDestination.API_KEYS.routePattern) {
+            aiManagementContent()
+        }
+        composable(AppDestination.TELEMETRY.routePattern) {
+            telemetryContent()
+        }
+        composable(AppDestination.PERSONAL_CONTEXT.routePattern) {
+            personalContextContent()
+        }
+        composable(AppDestination.ABOUT.routePattern) {
+            aboutContent()
+        }
+        composable(AppDestination.DATA_PRIVACY.routePattern) {
+            dataPrivacyContent()
+        }
+        composable(AppDestination.BACKUP_RESTORE.routePattern) {
+            backupContent()
+        }
+    }
+}
+
+fun NavHostController.navigateToTopLevel(destination: AppDestination) {
+    require(destination in AppDestination.topLevelDestinations) {
+        "${destination.name} 不是见域一级目的地"
+    }
+
+    if (destination == AppDestination.HOME) {
+        val alreadyAtConversation = currentDestination?.route == AppDestination.HOME.routePattern
+        if (alreadyAtConversation) return
+
+        // 外部 deep link 可以直接构造二级目的地栈，此时 start destination 不一定是当前栈中的
+        // 可恢复入口。回到对话页必须以根图为边界重建 HOME，避免 save/restore top-level 逻辑
+        // 在业务动作已经成功后仍把用户留在 Skill 详情页。
+        navigate(AppDestination.HOME.launchRoute) {
+            popUpTo(graph.id) {
+                inclusive = false
+            }
+            launchSingleTop = true
+        }
+        return
+    }
+
+    val alreadySelected = currentDestination?.hierarchy?.any { entry ->
+        entry.route == destination.routePattern || entry.route == destination.launchRoute
+    } == true
+    if (alreadySelected) return
+
+    navigate(destination.launchRoute) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
+fun NavHostController.navigateToSecondary(destination: AppDestination) {
+    require(destination !in AppDestination.topLevelDestinations) {
+        "${destination.name} 不是次级或兼容目的地"
+    }
+    navigate(destination.launchRoute) {
+        launchSingleTop = true
+    }
+}
+
+fun NavHostController.navigateToIssue(issueId: String, stageId: String? = null) {
+    ensureInternalGraphParent(JianyuNavigationRoutes.ISSUES_GRAPH)
+    navigate(JianyuNavigationRoutes.issue(issueId, stageId)) {
+        launchSingleTop = true
+    }
+}
+
+fun NavHostController.navigateToSkillDetail(skillId: String) {
+    ensureTopLevelParent(
+        graphRoute = JianyuNavigationRoutes.SKILLS_GRAPH,
+        destination = AppDestination.SKILLS,
+    )
+    navigate(JianyuNavigationRoutes.skillDetail(skillId)) {
+        launchSingleTop = true
+    }
+}
+
+fun NavHostController.navigateToSkillSearch() {
+    ensureTopLevelParent(
+        graphRoute = JianyuNavigationRoutes.SKILLS_GRAPH,
+        destination = AppDestination.SKILLS,
+    )
+    navigate(AppDestination.SKILL_SEARCH.launchRoute) {
+        launchSingleTop = true
+    }
+}
+
+fun NavHostController.navigateToSkillFavorites() {
+    ensureTopLevelParent(
+        graphRoute = JianyuNavigationRoutes.SKILLS_GRAPH,
+        destination = AppDestination.SKILLS,
+    )
+    navigate(AppDestination.SKILL_FAVORITES.launchRoute) {
+        launchSingleTop = true
+    }
+}
+
+fun NavHostController.navigateToSkillRecent() {
+    ensureTopLevelParent(
+        graphRoute = JianyuNavigationRoutes.SKILLS_GRAPH,
+        destination = AppDestination.SKILLS,
+    )
+    navigate(AppDestination.SKILL_RECENT.launchRoute) {
+        launchSingleTop = true
+    }
+}
+
+private fun NavHostController.ensureTopLevelParent(
+    graphRoute: String,
+    destination: AppDestination,
+) {
+    val alreadyInGraph = currentDestination?.hierarchy?.any { entry ->
+        entry.route == graphRoute
+    } == true
+    if (!alreadyInGraph) {
+        navigateToTopLevel(destination)
+    }
+}
+
+private fun NavHostController.ensureInternalGraphParent(graphRoute: String) {
+    val alreadyInGraph = currentDestination?.hierarchy?.any { entry ->
+        entry.route == graphRoute
+    } == true
+    if (!alreadyInGraph) {
+        // Issue 是二级内部能力，不能通过 Root BottomNav 的 top-level 合同进入。
+        navigate(graphRoute) {
+            popUpTo(graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+}

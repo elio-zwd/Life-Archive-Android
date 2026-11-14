@@ -1,0 +1,130 @@
+package com.elio.jianyu.ui.screens.skills
+
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import com.elio.jianyu.ui.lifecycle.sessionCoroutineScope as rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.elio.jianyu.skill.catalog.OfficialSkillCatalogRuntimeResult
+import com.elio.jianyu.skill.role.SkillRolePresentationLoadResult
+import com.elio.jianyu.ui.components.JianyuStateCard
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+/** UI-02 二级全屏详情 Route；不写 recent-use。 */
+@Composable
+internal fun SkillRoleDetailRoute(
+    presentationLoader: com.elio.jianyu.skill.role.RolePresentationLoader,
+
+    runtimeResult: OfficialSkillCatalogRuntimeResult,
+    skillId: String?,
+    canAddToCurrentConversation: Boolean,
+    onBack: () -> Unit,
+    onStartNewConversation: suspend (String) -> Boolean,
+    onAddToCurrentConversation: suspend (String) -> Boolean,
+    onConversationReady: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val runtime = when (runtimeResult) {
+        is OfficialSkillCatalogRuntimeResult.Failure -> {
+            JianyuStateCard(
+                title = "角色详情暂不可用",
+                message = runtimeResult.message,
+                modifier = modifier,
+            )
+            return
+        }
+        is OfficialSkillCatalogRuntimeResult.Success -> runtimeResult.runtime
+    }
+    val resolvedSkillId = skillId?.takeIf(String::isNotBlank)
+    if (resolvedSkillId == null || !runtime.catalog.containsOfficialId(resolvedSkillId)) {
+        JianyuStateCard(
+            title = "角色详情暂不可用",
+            message = "无法定位该 Skill 角色。",
+            modifier = modifier,
+        )
+        return
+    }
+
+    val appContext = LocalContext.current.applicationContext
+    val presentationResult = remember(appContext, runtime.catalog) {
+        presentationLoader.load(runtime.catalog)
+    }
+    val presentationCatalog = when (presentationResult) {
+        is SkillRolePresentationLoadResult.Failure -> {
+            JianyuStateCard(
+                title = "角色详情暂不可用",
+                message = presentationResult.message,
+                modifier = modifier,
+            )
+            return
+        }
+        is SkillRolePresentationLoadResult.Success -> presentationResult.catalog
+    }
+
+    val favoriteIds by runtime.preferences.favoriteIds.collectAsStateWithLifecycle()
+    val role = remember(runtime.catalog, presentationCatalog, resolvedSkillId) {
+        projectSkillRoleCatalog(
+            catalog = runtime.catalog,
+            presentationCatalog = presentationCatalog,
+        ).allRoles.firstOrNull { it.skillId == resolvedSkillId }
+    }
+    if (role == null) {
+        JianyuStateCard(
+            title = "角色详情暂不可用",
+            message = "角色展示数据不完整。",
+            modifier = modifier,
+        )
+        return
+    }
+
+    val scope = rememberCoroutineScope()
+    var actionInProgress by remember(resolvedSkillId) { mutableStateOf(false) }
+    var actionMessage by remember(resolvedSkillId) { mutableStateOf<String?>(null) }
+
+    val launchConversationAction: (suspend (String) -> Boolean) -> Unit = { action ->
+        if (!actionInProgress) {
+            actionInProgress = true
+            actionMessage = null
+            scope.launch {
+                try {
+                    if (action(resolvedSkillId)) {
+                        onConversationReady()
+                    } else {
+                        actionMessage = "操作未完成，请重试"
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    actionMessage = "操作未完成，请重试"
+                } finally {
+                    actionInProgress = false
+                }
+            }
+        }
+    }
+
+    SkillRoleDetailScreen(
+        role = role.copy(isFavorite = resolvedSkillId in favoriteIds),
+        isFavorite = resolvedSkillId in favoriteIds,
+        canAddToCurrentConversation = canAddToCurrentConversation,
+        actionInProgress = actionInProgress,
+        actionMessage = actionMessage,
+        onBack = onBack,
+        onToggleFavorite = {
+            scope.launch {
+                runtime.preferences.setFavorite(
+                    resolvedSkillId,
+                    resolvedSkillId !in favoriteIds,
+                )
+            }
+        },
+        onStartNewConversation = { launchConversationAction(onStartNewConversation) },
+        onAddToCurrentConversation = { launchConversationAction(onAddToCurrentConversation) },
+        modifier = modifier,
+    )
+}

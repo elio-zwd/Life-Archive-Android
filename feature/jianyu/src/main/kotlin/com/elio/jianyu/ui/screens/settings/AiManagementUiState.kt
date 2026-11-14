@@ -1,0 +1,87 @@
+package com.elio.jianyu.ui.screens.settings
+
+import com.elio.jianyu.network.AiProvider
+import com.elio.jianyu.network.AiRuntimeConfiguration
+import com.elio.jianyu.network.ApiKeySummary
+import com.elio.jianyu.network.ApiKeyValidationState
+import com.elio.jianyu.network.BatchImportResult
+
+sealed interface AiManagementConfirmation {
+    data class Delete(val summary: ApiKeySummary) : AiManagementConfirmation
+    data object ClearProviderKeys : AiManagementConfirmation
+}
+
+data class AiManagementUiState(
+    val configuration: AiRuntimeConfiguration,
+    val keyProvider: AiProvider,
+    val providerSummaries: Map<AiProvider, List<ApiKeySummary>>,
+    val storageError: String?,
+    val currentKeyAccount: String?,
+    val input: String,
+    val resultMessage: String?,
+    val confirmation: AiManagementConfirmation?,
+    val nowMs: Long = System.currentTimeMillis(),
+) {
+    val summaries: List<ApiKeySummary>
+        get() = summariesFor(keyProvider)
+
+    val availableKeyCount: Int
+        get() = availableKeyCount(keyProvider)
+
+    val canImport: Boolean
+        get() = input.isNotBlank() && summaries.size < MAX_PROVIDER_KEY_COUNT
+
+    fun summariesFor(provider: AiProvider): List<ApiKeySummary> =
+        providerSummaries[provider].orEmpty()
+
+    fun availableKeyCount(provider: AiProvider): Int =
+        summariesFor(provider).count {
+            it.enabled &&
+                it.validationState != ApiKeyValidationState.INVALID &&
+                it.banExpireTime <= nowMs
+        }
+
+    fun providerStatus(provider: AiProvider): String {
+        val total = summariesFor(provider).size
+        if (total == 0) return "未配置 Key"
+        return "$total 个 Key · ${availableKeyCount(provider)} 个可用"
+    }
+}
+
+internal const val MAX_PROVIDER_KEY_COUNT = 50
+
+internal object AiManagementTestTags {
+    const val ROOT = "ai_management"
+    const val CONTENT = "ai_management_content"
+    const val MODEL_SHEET = "ai_management_model_sheet"
+    const val KEY_SHEET = "ai_management_key_sheet"
+    const val IMPORT_INPUT = "ai_management_import_input"
+    const val IMPORT_BUTTON = "ai_management_import_button"
+    const val CLEAR_CONFIRM = "ai_management_clear_confirm"
+    const val DELETE_CONFIRM = "ai_management_delete_confirm"
+
+    fun useCase(useCaseName: String): String = "ai_management_use_case_$useCaseName"
+    fun keyProviderCard(providerName: String): String = "ai_management_key_provider_$providerName"
+    fun provider(providerName: String): String = "ai_management_provider_$providerName"
+    fun model(modelName: String): String = "ai_management_model_$modelName"
+    fun keyRow(id: String): String = "ai_management_key_$id"
+}
+
+internal fun aiBatchImportSummary(result: BatchImportResult): String =
+    "新增 ${result.added}，重复 ${result.duplicates}，非法 ${result.invalid}，超限 ${result.overflow}"
+
+internal fun aiKeyStatusText(summary: ApiKeySummary, nowMs: Long): String = when {
+    !summary.enabled -> "已禁用"
+    summary.banExpireTime > nowMs -> {
+        val seconds = (summary.banExpireTime - nowMs) / 1000L + 1L
+        if (seconds < 60L) "冷却中，剩余 $seconds 秒" else "冷却中，剩余 ${seconds / 60L} 分钟"
+    }
+    else -> when (summary.validationState) {
+        ApiKeyValidationState.UNVERIFIED -> "未验证"
+        ApiKeyValidationState.CHECKING -> "验证中"
+        ApiKeyValidationState.AVAILABLE -> "可用"
+        ApiKeyValidationState.INVALID -> "鉴权失败"
+        ApiKeyValidationState.NETWORK_ERROR -> "网络验证失败"
+        ApiKeyValidationState.RATE_LIMITED -> "上次验证受到限流，冷却已结束，可重试"
+    }
+}

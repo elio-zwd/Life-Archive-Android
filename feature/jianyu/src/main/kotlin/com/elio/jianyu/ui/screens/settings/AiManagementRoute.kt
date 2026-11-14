@@ -1,0 +1,116 @@
+package com.elio.jianyu.ui.screens.settings
+
+import android.widget.Toast
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import com.elio.jianyu.ui.lifecycle.sessionCoroutineScope as rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.elio.jianyu.network.AiProvider
+import com.elio.jianyu.network.ApiKeySummary
+import com.elio.jianyu.ui.components.rememberExpiryClock
+import kotlinx.coroutines.launch
+
+@Composable
+fun AiManagementRoute(
+    ai: com.elio.jianyu.network.AiServices,
+    currentSessionId: Long?,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val configurationRepository = remember(context) { ai.configuration }
+    val configuration by configurationRepository.configuration.collectAsStateWithLifecycle()
+
+    val geminiKeyRepository = remember(context) { ai.keys(AiProvider.GEMINI) }
+    val deepSeekKeyRepository = remember(context) { ai.keys(AiProvider.DEEPSEEK) }
+    val geminiSummaries by geminiKeyRepository.summaries.collectAsStateWithLifecycle()
+    val deepSeekSummaries by deepSeekKeyRepository.summaries.collectAsStateWithLifecycle()
+    val nowMs = rememberExpiryClock((geminiSummaries + deepSeekSummaries).map { it.banExpireTime })
+    val geminiStorageError by geminiKeyRepository.storageError.collectAsStateWithLifecycle()
+    val deepSeekStorageError by deepSeekKeyRepository.storageError.collectAsStateWithLifecycle()
+
+    var keyProviderName by rememberSaveable { mutableStateOf(AiProvider.GEMINI.name) }
+    val keyProvider = AiProvider.valueOf(keyProviderName)
+    val keyRepository = when (keyProvider) {
+        AiProvider.GEMINI -> geminiKeyRepository
+        AiProvider.DEEPSEEK -> deepSeekKeyRepository
+    }
+    var input by remember { mutableStateOf("") }
+    var resultMessage by remember { mutableStateOf<String?>(null) }
+    var confirmation by remember { mutableStateOf<AiManagementConfirmation?>(null) }
+
+    LaunchedEffect(keyProvider) {
+        input = ""
+        resultMessage = null
+        confirmation = null
+    }
+
+    val selectedSummaries = when (keyProvider) {
+        AiProvider.GEMINI -> geminiSummaries
+        AiProvider.DEEPSEEK -> deepSeekSummaries
+    }
+    val currentKeyAccount = remember(keyProvider, currentSessionId, selectedSummaries, selectedSummaries.map { it.banExpireTime > nowMs }) {
+        currentSessionId?.let(keyRepository::sessionKeyAccount)
+    }
+
+    AiManagementScreen(
+        uiState = AiManagementUiState(
+            nowMs = nowMs,
+            configuration = configuration,
+            keyProvider = keyProvider,
+            providerSummaries = mapOf(
+                AiProvider.GEMINI to geminiSummaries,
+                AiProvider.DEEPSEEK to deepSeekSummaries,
+            ),
+            storageError = when (keyProvider) {
+                AiProvider.GEMINI -> geminiStorageError
+                AiProvider.DEEPSEEK -> deepSeekStorageError
+            },
+            currentKeyAccount = currentKeyAccount,
+            input = input,
+            resultMessage = resultMessage,
+            confirmation = confirmation,
+        ),
+        onBack = onBack,
+        onSelectProvider = configurationRepository::selectProvider,
+        onSelectModel = configurationRepository::selectModel,
+        onSelectKeyProvider = { provider ->
+            input = ""
+            resultMessage = null
+            confirmation = null
+            keyProviderName = provider.name
+        },
+        onInputChange = { input = it },
+        onImport = {
+            val result = keyRepository.importBatch(input)
+            resultMessage = aiBatchImportSummary(result)
+            input = ""
+            if (result.importedIds.isNotEmpty()) {
+                scope.launch { ai.validateKeys(keyProvider, result.importedIds) }
+            }
+        },
+        onToggleKey = { summary, enabled -> keyRepository.setDisabled(summary.id, !enabled) },
+        onValidateKey = { summary ->
+            scope.launch { ai.validateKey(keyProvider, summary.id) }
+        },
+        onRequestDeleteKey = { summary -> confirmation = AiManagementConfirmation.Delete(summary) },
+        onRequestClearProviderKeys = { confirmation = AiManagementConfirmation.ClearProviderKeys },
+        onDismissConfirmation = { confirmation = null },
+        onConfirmDeleteKey = { summary: ApiKeySummary ->
+            val success = keyRepository.delete(summary.id)
+            Toast.makeText(context, if (success) "已删除 API Key" else "删除失败", Toast.LENGTH_SHORT).show()
+            confirmation = null
+        },
+        onConfirmClearProviderKeys = {
+            val success = keyRepository.clear()
+            Toast.makeText(context, if (success) "已清空 ${keyProvider.displayName} Key" else "清空失败", Toast.LENGTH_SHORT).show()
+            confirmation = null
+        },
+    )
+}

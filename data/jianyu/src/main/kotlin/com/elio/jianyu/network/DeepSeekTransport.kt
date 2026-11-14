@@ -1,0 +1,216 @@
+package com.elio.jianyu.network
+
+import android.content.Context
+import com.elio.lifearchive.data.jianyu.BuildConfig
+import com.elio.jianyu.network.keys.ApiKeyLease
+import com.elio.jianyu.roundtable.RequestBudgetTracker
+import com.elio.jianyu.network.retry.ApiRetryPolicy
+import kotlinx.coroutines.CancellationException
+import com.elio.jianyu.telemetry.PrivacySafeLogger
+import com.elio.jianyu.telemetry.TelemetryInterceptor
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.HttpException
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.Header
+import retrofit2.http.POST
+import java.util.concurrent.TimeUnit
+
+@Serializable
+data class DeepSeekMessage(
+    val role: String,
+    val content: String,
+)
+
+@Serializable
+data class DeepSeekChatCompletionRequest(
+    val model: String,
+    val messages: List<DeepSeekMessage>,
+    @SerialName("max_tokens") val maxTokens: Int? = null,
+    val thinking: DeepSeekThinking? = null,
+    @SerialName("reasoning_effort") val reasoningEffort: String? = null,
+    val stream: Boolean = false,
+)
+
+@Serializable
+data class DeepSeekThinking(
+    val type: String,
+)
+
+internal data class DeepSeekThinkingConfiguration(
+    val thinking: DeepSeekThinking,
+    val reasoningEffort: String,
+)
+
+/** 将应用统一思考档位映射为 DeepSeek Chat Completions 支持的档位。 */
+internal fun deepSeekThinkingConfiguration(thinkingLevel: String?): DeepSeekThinkingConfiguration? =
+    when (thinkingLevel) {
+        null -> null
+        "minimal", "low" -> DeepSeekThinkingConfiguration(
+            thinking = DeepSeekThinking(type = "enabled"),
+            reasoningEffort = "low",
+        )
+        "medium", "high" -> DeepSeekThinkingConfiguration(
+            thinking = DeepSeekThinking(type = "enabled"),
+            reasoningEffort = "high",
+        )
+        else -> throw IllegalArgumentException("DeepSeek 不支持思考档位：$thinkingLevel")
+    }
+
+@Serializable
+data class DeepSeekChatCompletionResponse(
+    val id: String,
+    val model: String? = null,
+    val choices: List<DeepSeekChoice> = emptyList(),
+)
+
+@Serializable
+data class DeepSeekChoice(
+    val message: DeepSeekResponseMessage? = null,
+)
+
+@Serializable
+data class DeepSeekResponseMessage(
+    val role: String? = null,
+    val content: String? = null,
+)
+
+internal class DeepSeekEmptyResponseException : SerializationException("服务未返回可展示的回答")
+
+/** 必须在执行器判定成功前校验；思考和工具调用不能代替本次期望的最终文本。 */
+internal fun validatedDeepSeekResponse(response: DeepSeekChatCompletionResponse?): DeepSeekChatCompletionResponse {
+    if (response?.choices?.firstOrNull()?.message?.content.isNullOrBlank()) throw DeepSeekEmptyResponseException()
+    return requireNotNull(response)
+}
+
+@Serializable
+data class DeepSeekModelListResponse(
+    val data: List<DeepSeekModel> = emptyList(),
+)
+
+@Serializable
+data class DeepSeekModel(
+    val id: String,
+)
+
+private interface DeepSeekApiService {
+    @GET("models")
+    suspend fun listModels(
+        @Header("Authorization") authorization: String,
+    ): Response<DeepSeekModelListResponse>
+
+    @POST("chat/completions")
+    suspend fun createChatCompletion(
+        @Header("Authorization") authorization: String,
+        @Body request: DeepSeekChatCompletionRequest,
+    ): Response<DeepSeekChatCompletionResponse>
+}
+
+/** DeepSeek 官方 OpenAI 兼容 REST transport；只处理一次请求，不承担 Key 轮换。 */
+object DeepSeekTransport {
+    private const val BASE_URL = "https://api.deepseek.com/"
+
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(90, TimeUnit.SECONDS)
+        .readTimeout(300, TimeUnit.SECONDS)
+        .writeTimeout(90, TimeUnit.SECONDS)
+        .addNetworkInterceptor(TelemetryInterceptor())
+        .eventListenerFactory { com.elio.jianyu.telemetry.DiagnosticCallListener(it, com.elio.jianyu.telemetry.DiagnosticContext.current()) }
+        .addInterceptor(HttpLoggingInterceptor { rawMessage ->
+            PrivacySafeLogger.d("DeepSeekHttp", rawMessage)
+        }.apply {
+            level = if (BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
+        })
+        .build()
+
+    private val service: DeepSeekApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(httpClient)
+            .addConverterFactory(
+                Json {
+                    ignoreUnknownKeys = true
+                    coerceInputValues = true
+                }.asConverterFactory("application/json".toMediaType()),
+            )
+            .build()
+            .create(DeepSeekApiService::class.java)
+    }
+
+    suspend fun validateKey(apiKey: String): ApiKeyValidationResult = try {
+        val response = service.listModels(bearer(apiKey))
+        val state = when (response.code()) {
+            in 200..299 -> ApiKeyValidationState.AVAILABLE
+            400, 401, 403 -> ApiKeyValidationState.INVALID
+            429 -> ApiKeyValidationState.RATE_LIMITED
+            else -> ApiKeyValidationState.NETWORK_ERROR
+        }
+        ApiKeyValidationResult(state, response.code(), ApiRetryPolicy.parseRetryAfterMs(response.headers()["Retry-After"]))
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        ApiKeyValidationResult(ApiKeyValidationState.NETWORK_ERROR)
+    }
+
+    suspend fun createChatCompletion(
+        context: Context,
+        sessionId: Long,
+        attemptPlan: List<ApiKeyLease>,
+        model: AiModel,
+        systemInstruction: String?,
+        userContent: String,
+        maxOutputTokens: Int? = null,
+        thinkingLevel: String? = null,
+        operationName: String,
+        tracker: RequestBudgetTracker,
+        onAttemptStarted: suspend () -> Unit = {},
+        onTextUpdate: suspend (String) -> Unit = {},
+    ): DeepSeekChatCompletionResponse {
+        require(model.provider == AiProvider.DEEPSEEK) { "DeepSeek transport 只能使用 DeepSeek 模型" }
+        val messages = buildList {
+            systemInstruction?.takeIf(String::isNotBlank)?.let { add(DeepSeekMessage("system", it)) }
+            add(DeepSeekMessage("user", userContent))
+        }
+        val thinkingConfiguration = deepSeekThinkingConfiguration(thinkingLevel)
+        val response = AiManager.requests(context, AiProvider.DEEPSEEK).execute(
+            sessionId = sessionId,
+            attemptPlan = attemptPlan,
+            operationName = operationName,
+            onAttemptStarted = {
+                tracker.tryConsumeRequired()
+                onAttemptStarted()
+            },
+        ) { secret ->
+            val httpResponse = service.createChatCompletion(
+                authorization = bearer(secret),
+                request = DeepSeekChatCompletionRequest(
+                    model = model.modelId,
+                    messages = messages,
+                    maxTokens = maxOutputTokens,
+                    thinking = thinkingConfiguration?.thinking,
+                    reasoningEffort = thinkingConfiguration?.reasoningEffort,
+                ),
+            )
+            if (!httpResponse.isSuccessful) throw HttpException(httpResponse)
+            validatedDeepSeekResponse(httpResponse.body())
+        }
+        val outputText = response.choices.firstOrNull()?.message?.content?.takeIf(String::isNotBlank)
+        if (outputText != null) onTextUpdate(outputText)
+        return response
+    }
+
+    private fun bearer(apiKey: String): String = "Bearer $apiKey"
+}
