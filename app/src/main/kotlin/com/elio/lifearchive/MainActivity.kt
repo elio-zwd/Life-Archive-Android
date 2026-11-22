@@ -102,7 +102,7 @@ class MainActivity : ComponentActivity() {
                         },
                         onStopOverlay = { stopService(android.content.Intent(this, CompanionOverlayService::class.java)) },
                         onLife = { businessHost.select(Business.LIFE) })
-                }) { onSwitcher, onBottomBar ->
+                }, inAppCompanion = { visible -> InAppCompanion(companionProvider, visible) { businessHost.select(Business.PET) } }) { onSwitcher, onBottomBar ->
                 when {
                     state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
                     !state.ready -> Scaffold { Text("正在恢复本地状态…", modifier = androidx.compose.ui.Modifier.padding(it)) }

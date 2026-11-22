@@ -6,6 +6,7 @@ import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.domain.notes.NoteResult
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.After
@@ -94,6 +95,8 @@ class BusinessHostUiTest {
         focusWindow(); switchTo("PET")
         compose.waitUntil(30_000) { compose.onAllNodesWithTag("pet-input").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("pet-input").performTextInput("给伙伴的未发送输入")
+        compose.onNodeWithTag("pet-input").assertIsDisplayed()
+        compose.onNodeWithTag("pet-send").assertIsDisplayed()
         captureCompanion("conversation")
         compose.onNodeWithText("记忆", useUnmergedTree = true).performClick()
         compose.onNodeWithText("添加记忆").performClick()
@@ -122,5 +125,26 @@ class BusinessHostUiTest {
             java.io.File(directory, "$name.png").outputStream().use { output -> bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output) }
             bitmap.recycle()
         }
+    }
+
+    @Test fun inAppCompanionCanBeClosedWhilePetPageIsInactive() {
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
+        focusWindow(); switchTo("PET")
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("pet-input").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("pet-tab-2").performClick()
+        compose.onNodeWithTag("pet-in-app-visible").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(isToggleable() and isOn()).fetchSemanticsNodes().isNotEmpty() }
+        focusWindow(); switchTo("LIFE")
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("in-app-companion").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("in-app-companion-drag").performTouchInput {
+            down(center); moveBy(androidx.compose.ui.geometry.Offset(-1000f, -1000f)); up()
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("in-app-companion-drag").assertIsDisplayed()
+        val bounds = compose.onNodeWithTag("in-app-companion").fetchSemanticsNode().boundsInRoot
+        assertTrue("小窗拖动后必须保留可见手柄", bounds.left >= 0f && bounds.top >= 0f)
+        compose.onNode(hasText("收起") and hasAnyAncestor(hasTestTag("in-app-companion"))).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("in-app-companion").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("in-app-companion").assertDoesNotExist()
     }
 }

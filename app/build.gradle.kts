@@ -36,6 +36,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core:live2d"))
+    implementation(files(rootProject.extra["cubismCoreAar"]))
     implementation(project(":domain:ai"))
     implementation(project(":data:ai"))
     implementation(project(":domain:pet"))

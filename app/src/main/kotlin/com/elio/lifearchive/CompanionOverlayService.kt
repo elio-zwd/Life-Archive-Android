@@ -10,6 +10,7 @@ import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import com.elio.lifearchive.domain.pet.*
+import com.elio.lifearchive.core.live2d.Live2DView
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.UUID
 import javax.inject.Inject
@@ -26,6 +27,12 @@ class CompanionOverlayService : Service() {
     private var watcher: Job? = null
     private var repository: CompanionRepository? = null
     private var expanded = false
+    private var avatar: Live2DView? = null
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            avatar?.setActive(intent?.action != Intent.ACTION_SCREEN_OFF && !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
+        }
+    }
     private var dragX = 0f
     private var dragY = 0f
     private var startX = 0
@@ -38,6 +45,12 @@ class CompanionOverlayService : Service() {
     ).apply { gravity = Gravity.TOP or Gravity.START; x = 20; y = 180 }
 
     override fun onBind(intent: Intent?): IBinder? = null
+    override fun onCreate() {
+        super.onCreate()
+        val filter = android.content.IntentFilter().apply { addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT) }
+        if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(screenReceiver, filter, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(screenReceiver, filter)
+    }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == STOP || !Settings.canDrawOverlays(this)) { stopSelf(); return START_NOT_STICKY }
         val manager = getSystemService(NotificationManager::class.java)
@@ -60,12 +73,20 @@ class CompanionOverlayService : Service() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = GradientDrawable().apply { setColor(Color.rgb(247, 245, 252)); cornerRadius = dp(18).toFloat(); setStroke(dp(1), Color.rgb(198, 190, 218)) }
-            elevation = dp(8).toFloat()
         }
         val title = Button(this).apply { text = "伙伴 · 展开"; contentDescription = "拖动或展开伙伴" }
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         val text = TextView(this).apply { setTextColor(Color.rgb(48, 43, 62)); text = "正在打开伙伴…"; maxLines = 8 }
+        val bubble = TextView(this).apply {
+            setTextColor(Color.rgb(48, 43, 62)); this.text = "今天想聊些什么？"; maxLines = 3
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = GradientDrawable().apply { setColor(Color.rgb(247, 245, 252)); cornerRadius = dp(12).toFloat() }
+        }
+        body.background = GradientDrawable().apply { setColor(Color.rgb(247, 245, 252)); cornerRadius = dp(18).toFloat() }
+        val model = Live2DView(this).also { avatar = it }
+        model.onStatus = { error -> if (error != null) { text.text = error; bubble.text = error } }
+        model.onTap = { bubble.text = "嗯，我在。展开后可以继续聊。" }
+        model.setActive(!getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked)
         val input = EditText(this).apply { hint = "和伙伴说说话"; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(16_000)) }
         val controls = LinearLayout(this)
         val send = Button(this).apply { this.text = "发送" }
@@ -74,7 +95,10 @@ class CompanionOverlayService : Service() {
         controls.addView(send); controls.addView(open); controls.addView(close)
         body.addView(text, LinearLayout.LayoutParams(dp(270), ViewGroup.LayoutParams.WRAP_CONTENT))
         body.addView(input); body.addView(controls)
-        container.addView(title); container.addView(body)
+        container.addView(title)
+        container.addView(bubble, LinearLayout.LayoutParams(dp(180), ViewGroup.LayoutParams.WRAP_CONTENT))
+        container.addView(model, LinearLayout.LayoutParams(dp(150), dp(200)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        container.addView(body)
         title.setOnClickListener {
             expanded = !expanded
             body.visibility = if (expanded) View.VISIBLE else View.GONE
@@ -119,7 +143,9 @@ class CompanionOverlayService : Service() {
                 repo.state.collect { state ->
                     val last = state.messages.lastOrNull { it.role == MessageRole.COMPANION }
                     text.text = when { last == null -> "今天想聊些什么？"; last.status == ReplyStatus.GENERATING -> "正在想怎么回应你…"; else -> last.error ?: last.text }
+                    bubble.text = text.text.take(80)
                     send.text = if (state.generating) "停止" else "发送"
+                    model.setCue("${last?.id}:${last?.status}:${last?.emotion}", if (state.generating) "THINKING" else last?.emotion?.name ?: "CALM")
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { text.text = "伙伴暂时无法打开，请关闭后重试。" }
@@ -134,6 +160,8 @@ class CompanionOverlayService : Service() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     override fun onDestroy() {
         watcher?.cancel(); scope.cancel()
+        avatar?.setActive(false); avatar?.onStatus = {}; avatar?.onTap = {}; avatar = null
+        unregisterReceiver(screenReceiver)
         root?.let { runCatching { window?.removeViewImmediate(it) } }; root = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()

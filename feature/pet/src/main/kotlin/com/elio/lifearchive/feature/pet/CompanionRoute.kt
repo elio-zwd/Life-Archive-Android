@@ -1,6 +1,8 @@
 package com.elio.lifearchive.feature.pet
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -44,7 +46,11 @@ fun CompanionRoute(
     var deleteMemory by remember { mutableStateOf<CompanionMemory?>(null) }
     var showAi by rememberSaveable { mutableStateOf(false) }
     var editProfile by rememberSaveable { mutableStateOf(false) }
+    var touched by remember { mutableStateOf(false) }
+    var collapsed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(touched) { if (touched) { kotlinx.coroutines.delay(2500); touched = false } }
     val list = rememberLazyListState()
+    val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
     LaunchedEffect(state.profile.showInApp) { onInAppVisibility(state.profile.showInApp) }
     LaunchedEffect(state.messages.lastOrNull()?.id, state.generating) {
         if (state.messages.isNotEmpty()) list.animateScrollToItem(state.messages.lastIndex)
@@ -52,14 +58,14 @@ fun CompanionRoute(
     Scaffold(Modifier.fillMaxSize().testTag("pet-root"), bottomBar = {
         NavigationBar(Modifier.onSizeChanged { onBottomBarMeasured(it.height) }) {
             listOf("陪伴", "记忆", "设置").forEachIndexed { index, label ->
-                NavigationBarItem(selected = tab == index, onClick = { tab = index },
+                NavigationBarItem(selected = tab == index, onClick = { tab = index }, modifier = Modifier.testTag("pet-tab-$index"),
                     icon = { Text(listOf("◉", "♡", "☷")[index]) }, label = { Text(label) })
             }
         }
     }) { padding ->
         Column(Modifier.padding(padding).statusBarsPadding().fillMaxSize().padding(horizontal = 18.dp)) {
             Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column { Text(state.profile.name, style = MaterialTheme.typography.headlineSmall)
+                Column(Modifier.weight(1f)) { Text(state.profile.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Text("日常里的陪伴", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 TextButton(onClick = { showAi = true }) { Text("公共 AI") }
             }
@@ -71,17 +77,26 @@ fun CompanionRoute(
             if (!state.ready) { LinearProgressIndicator(Modifier.fillMaxWidth()); return@Column }
             when (tab) {
                 0 -> {
-                    if (state.messages.isEmpty()) {
-                        Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                            Column(Modifier.padding(20.dp)) {
-                                Text("今天，想聊点什么？", style = MaterialTheme.typography.titleLarge)
-                                Spacer(Modifier.height(8.dp))
-                                Text("可以聊聊刚发生的小事，也可以把希望伙伴记住的事放进记忆。")
-                                Text("伙伴形象准备中，当前可使用对话和记忆。", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodySmall)
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                        val stageHeight = (maxHeight * 0.35f).coerceAtMost(180.dp)
+                        val roomForStage = maxHeight >= 140.dp
+                        Column(Modifier.fillMaxSize()) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(if (touched) "嗯，我在。" else "Hiyori · 技术样板", style = MaterialTheme.typography.labelMedium)
+                                TextButton(onClick = { collapsed = !collapsed }) { Text(if (collapsed) "展开形象" else "收起形象") }
                             }
-                        }
-                    }
-                    LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+                            if (!collapsed && !keyboardOpen && roomForStage) CompanionAvatar(state, Modifier.fillMaxWidth().height(stageHeight), onTap = { touched = true })
+                            LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+                                if (state.messages.isEmpty()) item(key = "welcome") {
+                                    Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                                        Column(Modifier.padding(20.dp)) {
+                                            Text("今天，想聊点什么？", style = MaterialTheme.typography.titleLarge)
+                                            Spacer(Modifier.height(8.dp))
+                                            Text("可以聊聊刚发生的小事，也可以把希望伙伴记住的事放进记忆。")
+                                            Text("轻触伙伴可互动；正式形象之后再选。", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                }
                         items(state.messages, key = { it.id }) { message ->
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor =
                                 if (message.role == MessageRole.USER) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
@@ -98,6 +113,8 @@ fun CompanionRoute(
                                         TextButton(onClick = { memoryText = message.text.take(2000); memorySource = message.id; addMemory = true }) { Text("记住这件事") }
                                     }
                                 }
+                            }
+                        }
                             }
                         }
                     }
@@ -126,17 +143,19 @@ fun CompanionRoute(
                     }
                 }
                 else -> {
+                  Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Text("伙伴设定", style = MaterialTheme.typography.titleMedium)
                     Text(state.profile.personality, Modifier.padding(vertical = 12.dp))
                     OutlinedButton(onClick = { editProfile = true }) { Text("修改名称与人格") }
                     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("在 App 内显示伙伴入口", Modifier.weight(1f))
-                        Switch(state.profile.showInApp, { model.visible(it) })
+                        Text("在 App 内显示伙伴", Modifier.weight(1f))
+                        Switch(state.profile.showInApp, { model.visible(it) }, modifier = Modifier.testTag("pet-in-app-visible"))
                     }
                     Text("桌面陪伴", style = MaterialTheme.typography.titleMedium)
                     Text("开启后，可在桌面或其他 App 上与伙伴交流。", Modifier.padding(vertical = 12.dp))
                     Row { OutlinedButton(onClick = onOverlay) { Text("开启桌面陪伴") }
                         TextButton(onClick = onStopOverlay) { Text("关闭") } }
+                  }
                 }
             }
         }

@@ -31,6 +31,7 @@ internal fun DualBusinessHost(
     lifeDark: Boolean,
     lifeKnowledge: LifeKnowledge? = null,
     petContent: @Composable ((Int) -> Unit, (Boolean) -> Unit) -> Unit = { _, _ -> },
+    inAppCompanion: @Composable ((Boolean) -> Unit) -> Unit = {},
     lifeContent: @Composable ((Boolean) -> Unit, (Int) -> Unit) -> Unit,
 ) {
     val selected by model.selected.collectAsStateWithLifecycle()
@@ -108,6 +109,9 @@ internal fun DualBusinessHost(
         }
         val bar = when (selected) { Business.LIFE -> lifeBar; Business.JIANYU -> jianyuBar; Business.PET -> petBar }
         val allowed = when (selected) { Business.LIFE -> lifeSwitchAllowed; Business.JIANYU -> ready != null && jianyuSwitchAllowed; Business.PET -> true }
+        if (enteredPet && petVisible && selected != Business.PET && allowed && windowFocused) {
+            Box(Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(bottom = with(density) { bar.toDp() } + 80.dp, end = 16.dp)) { inAppCompanion { petVisible = it } }
+        }
         if (allowed && windowFocused && bar > 0 && size.width > 0 && size.height > 0) {
             val margin = with(density) { 12.dp.roundToPx() }
             val bounds = SwitchBounds.create(size.width, size.height, buttonSize,

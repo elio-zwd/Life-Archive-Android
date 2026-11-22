@@ -16,6 +16,7 @@ android {
 }
 kotlin { jvmToolchain(17) }
 dependencies {
+    implementation(project(":core:live2d"))
     api(project(":domain:pet"))
     implementation(project(":domain:ai"))
     implementation(platform(libs.androidx.compose.bom))
