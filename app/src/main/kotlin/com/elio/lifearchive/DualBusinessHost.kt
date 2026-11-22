@@ -30,6 +30,7 @@ internal fun DualBusinessHost(
     positions: SwitchPositionStore,
     lifeDark: Boolean,
     lifeKnowledge: LifeKnowledge? = null,
+    petContent: @Composable ((Int) -> Unit, (Boolean) -> Unit) -> Unit = { _, _ -> },
     lifeContent: @Composable ((Boolean) -> Unit, (Int) -> Unit) -> Unit,
 ) {
     val selected by model.selected.collectAsStateWithLifecycle()
@@ -40,6 +41,9 @@ internal fun DualBusinessHost(
     var jianyuSwitchAllowed by remember { mutableStateOf(false) }
     var lifeBar by remember { mutableIntStateOf(0) }
     var jianyuBar by remember { mutableIntStateOf(0) }
+    var petBar by remember { mutableIntStateOf(0) }
+    var petVisible by remember { mutableStateOf(false) }
+    var enteredPet by remember { mutableStateOf(false) }
     var jianyuDark by remember { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     var buttonSize by remember { mutableStateOf(IntSize.Zero) }
@@ -62,6 +66,7 @@ internal fun DualBusinessHost(
         }
     }
     if (selected == Business.JIANYU) SideEffect { enteredJianyu = true }
+    if (selected == Business.PET) SideEffect { enteredPet = true }
     val ready = jianyu as? JianyuHostState.Ready
     var lastEpoch by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(ready?.session?.contentEpoch) {
@@ -94,21 +99,27 @@ internal fun DualBusinessHost(
                 JianyuStatus(jianyu, model::retryJianyu) { model.select(Business.LIFE) }
             }
         }
-        val bar = if (selected == Business.LIFE) lifeBar else jianyuBar
-        val allowed = if (selected == Business.LIFE) lifeSwitchAllowed else ready != null && jianyuSwitchAllowed
+        if (enteredPet || selected == Business.PET) {
+            holder.SaveableStateProvider("pet") {
+                RetainedBusinessPane(selected == Business.PET) {
+                    petContent({ petBar = it }, { petVisible = it })
+                }
+            }
+        }
+        val bar = when (selected) { Business.LIFE -> lifeBar; Business.JIANYU -> jianyuBar; Business.PET -> petBar }
+        val allowed = when (selected) { Business.LIFE -> lifeSwitchAllowed; Business.JIANYU -> ready != null && jianyuSwitchAllowed; Business.PET -> true }
         if (allowed && windowFocused && bar > 0 && size.width > 0 && size.height > 0) {
             val margin = with(density) { 12.dp.roundToPx() }
             val bounds = SwitchBounds.create(size.width, size.height, buttonSize,
                 safe.getLeft(density, direction), safe.getTop(density), safe.getRight(density, direction),
                 maxOf(safe.getBottom(density), WindowInsets.ime.getBottom(density)), bar, margin)
-            val target = if (selected == Business.LIFE) Business.JIANYU else Business.LIFE
-            BusinessSwitcher(target, bounds, position, onPosition = { newPosition ->
+            BusinessSwitcher(selected, bounds, position, onPosition = { newPosition ->
                 scope.launch { try { positions.save(newPosition) } catch (_: IOException) { /* 位置保留在本次界面，磁盘恢复后再保存。 */ } }
-            }, onClick = {
+            }, onSelect = { target ->
                 focus.clearFocus(force = true)
                 keyboard?.hide()
                 model.select(target)
-            }, onMeasured = { buttonSize = it })
+            }, onMeasured = { buttonSize = it }, companionVisible = petVisible)
         }
     }
 }

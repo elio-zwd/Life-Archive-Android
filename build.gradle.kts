@@ -11,12 +11,15 @@ plugins {
 
 // 编译依赖是架构边界；新模块必须在这里声明允许的直接依赖。
 val allowedModules = mapOf(
-    ":app" to setOf(":core:designsystem", ":core:preferences", ":core:backup", ":domain:notes", ":data:notes", ":core:document", ":domain:sync", ":data:sync", ":domain:jianyu", ":data:jianyu", ":domain:ai", ":data:ai"),
+    ":app" to setOf(":core:designsystem", ":core:preferences", ":core:backup", ":domain:notes", ":data:notes", ":core:document", ":domain:sync", ":data:sync", ":domain:jianyu", ":data:jianyu", ":domain:ai", ":data:ai", ":domain:pet", ":data:pet"),
     ":core:designsystem" to emptySet(),
     ":core:document" to emptySet(),
     ":core:markdown" to setOf(":core:document"),
     ":domain:ai" to emptySet(),
     ":data:ai" to setOf(":domain:ai"),
+    ":domain:pet" to setOf(":domain:ai"),
+    ":data:pet" to setOf(":domain:pet", ":domain:ai"),
+    ":feature:pet" to setOf(":domain:pet", ":domain:ai"),
     ":domain:jianyu" to setOf(":domain:ai"),
     ":data:jianyu" to setOf(":domain:jianyu", ":data:ai"),
     ":feature:jianyu" to setOf(":domain:jianyu", ":core:markdown"),

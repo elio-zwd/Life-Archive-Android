@@ -1,0 +1,142 @@
+package com.elio.lifearchive
+
+import android.app.*
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.os.IBinder
+import android.provider.Settings
+import android.view.*
+import android.view.inputmethod.InputMethodManager
+import android.widget.*
+import com.elio.lifearchive.domain.pet.*
+import dagger.hilt.android.AndroidEntryPoint
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Provider
+import kotlinx.coroutines.*
+
+/** 系统窗口只持有呈现和输入，共用 app 装配的伙伴资料及生成任务。 */
+@AndroidEntryPoint
+class CompanionOverlayService : Service() {
+    @Inject lateinit var repositoryProvider: Provider<CompanionRepository>
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var window: WindowManager? = null
+    private var root: LinearLayout? = null
+    private var watcher: Job? = null
+    private var repository: CompanionRepository? = null
+    private var expanded = false
+    private var dragX = 0f
+    private var dragY = 0f
+    private var startX = 0
+    private var startY = 0
+    private val params = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+        android.graphics.PixelFormat.TRANSLUCENT,
+    ).apply { gravity = Gravity.TOP or Gravity.START; x = 20; y = 180 }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == STOP || !Settings.canDrawOverlays(this)) { stopSelf(); return START_NOT_STICKY }
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, "桌面陪伴", NotificationManager.IMPORTANCE_LOW))
+        val stop = PendingIntent.getService(this, 1, Intent(this, CompanionOverlayService::class.java).setAction(STOP), PendingIntent.FLAG_IMMUTABLE)
+        val open = PendingIntent.getActivity(this, 2, openIntent(), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        try { startForeground(1024, Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("伙伴正在桌面陪伴").setContentText("点击回到伙伴，或停止桌面陪伴。")
+            .setContentIntent(open).setOngoing(true).addAction(Notification.Action.Builder(null, "停止", stop).build()).build()) }
+        catch (_: RuntimeException) { stopSelf(); return START_NOT_STICKY }
+        if (root == null) attach()
+        return START_NOT_STICKY
+    }
+
+    // 拖动监听在 ACTION_UP 显式调用 performClick，保留 Button 原有无障碍点击语义。
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun attach() {
+        val wm = getSystemService(WindowManager::class.java)
+        window = wm
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = GradientDrawable().apply { setColor(Color.rgb(247, 245, 252)); cornerRadius = dp(18).toFloat(); setStroke(dp(1), Color.rgb(198, 190, 218)) }
+            elevation = dp(8).toFloat()
+        }
+        val title = Button(this).apply { text = "伙伴 · 展开"; contentDescription = "拖动或展开伙伴" }
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        val text = TextView(this).apply { setTextColor(Color.rgb(48, 43, 62)); text = "正在打开伙伴…"; maxLines = 8 }
+        val input = EditText(this).apply { hint = "和伙伴说说话"; maxLines = 3; filters = arrayOf(android.text.InputFilter.LengthFilter(16_000)) }
+        val controls = LinearLayout(this)
+        val send = Button(this).apply { this.text = "发送" }
+        val open = Button(this).apply { this.text = "打开"; setOnClickListener { startActivity(openIntent()) } }
+        val close = Button(this).apply { this.text = "关闭"; setOnClickListener { stopSelf() } }
+        controls.addView(send); controls.addView(open); controls.addView(close)
+        body.addView(text, LinearLayout.LayoutParams(dp(270), ViewGroup.LayoutParams.WRAP_CONTENT))
+        body.addView(input); body.addView(controls)
+        container.addView(title); container.addView(body)
+        title.setOnClickListener {
+            expanded = !expanded
+            body.visibility = if (expanded) View.VISIBLE else View.GONE
+            title.text = if (expanded) "伙伴 · 收起" else "伙伴 · 展开"
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or (if (expanded) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            if (!expanded) getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(input.windowToken, 0)
+            updateWindow()
+        }
+        title.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { dragX = event.rawX; dragY = event.rawY; startX = params.x; startY = params.y; true }
+                MotionEvent.ACTION_MOVE -> {
+                    params.x = (startX + event.rawX - dragX).toInt().coerceIn(0, (resources.displayMetrics.widthPixels - container.width).coerceAtLeast(0))
+                    params.y = (startY + event.rawY - dragY).toInt().coerceIn(dp(24), (resources.displayMetrics.heightPixels - container.height - dp(24)).coerceAtLeast(dp(24)))
+                    updateWindow(); true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (kotlin.math.abs(event.rawX - dragX) < dp(8) && kotlin.math.abs(event.rawY - dragY) < dp(8)) view.performClick()
+                    true
+                }
+                else -> false
+            }
+        }
+        send.setOnClickListener {
+            val repo = repository ?: return@setOnClickListener
+            if (repo.state.value.generating) { scope.launch { repo.cancel() }; return@setOnClickListener }
+            val message = input.text.toString()
+            if (message.isBlank()) return@setOnClickListener
+            send.isEnabled = false
+            scope.launch {
+                try { if (repo.send(message, UUID.randomUUID().toString())) input.setText("") }
+                catch (_: Exception) { text.text = "发送未完成，请重试。" }
+                finally { send.isEnabled = true }
+            }
+        }
+        try { wm.addView(container, params); root = container }
+        catch (_: Exception) { stopSelf(); return }
+        scope.launch {
+            try {
+                val repo = withContext(Dispatchers.IO) { repositoryProvider.get().also { it.initialize() } }
+                repository = repo
+                repo.state.collect { state ->
+                    val last = state.messages.lastOrNull { it.role == MessageRole.COMPANION }
+                    text.text = when { last == null -> "今天想聊些什么？"; last.status == ReplyStatus.GENERATING -> "正在想怎么回应你…"; else -> last.error ?: last.text }
+                    send.text = if (state.generating) "停止" else "发送"
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { text.text = "伙伴暂时无法打开，请关闭后重试。" }
+        }
+        watcher = scope.launch {
+            while (isActive) { delay(1000); if (!Settings.canDrawOverlays(this@CompanionOverlayService)) { stopSelf(); break } }
+        }
+    }
+    private fun updateWindow() { root?.let { runCatching { window?.updateViewLayout(it, params) }.onFailure { stopSelf() } } }
+    private fun openIntent() = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        .putExtra("open-companion", true)
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    override fun onDestroy() {
+        watcher?.cancel(); scope.cancel()
+        root?.let { runCatching { window?.removeViewImmediate(it) } }; root = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        super.onDestroy()
+    }
+    companion object { private const val CHANNEL = "companion-overlay"; private const val STOP = "companion.stop" }
+}

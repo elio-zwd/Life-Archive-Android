@@ -4,6 +4,8 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -39,20 +41,22 @@ internal data class SwitchBounds(val left: Float, val top: Float, val right: Flo
 
 @Composable
 internal fun BusinessSwitcher(
-    target: Business,
+    current: Business,
     bounds: SwitchBounds,
     position: SwitchPosition,
     onPosition: (SwitchPosition) -> Unit,
-    onClick: () -> Unit,
+    onSelect: (Business) -> Unit,
     onMeasured: (IntSize) -> Unit,
+    companionVisible: Boolean = false,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     var localPosition by remember { mutableStateOf(position) }
     var dragging by remember { mutableStateOf(false) }
     var dragPoint by remember { mutableStateOf(Offset.Zero) }
     LaunchedEffect(position) { if (!dragging) localPosition = position }
     val latestPosition by rememberUpdatedState(onPosition)
     val point = if (dragging) bounds.clamp(dragPoint) else bounds.absolute(localPosition)
-    val label = if (target == Business.JIANYU) "见域" else "Life"
+    val label = if (companionVisible && current != Business.PET) "伙伴 · 切换" else "切换"
     fun finishDrag() {
         if (dragging) {
             localPosition = bounds.relative(dragPoint)
@@ -60,11 +64,9 @@ internal fun BusinessSwitcher(
             latestPosition(localPosition)
         }
     }
-    FloatingActionButton(onClick = { if (!dragging) onClick() }, modifier = Modifier
+    Box(modifier = Modifier
         .offset { IntOffset(point.x.roundToInt(), point.y.roundToInt()) }
         .onSizeChanged(onMeasured)
-        .testTag("business-switch")
-        .semantics { contentDescription = "切换到$label" }
         .pointerInput(bounds) {
             detectDragGestures(onDragStart = { dragPoint = bounds.absolute(localPosition); dragging = true },
                 onDragEnd = ::finishDrag, onDragCancel = ::finishDrag) { change, delta ->
@@ -72,6 +74,17 @@ internal fun BusinessSwitcher(
                 dragPoint = bounds.clamp(dragPoint + delta)
             }
         }) {
-        Text(label, modifier = Modifier.padding(horizontal = 16.dp))
+        FloatingActionButton(onClick = { if (!dragging) expanded = true }, modifier = Modifier
+            .testTag("business-switch").semantics { contentDescription = "切换业务" }) {
+            Text(label, modifier = Modifier.padding(horizontal = 16.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            Business.entries.forEach { business -> DropdownMenuItem(
+                text = { Text(when (business) { Business.LIFE -> "Life"; Business.JIANYU -> "见域"; Business.PET -> "伙伴" }) },
+                modifier = Modifier.testTag("business-select-${business.name}"),
+                enabled = business != current,
+                onClick = { expanded = false; onSelect(business) },
+            ) }
+        }
     }
 }

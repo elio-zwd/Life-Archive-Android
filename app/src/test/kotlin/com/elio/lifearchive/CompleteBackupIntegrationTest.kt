@@ -57,6 +57,7 @@ class CompleteBackupIntegrationTest {
         ShadowContentResolver.registerProviderInternal("complete.test", provider)
         focusWindow()
         compose.onNodeWithTag("business-switch").performClick()
+        compose.onNodeWithTag("business-select-JIANYU").performClick()
         compose.waitUntil(30000) { compose.onAllNodesWithTag("chat_input").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("chat_input").performTextInput("创建完整备份时不能丢的草稿")
         val originalSession = ready().session

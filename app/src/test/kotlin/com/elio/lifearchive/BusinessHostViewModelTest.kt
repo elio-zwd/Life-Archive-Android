@@ -18,6 +18,18 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class BusinessHostViewModelTest {
+    @Test fun petSelectionDoesNotInitializeJianyuAndSurvivesReconstruction() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val owner = ModelOwner(FakeRuntime(), SavedStateHandle(mapOf("host.selected-business" to "PET")))
+        try {
+            runCurrent()
+            assertEquals(Business.PET, owner.model.selected.value)
+            owner.model.select(Business.LIFE); owner.model.select(Business.PET)
+            runCurrent()
+            assertEquals(0, owner.providerCalls)
+            assertEquals(JianyuHostState.Idle, owner.model.jianyu.value)
+        } finally { owner.viewModelStore.clear(); runCurrent(); Dispatchers.resetMain() }
+    }
     @Test fun freshLaunchDoesNotCreateJianyuRuntime() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val runtime = FakeRuntime()

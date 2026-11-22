@@ -37,12 +37,43 @@ class MainActivity : ComponentActivity() {
     @Inject internal lateinit var readerCache: ReaderCacheRepository
     @Inject internal lateinit var backup: BackupEngine
     @Inject internal lateinit var sync: com.elio.lifearchive.domain.sync.SyncRepository
+    @Inject internal lateinit var companionProvider: javax.inject.Provider<com.elio.lifearchive.domain.pet.CompanionRepository>
+    private val overlayPermission = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+        if (android.provider.Settings.canDrawOverlays(this)) requestCompanionOverlay()
+    }
+    private val notificationPermission = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
+        startCompanionOverlay()
+    }
+
+    private fun requestCompanionOverlay() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else startCompanionOverlay()
+    }
+
+    private fun startCompanionOverlay() {
+        try { startForegroundService(android.content.Intent(this, CompanionOverlayService::class.java)) }
+        catch (_: RuntimeException) { android.widget.Toast.makeText(this, "暂时无法开启桌面陪伴，请返回前台后重试。", android.widget.Toast.LENGTH_LONG).show() }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open-companion", false)) {
+            ViewModelProvider(this)[BusinessHostViewModel::class.java].select(Business.PET)
+            intent.removeExtra("open-companion")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val model = ViewModelProvider(this)[AppViewModel::class.java]
         val businessHost = ViewModelProvider(this)[BusinessHostViewModel::class.java]
+        if (intent?.getBooleanExtra("open-companion", false) == true) {
+            businessHost.select(Business.PET)
+            intent.removeExtra("open-companion")
+        }
         setContent {
             val state by model.state.collectAsStateWithLifecycle()
             val lifeNote by businessHost.lifeNote.collectAsStateWithLifecycle()
@@ -58,7 +89,20 @@ class MainActivity : ComponentActivity() {
                 DocumentTheme.GRAPHITE -> DocumentPalette.GRAPHITE
             }
             DocumentPageTheme(palette) {
-              DualBusinessHost(businessHost, switchPositions, palette == DocumentPalette.GRAPHITE, knowledge) { onSwitcher, onBottomBar ->
+              DualBusinessHost(businessHost, switchPositions, palette == DocumentPalette.GRAPHITE, knowledge,
+                petContent = { onBar, onVisible ->
+                    CompanionHost(companionProvider, onBar, onVisible,
+                        onOverlay = {
+                            if (android.provider.Settings.canDrawOverlays(this)) {
+                                requestCompanionOverlay()
+                            } else {
+                                overlayPermission.launch(android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:$packageName")))
+                            }
+                        },
+                        onStopOverlay = { stopService(android.content.Intent(this, CompanionOverlayService::class.java)) },
+                        onLife = { businessHost.select(Business.LIFE) })
+                }) { onSwitcher, onBottomBar ->
                 when {
                     state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
                     !state.ready -> Scaffold { Text("正在恢复本地状态…", modifier = androidx.compose.ui.Modifier.padding(it)) }

@@ -29,7 +29,7 @@ class BusinessHostUiTest {
         compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
         assertFalse("Life 冷启动不能打开见域数据库", compose.activity.getDatabasePath("jianyu_roundtable_database").exists())
         focusWindow()
-        compose.onNodeWithTag("business-switch").assertIsDisplayed().assertContentDescriptionEquals("切换到见域").performClick()
+        switchTo("JIANYU")
         compose.waitUntil(30_000) {
             compose.onAllNodesWithTag("jianyu_app_content_root").fetchSemanticsNodes().isNotEmpty() ||
                 compose.onAllNodesWithText("见域暂时无法打开，请重试。").fetchSemanticsNodes().isNotEmpty()
@@ -39,12 +39,12 @@ class BusinessHostUiTest {
         compose.onNodeWithTag("jianyu_app_content_root").assertIsDisplayed()
         compose.onNodeWithTag("chat_input").performTextInput("尚未发送的输入，重建后仍应保留")
         focusWindow()
-        compose.onNodeWithTag("business-switch").assertContentDescriptionEquals("切换到Life").performClick()
+        switchTo("LIFE")
         compose.onNodeWithTag("new-note").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
         compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
         focusWindow()
-        compose.onNodeWithTag("business-switch").performClick()
+        switchTo("JIANYU")
         compose.waitUntil(30_000) { compose.onAllNodesWithTag("chat_input").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("chat_input").assertTextContains("尚未发送的输入，重建后仍应保留")
     }
@@ -57,7 +57,7 @@ class BusinessHostUiTest {
         }
         check(result is NoteResult.Committed)
         focusWindow()
-        compose.onNodeWithTag("business-switch").performClick()
+        switchTo("JIANYU")
         compose.waitUntil(30_000) { compose.onAllNodesWithTag("chat_input").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("chat_input").performTextInput("保留这段未发送的输入")
         compose.onNodeWithContentDescription("添加功能").performClick()
@@ -72,12 +72,55 @@ class BusinessHostUiTest {
         compose.onNodeWithText("本地资料验收").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
         focusWindow()
-        compose.onNodeWithTag("business-switch").performClick()
+        switchTo("JIANYU")
         compose.onNodeWithTag("chat_input").assertTextContains("保留这段未发送的输入", substring = true)
     }
 
     private fun focusWindow() {
         compose.runOnIdle { compose.activity.window.decorView.dispatchWindowFocusChanged(true) }
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("business-switch").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun switchTo(name: String) {
+        compose.onNodeWithTag("business-switch").assertContentDescriptionEquals("切换业务").performClick()
+        compose.onNodeWithTag("business-select-$name").performClick()
+    }
+
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun petDraftAndMemorySurviveThreeDomainSwitchAndRecreation() {
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
+        assertFalse("Life 冷启动不能打开宠物库", compose.activity.getDatabasePath("companion.db").exists())
+        focusWindow(); switchTo("PET")
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("pet-input").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("pet-input").performTextInput("给伙伴的未发送输入")
+        captureCompanion("conversation")
+        compose.onNodeWithText("记忆", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("添加记忆").performClick()
+        compose.onNodeWithText("希望伙伴记住的事").performTextInput("合成资料：周末喜欢散步")
+        compose.onNodeWithText("保存").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("合成资料：周末喜欢散步").fetchSemanticsNodes().isNotEmpty() }
+        focusWindow(); switchTo("LIFE")
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
+        focusWindow(); switchTo("PET")
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("pet-root").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("陪伴", useUnmergedTree = true).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("pet-input").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("pet-input").assertTextContains("给伙伴的未发送输入")
+        compose.onNodeWithText("记忆", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("合成资料：周末喜欢散步").assertIsDisplayed()
+        captureCompanion("memories")
+    }
+
+    private fun captureCompanion(name: String) {
+        val directory = java.io.File(System.getProperty("java.io.tmpdir"), "life-archive-companion-previews").apply { mkdirs() }
+        compose.runOnIdle {
+            val view = compose.activity.findViewById<android.view.View>(android.R.id.content)
+            val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+            view.draw(android.graphics.Canvas(bitmap))
+            java.io.File(directory, "$name.png").outputStream().use { output -> bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output) }
+            bitmap.recycle()
+        }
     }
 }

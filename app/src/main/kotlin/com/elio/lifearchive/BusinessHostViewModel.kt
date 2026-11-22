@@ -14,7 +14,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-internal enum class Business { LIFE, JIANYU }
+internal enum class Business { LIFE, JIANYU, PET }
 
 internal sealed interface JianyuHostState {
     data object Idle : JianyuHostState

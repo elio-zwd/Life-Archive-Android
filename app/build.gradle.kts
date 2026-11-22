@@ -36,6 +36,11 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":domain:ai"))
+    implementation(project(":data:ai"))
+    implementation(project(":domain:pet"))
+    implementation(project(":data:pet"))
+    implementation(project(":feature:pet"))
     implementation(project(":domain:jianyu"))
     implementation(project(":data:jianyu"))
     implementation(project(":feature:jianyu"))
