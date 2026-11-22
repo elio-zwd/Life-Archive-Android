@@ -28,7 +28,7 @@
 1. [第一期：本地笔记](docs/plans/phase-1-local-notes.md)：编辑、组织、搜索、附件、导入导出和简单备份恢复。交互与视觉以[已确认的决策文档](docs/plans/phase-1-editor-visual-decisions.md)为准。
 2. [第二期：单 App 整合与共用 Markdown](docs/plans/phase-2-ai-and-shared-capabilities.md)：Life 唯一宿主，默认进入 Life；真实见域业务与可拖动悬浮入口已接入，保留各自底栏、状态和外观，见[宿主交接](docs/engineering/phase-2-business-host-handoff.md)。生产消息共用渲染、完整 `.jyfull` 迁入及独立备份恢复已实现，电脑检查与开发包见[数据闭环交接](docs/engineering/phase-2-complete-backup-handoff.md)；[小米真机验收](docs/testing/phase-2-manual-acceptance.md)尚未完成。见域本期不访问 Life 文档，统一备份留第五期。
 3. [第三期：简化双向同步](docs/plans/phase-3-computer-obsidian.md)：先实施局域网手动双向同步、YAML ID、改名移动及 AI 修改前备份；实现、检查和产物见[三期交接](docs/engineering/phase-3-sync-handoff.md)，随后由用户[真机验证](docs/testing/phase-3-manual-acceptance.md)。
-4. 第四期优化：[电脑端阅读显示与修改差异](docs/plans/phase-4-pc-reading.md)继续只记录方向；[笔记分类与整理制度](docs/plans/phase-4-note-organization.md)独立实施，按主题／类型归档，支持三级标签、批量预览整理和真实内容时间，不新增 AI 分类或强制 AI 标记。笔记同步身份机制仍归第三期。
+4. 第四期优化：[电脑端阅读与 Git 修改差异](docs/plans/phase-4-pc-reading.md)已接入源码浏览器版，资料基线状态见[四期 PC 交接](docs/engineering/phase-4-pc-reading-handoff.md)。[笔记分类与整理制度](docs/plans/phase-4-note-organization.md)支持主题／类型归档、三级标签、批量预览和真实内容时间，真机结果单独记录。
 5. [第五期：知识库与资料联动](docs/plans/phase-5-knowledge-base.md)：Life 文档作为见域知识库，承接 AI 全库搜索、自动调用资料、其他新增联动及整 App 统一备份；仅记录方向，未展开设计。
 
 目标范围、实现与验收分别记录。第一期不接入 AI、不抽取两款 App 的共享模块；旧数据库不迁移。Android App 内版本对比、关系图和手写暂不计划实现。

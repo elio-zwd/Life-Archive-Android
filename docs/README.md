@@ -14,7 +14,7 @@
 - [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：Life 唯一宿主、默认 Life；真实见域、悬浮入口、共用消息渲染和完整迁入／独立恢复已接入；电脑证据与手机待验收分开记录。
 - [二期剩余实施计划](plans/phase-2-remaining-implementation.md)：真实见域接入、悬浮入口、生命周期、流式渲染、历史迁移与独立备份的任务顺序和完成门槛；规划与实际完成状态分开记录。
 - [第三期：简化双向同步与 AI 修改前备份](plans/phase-3-computer-obsidian.md)：本期先行，含 ID、改名移动和初步交付门槛。
-- [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：仅记录两个方向，暂不详细规划。
+- [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：长文阅读、当前笔记与 Git 提交对比；代码、电脑检查与真实资料基线状态见[四期 PC 交接](engineering/phase-4-pc-reading-handoff.md)。
 - [第四期优化：笔记分类与整理制度](plans/phase-4-note-organization.md)：独立实施主题／类型归档、三级标签、批量预览整理与真实内容时间；不强设 AI 内容第三类。
 - [分类整理交接](engineering/note-organization-handoff.md)：接口、备份迁移、工具用法、实际检查和产物；[独立真机清单](testing/note-organization-manual-acceptance.md)区分电脑与设备结果。
 - [第五期：知识库与资料联动](plans/phase-5-knowledge-base.md)：Life 文档知识库、AI 全库搜索、自动调用资料、其他新增笔记与对话联动及整 App 统一备份；仅记录方向，不展开设计。
