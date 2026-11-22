@@ -11,13 +11,13 @@
 - [第一期：UI 优化实施计划](plans/phase-1-ui-polish.md)：首页及已认可编辑／阅读视觉的 Android 移植、保护边界和分层验证。
 - [第一期：阅读打开提速](plans/phase-1-reader-open-performance.md)：首屏优先、按需持久缓存及性能验收要求。
 - [第一期：工具栏增强与回车续写](plans/phase-1-editor-toolbar.md)：标题手势、格式／插入面板、选区保护与输入事务约定。
-- [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：Life 唯一宿主、默认 Life；真实见域、悬浮入口、共用消息渲染和完整迁入／独立恢复已接入；电脑证据与手机待验收分开记录。
+- [第二期：单 App 整合与共用 Markdown](plans/phase-2-ai-and-shared-capabilities.md)：Life 唯一宿主、默认 Life；真实见域、悬浮入口、共用消息渲染和完整迁入／独立恢复已接入。真机验证已由用户确认。
 - [二期剩余实施计划](plans/phase-2-remaining-implementation.md)：真实见域接入、悬浮入口、生命周期、流式渲染、历史迁移与独立备份的任务顺序和完成门槛；规划与实际完成状态分开记录。
 - [第三期：简化双向同步与 AI 修改前备份](plans/phase-3-computer-obsidian.md)：本期先行，含 ID、改名移动和初步交付门槛。
 - [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：长文阅读、当前笔记与 Git 提交对比；代码、电脑检查与真实资料基线状态见[四期 PC 交接](engineering/phase-4-pc-reading-handoff.md)。
 - [第四期优化：笔记分类与整理制度](plans/phase-4-note-organization.md)：独立实施主题／类型归档、三级标签、批量预览整理与真实内容时间；不强设 AI 内容第三类。
 - [分类整理交接](engineering/note-organization-handoff.md)：接口、备份迁移、工具用法、实际检查和产物；[独立真机清单](testing/note-organization-manual-acceptance.md)区分电脑与设备结果。
-- [第五期：知识库与资料联动](plans/phase-5-knowledge-base.md)：Life 文档知识库、AI 全库搜索、自动调用资料、其他新增笔记与对话联动及整 App 统一备份；仅记录方向，不展开设计。
+- [第五期：知识库、资料联动与整 App 备份](plans/phase-5-knowledge-base.md)：首版交互、片段发送规则、双域加密备份与联合恢复、实施顺序及验收条件。
 
 一期范围及已确认交互以一期计划和决策为依据；三期按 2026-11-04 用户确认先行，计划、实现和验收分别记录。
 
@@ -41,7 +41,7 @@
 - [二期业务接入与双域宿主](engineering/phase-2-business-host-handoff.md)：十六模块的真实接入、悬浮入口、运行租约与状态保留、电脑证据及剩余迁移／渲染门槛。
 - [见域完整迁移与恢复契约](engineering/phase-2-complete-transfer-contract.md)：38 表、设置、音频与用户文件的覆盖矩阵、独立格式和提交／回滚设计；实现与验收另记。
 - [二期完整迁移与独立备份交接](engineering/phase-2-complete-backup-handoff.md)：真实来源导出、`.jyfull` 预览与恢复、持久化回滚、换代／清理、互通及两域隔离证据、开发包。
-- [二期小米 14 Ultra 验收](testing/phase-2-manual-acceptance.md)：入口、状态、流式／长列表、真实迁出迁入和独立备份的待验收清单；当前均未实测。
+- [二期小米 14 Ultra 验收](testing/phase-2-manual-acceptance.md)：覆盖入口、状态、流式／长列表、真实迁出迁入和独立备份的历史清单。用户已确认真机验证。
 
 - [三期同步实现与初步交付](engineering/phase-3-sync-handoff.md)：双向同步、备份脚本、恢复兼容、产物和实际检查；[真机验收清单](testing/phase-3-manual-acceptance.md)单独记录手机结果。
 
