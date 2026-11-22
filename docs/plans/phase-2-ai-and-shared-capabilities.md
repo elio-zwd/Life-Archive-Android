@@ -2,9 +2,9 @@
 
 记录日期：2026-10-17；架构与实施顺序确认：2026-11-09。
 
-状态：二期开发代码已接入真实见域业务、悬浮切换、共用消息渲染、完整迁移与独立恢复，电脑定向交付检查通过；小米 14 Ultra 验收尚未进行，不能标记整期完成。初始差距保留在[整合基线](../engineering/phase-2-integration-baseline.md)，Life 共用渲染的早期实现见[阶段记录](../engineering/phase-2-shared-markdown-handoff.md)。
+状态：二期已接入真实见域业务、悬浮切换、共用消息渲染、完整迁移与独立恢复，电脑定向交付检查通过。小米 14 Ultra 真机验证已由用户确认，[验收清单](../testing/phase-2-manual-acceptance.md)保留逐项历史记录。初始差距保留在[整合基线](../engineering/phase-2-integration-baseline.md)，Life 共用渲染的早期实现见[阶段记录](../engineering/phase-2-shared-markdown-handoff.md)。
 
-2026-11-14 执行[剩余实施计划](phase-2-remaining-implementation.md)：三个见域模块、独立存储及按需运行、双域状态与入口已接入，电脑实际 MainActivity 切换及重建输入保留测试通过，见[宿主交接](../engineering/phase-2-business-host-handoff.md)。生产消息已统一调用共用渲染，旧渲染依赖已删除；`.jyfull` 全量导出、预览、换库回滚和独立恢复已实现，见[迁移交接](../engineering/phase-2-complete-backup-handoff.md)。原有限 `.jybak` 不作完整备份。尚未安装或验收手机。
+2026-11-14 执行[剩余实施计划](phase-2-remaining-implementation.md)：三个见域模块、独立存储及按需运行、双域状态与入口已接入，电脑实际 MainActivity 切换及重建输入保留测试通过，见[宿主交接](../engineering/phase-2-business-host-handoff.md)。生产消息已统一调用共用渲染，旧渲染依赖已删除；`.jyfull` 全量导出、预览、换库回滚和独立恢复已实现，见[迁移交接](../engineering/phase-2-complete-backup-handoff.md)。原有限 `.jybak` 不作完整备份。此次电脑交付未操作手机。
 
 2026-11-04 调整为第三期先行；三期及四期分类整理已初步交付后，现按用户要求开始本期。Life 文档知识库、AI 全库搜索、新增资料联动及整 App 统一备份留第五期。
 
