@@ -29,7 +29,7 @@
 2. [第二期：单 App 整合与共用 Markdown](docs/plans/phase-2-ai-and-shared-capabilities.md)：双入口、生产消息共用渲染、完整 `.jyfull` 迁入及独立备份恢复已接入，小米 14 Ultra 真机验证已由用户确认。电脑证据和开发包见[数据闭环交接](docs/engineering/phase-2-complete-backup-handoff.md)。Life 文档接入与统一备份归第五期。
 3. [第三期：简化双向同步](docs/plans/phase-3-computer-obsidian.md)：先实施局域网手动双向同步、YAML ID、改名移动及 AI 修改前备份；实现、检查和产物见[三期交接](docs/engineering/phase-3-sync-handoff.md)，随后由用户[真机验证](docs/testing/phase-3-manual-acceptance.md)。
 4. 第四期优化：[电脑端阅读与 Git 修改差异](docs/plans/phase-4-pc-reading.md)已接入源码浏览器版，资料基线状态见[四期 PC 交接](docs/engineering/phase-4-pc-reading-handoff.md)。[笔记分类与整理制度](docs/plans/phase-4-note-organization.md)支持主题／类型归档、三级标签、批量预览和真实内容时间，真机结果单独记录。
-5. [第五期：知识库、资料联动与整 App 备份](docs/plans/phase-5-knowledge-base.md)：实施计划已形成，包含见域检索 Life 笔记、确认片段后问答、原文引用和保存回复，以及两域加密备份与联合恢复。
+5. [第五期：知识库、资料联动与整 App 备份](docs/plans/phase-5-knowledge-base.md)：开发已启动。见域对话「添加功能 → 选择资料 → Life 笔记」已接入本地搜索、预览及原文跳转。模型调用、保存回复及两域联合备份按计划后续接入。
 
 目标范围、实现与验收分别记录。第一期不接入 AI、不抽取两款 App 的共享模块；旧数据库不迁移。Android App 内版本对比、关系图和手写暂不计划实现。
 

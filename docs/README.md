@@ -17,7 +17,7 @@
 - [第四期：电脑端阅读显示与修改差异](plans/phase-4-pc-reading.md)：长文阅读、当前笔记与 Git 提交对比；代码、电脑检查与真实资料基线状态见[四期 PC 交接](engineering/phase-4-pc-reading-handoff.md)。
 - [第四期优化：笔记分类与整理制度](plans/phase-4-note-organization.md)：独立实施主题／类型归档、三级标签、批量预览整理与真实内容时间；不强设 AI 内容第三类。
 - [分类整理交接](engineering/note-organization-handoff.md)：接口、备份迁移、工具用法、实际检查和产物；[独立真机清单](testing/note-organization-manual-acceptance.md)区分电脑与设备结果。
-- [第五期：知识库、资料联动与整 App 备份](plans/phase-5-knowledge-base.md)：首版交互、片段发送规则、双域加密备份与联合恢复、实施顺序及验收条件。
+- [第五期：知识库、资料联动与整 App 备份](plans/phase-5-knowledge-base.md)：首版交互、片段发送规则、联合备份与实施验收。开发已开始，见域本地查找 Life 笔记的入口位于对话「选择资料」。
 
 一期范围及已确认交互以一期计划和决策为依据；三期按 2026-11-04 用户确认先行，计划、实现和验收分别记录。
 
