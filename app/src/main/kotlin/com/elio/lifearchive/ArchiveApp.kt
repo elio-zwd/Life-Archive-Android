@@ -22,6 +22,7 @@ import android.net.Uri
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.elio.lifearchive.core.backup.BackupEngine
+import com.elio.lifearchive.core.document.DocumentVersion
 import com.elio.lifearchive.core.document.LibraryPath
 import com.elio.lifearchive.feature.settings.*
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -54,14 +55,34 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 @Serializable internal data class NotesHome(val generation: String = UUID.randomUUID().toString()) : NavKey
-@Serializable internal data class NoteDestination(val id: String, val editing: Boolean = false, val offset: Int? = null, val entry: String = UUID.randomUUID().toString()) : NavKey
+@Serializable internal data class NoteDestination(
+    val id: String,
+    val editing: Boolean = false,
+    val offset: Int? = null,
+    val entry: String = UUID.randomUUID().toString(),
+    val expectedVersion: String? = null,
+) : NavKey
 @Serializable internal data object SettingsDestination : NavKey
 @Serializable internal data class OrganizationDestination(val ids: List<String> = emptyList(), val entry: String = UUID.randomUUID().toString()) : NavKey
 @Serializable internal data class VideoNotesDestination(val folder: String?, val entry: String = UUID.randomUUID().toString(), val captureOnly: Boolean = false) : NavKey
 @Serializable internal data class OnlineDestination(val url: String) : NavKey
 
 @Composable
-internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesRepository, values: UserPreferences, debugControls: Boolean, library: LibraryRepository? = null, remote: RemoteCacheRepository? = null, backup: BackupEngine? = null, readerCache: ReaderCacheRepository? = null, sync: com.elio.lifearchive.domain.sync.SyncRepository? = null, onSwitcherAvailabilityChanged: (Boolean) -> Unit = {}, onBottomBarMeasured: (Int) -> Unit = {}) {
+internal fun ArchiveApp(
+    notes: NotesRepository,
+    preferences: PreferencesRepository,
+    values: UserPreferences,
+    debugControls: Boolean,
+    library: LibraryRepository? = null,
+    remote: RemoteCacheRepository? = null,
+    backup: BackupEngine? = null,
+    readerCache: ReaderCacheRepository? = null,
+    sync: com.elio.lifearchive.domain.sync.SyncRepository? = null,
+    onSwitcherAvailabilityChanged: (Boolean) -> Unit = {},
+    onBottomBarMeasured: (Int) -> Unit = {},
+    lifeNoteRequest: NoteDestination? = null,
+    onLifeNoteOpened: (NoteDestination) -> Unit = {},
+) {
     val backStack = rememberNavBackStack(remember { NotesHome() })
     val scope = rememberCoroutineScope()
     val pendingTransfers = remember { mutableSetOf<Job>() }
@@ -110,6 +131,12 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
         }
     }
     val context = LocalContext.current
+    LaunchedEffect(lifeNoteRequest) {
+        if (lifeNoteRequest != null) {
+            backStack.add(lifeNoteRequest)
+            onLifeNoteOpened(lifeNoteRequest)
+        }
+    }
     val settings: SettingsViewModel? = if (library != null && remote != null && backup != null) viewModel(factory = remember(library, remote, backup, readerCache, sync) { viewModelFactory { initializer { SettingsViewModel(preferences, backup, notes, library, remote, readerCache, sync) } } }) else null
     if (settings != null) {
         val transferState by settings.state.collectAsStateWithLifecycle()
@@ -261,7 +288,10 @@ internal fun ArchiveApp(notes: NotesRepository, preferences: PreferencesReposito
                 )
             }
             entry<NoteDestination> { key ->
-                val factory = remember(notes, library, key) { viewModelFactory { initializer { EditorViewModel(notes, NoteId(key.id), key.editing, key.offset, library = library) } } }
+                val factory = remember(notes, library, key) { viewModelFactory { initializer {
+                    EditorViewModel(notes, NoteId(key.id), key.editing, key.offset, library = library,
+                        expectedVersion = key.expectedVersion?.let(::DocumentVersion))
+                } } }
                 val model: EditorViewModel = viewModel(factory = factory)
                 SideEffect { editors[key.entry] = model; if (backStack.lastOrNull() == key) activeEditor = model }
                 DocumentPageTheme(documentPalette) {

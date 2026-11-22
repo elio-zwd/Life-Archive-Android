@@ -30,6 +30,45 @@ class NotesStorageTest {
     private fun created(result: NoteResult<NoteSnapshot>) = (result as NoteResult.Committed).value
     private class Crash : Error()
 
+    @Test fun lifeKnowledgeSearchRanksAndFiltersSavedNotesWhilePreservingSourceOffsets() = runBlocking {
+        open(temp.newFolder()).use { storage ->
+            val repo = storage.repository
+            val source = RawDocument("\uFEFF---\r\ntags: [学习/工具/复习]\r\n未知: 属性专用值\r\n---\r\n# 复习方法\r\n\r\n准确命中的正文。\r\n![[私有图片.png]]")
+            val note = created(repo.create("学习研究/个人笔记/方法.md", source))
+            val match = created(repo.create("学习研究/视频摘记/例子.md", RawDocument("这里提到复习方法。")))
+            repo.writeDraft(Draft(match.summary.id, match.summary.version, 1, RawDocument("仅草稿词")))
+            fun NoteResult<KnowledgeListing>.listing() = (this as NoteResult.Success).value
+            val all = storage.library.searchKnowledge(KnowledgeQuery("复习方法")).listing()
+            assertEquals(listOf(note.summary.id, match.summary.id), all.hits.map { it.note.id })
+            assertTrue("学习/工具" in all.tags)
+
+            val query = KnowledgeQuery("准确命中", "学习研究", NoteKind.PERSONAL, "学习/工具")
+            val filtered = storage.library.searchKnowledge(query).listing().hits.single()
+            assertEquals(source.text.indexOf("准确命中"), filtered.offset)
+            assertTrue(filtered.excerpt.contains("准确命中的正文"))
+            assertFalse(filtered.excerpt.contains("属性专用值"))
+            assertFalse(filtered.excerpt.contains("私有图片.png"))
+            for (word in listOf("属性专用值", "私有图片", "仅草稿词", "无匹配")) {
+                assertTrue(storage.library.searchKnowledge(KnowledgeQuery(word)).listing().hits.isEmpty())
+            }
+            assertEquals(source, (repo.read(note.summary.id) as NoteResult.Success).value.document)
+
+            storage.library.trash(note.summary.id, note.summary.version)
+            assertTrue(storage.library.searchKnowledge(query).listing().hits.isEmpty())
+            storage.library.restore(note.summary.id)
+            assertEquals(note.summary.id, storage.library.searchKnowledge(query).listing().hits.single().note.id)
+
+            storage.fault = { if (it == "index") throw IOException("索引暂时不可用") }
+            created(repo.create("新笔记.md", RawDocument("唯一待更新关键词")))
+            val pending = storage.library.searchKnowledge(KnowledgeQuery("唯一待更新关键词")).listing()
+            assertEquals(1, pending.pendingIndex)
+            assertTrue(pending.hits.isEmpty())
+            storage.fault = {}
+            repo.rebuildIndex()
+            assertEquals(1, storage.library.searchKnowledge(KnowledgeQuery("唯一待更新关键词")).listing().hits.size)
+        }
+    }
+
     @Test fun realFilesPreserveContentAcrossReopenAndRejectStaleSave() = runBlocking {
         val root = temp.newFolder()
         val original = RawDocument("\uFEFF---\r\nunknown: 原文\r\n---\r\n# 中文\n![[file.pdf]]")
@@ -161,12 +200,18 @@ class NotesStorageTest {
         val root = temp.newFolder()
         open(root).use { storage ->
             repeat(500) { i ->
-                val text = if (i == 499) "x".repeat(1024 * 1024) else "中英 sample $i\n".repeat(600)
+                val text = if (i == 499) "x".repeat(1024 * 1024) + "\n\n末段标记" else "中英 sample $i\n".repeat(600)
                 val note = created(storage.repository.create("本子/笔记$i.md", RawDocument(text)))
                 assertEquals(text, (storage.repository.read(note.summary.id) as NoteResult.Success).value.document.text)
             }
             assertEquals(500, storage.repository.observeNotes().first().size)
             assertEquals(499, (storage.library.query(NotesQuery(text = "中英")) as NoteResult.Success).value.notes.size)
+            val listed = (storage.library.searchKnowledge(KnowledgeQuery("中英")) as NoteResult.Success).value
+            assertEquals(499, listed.total)
+            assertEquals(50, listed.hits.size)
+            val longHit = (storage.library.searchKnowledge(KnowledgeQuery("末段标记")) as NoteResult.Success).value.hits.single()
+            assertEquals(1024 * 1024 + 2, longHit.offset)
+            assertTrue(longHit.excerpt.contains("末段标记"))
             val times = (0 until 20).map { val start = System.nanoTime(); assertEquals(1, (storage.library.query(NotesQuery(text = "sample 123")) as NoteResult.Success).value.notes.size); (System.nanoTime() - start) / 1_000_000 }
             println("电脑热搜索 20 次 p95=${times.sorted()[18]} ms；不代表目标机性能")
         }

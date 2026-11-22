@@ -42,6 +42,7 @@ import com.elio.jianyu.profile.UserAvatarSnapshot
 import com.elio.jianyu.execution.SearchMode
 import com.elio.jianyu.skill.catalog.OfficialSkillCatalog
 import com.elio.jianyu.ui.components.LocalUserAvatarImage
+import com.elio.jianyu.ui.LocalLifeKnowledge
 import com.elio.jianyu.viewmodel.ConversationSession as RoundtableViewModel
 import com.elio.jianyu.viewmodel.ConversationContextSelection
 import kotlinx.coroutines.launch
@@ -83,12 +84,15 @@ fun DialogRoute(
     var showArchivedSessions by remember { mutableStateOf(false) }
     var renameTitle by remember { mutableStateOf<String?>(null) }
     var contextConfirmation by remember { mutableStateOf<DialogContextState?>(null) }
+    val lifeKnowledge = LocalLifeKnowledge.current
+    var showLifeKnowledge by remember { mutableStateOf(false) }
     var showReferenceDialog by remember { mutableStateOf(false) }
     var messageActionId by remember { mutableStateOf<String?>(null) }
     androidx.compose.runtime.SideEffect {
         DialogDraftMemory.save(contentEpoch, localState.composerState)
         onDetailChanged(localState.activeOverlay != DialogOverlayType.NONE || localState.expandedAnswerIds.isNotEmpty() ||
-            localState.isMoreMenuOpen || renameTitle != null || contextConfirmation != null || showReferenceDialog || messageActionId != null)
+            localState.isMoreMenuOpen || renameTitle != null || contextConfirmation != null || showLifeKnowledge ||
+            showReferenceDialog || messageActionId != null)
     }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -490,7 +494,7 @@ fun DialogRoute(
         )
     }
 
-    contextConfirmation?.let { state ->
+    contextConfirmation?.takeUnless { showLifeKnowledge }?.let { state ->
         DialogContextSelectionDialog(
             state = state,
             showSensitiveReminder = appPreferences.confirmSensitiveContext,
@@ -498,6 +502,7 @@ fun DialogRoute(
             onChange = { candidate ->
                 contextConfirmation = updateDialogContextCandidate(state, candidate)
             },
+            onOpenLifeKnowledge = if (lifeKnowledge != null) ({ showLifeKnowledge = true }) else null,
             onConfirm = {
                 val selections = state.selectedItems.map { candidate ->
                     ConversationContextSelection(
@@ -522,6 +527,13 @@ fun DialogRoute(
                 }
             },
         )
+    }
+
+    if (showLifeKnowledge && lifeKnowledge != null) {
+        LifeKnowledgeDialog(lifeKnowledge, onDismiss = { showLifeKnowledge = false }, onOpened = {
+            showLifeKnowledge = false
+            contextConfirmation = null
+        })
     }
 
     if (showReferenceDialog) {
@@ -625,6 +637,7 @@ internal fun DialogContextSelectionDialog(
     showSensitiveReminder: Boolean,
     onDismiss: () -> Unit,
     onChange: (DialogContextCandidate) -> Unit,
+    onOpenLifeKnowledge: (() -> Unit)? = null,
     onConfirm: () -> Unit,
 ) {
     val hasIncompleteSelection = state.selectedItems.any { candidate ->
@@ -641,6 +654,9 @@ internal fun DialogContextSelectionDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (onOpenLifeKnowledge != null) {
+                    TextButton(onClick = onOpenLifeKnowledge) { Text("Life 笔记") }
+                }
                 Text(
                     "资料和个人背景沿用现有确认规则；Skill 资料只会在你主动“带入当前会话”后出现在这里。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

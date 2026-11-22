@@ -33,6 +33,8 @@ internal class BusinessHostViewModel @Inject constructor(
     val selected = selectedMutable.asStateFlow()
     private val jianyuMutable = MutableStateFlow<JianyuHostState>(JianyuHostState.Idle)
     val jianyu = jianyuMutable.asStateFlow()
+    private val lifeNoteMutable = MutableStateFlow<NoteDestination?>(null)
+    val lifeNote = lifeNoteMutable.asStateFlow()
     private val runtime by lazy(LazyThreadSafetyMode.NONE) { runtimeProvider.get() }
     private var observer: Job? = null
     private var initialization: Job? = null
@@ -47,6 +49,15 @@ internal class BusinessHostViewModel @Inject constructor(
     }
 
     fun retryJianyu() = ensureJianyu(retry = true)
+
+    fun openLifeNote(destination: NoteDestination) {
+        lifeNoteMutable.value = destination
+        select(Business.LIFE)
+    }
+
+    fun consumeLifeNote(request: NoteDestination) {
+        lifeNoteMutable.compareAndSet(request, null)
+    }
 
     private fun ensureJianyu(retry: Boolean = false) {
         if (initialization?.isActive == true || (!retry && observer?.isActive == true)) return

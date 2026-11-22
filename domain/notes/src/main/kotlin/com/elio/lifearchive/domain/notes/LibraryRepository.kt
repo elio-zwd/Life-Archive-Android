@@ -20,6 +20,8 @@ data class PreparedImport(val token: String, val folder: String, val notes: Int,
 data class LibraryProgress(val operation: String, val completed: Int, val total: Int)
 
 interface LibraryRepository {
+    suspend fun searchKnowledge(query: KnowledgeQuery): NoteResult<KnowledgeListing> =
+        NoteResult.StorageFailure("当前笔记库不支持资料检索")
     suspend fun previewOrganization(changes: List<OrganizationChange>): NoteResult<OrganizationPreview> = NoteResult.StorageFailure("当前笔记库不支持整理")
     suspend fun applyOrganization(preview: OrganizationPreview): NoteResult<OrganizationResult> = NoteResult.StorageFailure("当前笔记库不支持整理")
     suspend fun organizationSuggestions(): NoteResult<List<OrganizationSuggestion>> = NoteResult.StorageFailure("当前笔记库不支持整理")

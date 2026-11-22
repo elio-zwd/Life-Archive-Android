@@ -35,7 +35,17 @@ enum class EditorInsertKind { EXTERNAL_LINK, WIKI_LINK, CODE_BLOCK, CALLOUT }
 data class EditorInsertion(val key: String, val kind: EditorInsertKind, val anchor: EditorAnchor, val label: String = "", val target: String = "", val parameter: String = "", val query: String = "", val selected: NoteLinkChoice? = null, val markdown: Boolean = false)
 data class NoteLinkChoice(val id: NoteId, val path: String, val title: String?)
 
-class EditorViewModel(private val repository: NotesRepository, val id: NoteId, startEditing: Boolean, private val location: Int? = null, private val parse: suspend (String) -> ParsedDocument = { text -> withContext(Dispatchers.Default) { MarkdownParser().parse(text) } }, private val library: LibraryRepository? = null) : ViewModel() {
+class EditorViewModel(
+    private val repository: NotesRepository,
+    val id: NoteId,
+    startEditing: Boolean,
+    private val location: Int? = null,
+    private val parse: suspend (String) -> ParsedDocument = { text ->
+        withContext(Dispatchers.Default) { MarkdownParser().parse(text) }
+    },
+    private val library: LibraryRepository? = null,
+    expectedVersion: DocumentVersion? = null,
+) : ViewModel() {
     private val mutableState = MutableStateFlow(EditorUiState(mode = if (startEditing) EditorMode.SOURCE else EditorMode.READ))
     val state = mutableState.asStateFlow()
     var session by mutableStateOf<EditorSession?>(null); private set
@@ -65,10 +75,12 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
             val draftResult = repository.readDraft(id)
             if (draftResult !is NoteResult.Success) { mutableState.value = mutableState.value.copy(loading = false, error = draftResult.explanation()); return@launch }
             val draft = draftResult.value
-            readingOffset = location ?: (repository.readReadingOffset(id) as? NoteResult.Success)?.value ?: 0
+            val changed = expectedVersion != null && read.value.summary.version != expectedVersion
+            val verifiedLocation = location.takeUnless { changed }
+            readingOffset = verifiedLocation ?: (repository.readReadingOffset(id) as? NoteResult.Success)?.value ?: 0
             entryOffset = readingOffset
             val newSession = EditorSession(read.value.document.text)
-            if (location != null) newSession.edit { selection = TextRange(location.coerceIn(0, length)) }
+            if (verifiedLocation != null) newSession.edit { selection = TextRange(verifiedLocation.coerceIn(0, length)) }
             else if (startEditing) {
                 val raw = read.value.document.text
                 val bodyStart = com.elio.lifearchive.core.document.DocumentAnalyzer.yaml(raw)?.last?.plus(1)
@@ -82,6 +94,7 @@ class EditorViewModel(private val repository: NotesRepository, val id: NoteId, s
             val pending = draft?.takeIf { it.document != read.value.document }
             if (pending != null) persistence?.blockAutomaticSave()
             mutableState.value = mutableState.value.copy(loading = false, name = read.value.summary.path.value.removeSuffix(".md"), path = read.value.summary.path.value, version = read.value.summary.version.value, mode = if (pending != null) EditorMode.READ else mutableState.value.mode, pendingDraft = pending, draftConflict = pending != null && pending.baseVersion != read.value.summary.version)
+            if (changed) message("笔记已变化，已打开当前版本")
             val contents = snapshotFlow { newSession.content }.stateIn(viewModelScope, SharingStarted.Eagerly, newSession.content)
             launch {
                 contents.collect { current ->

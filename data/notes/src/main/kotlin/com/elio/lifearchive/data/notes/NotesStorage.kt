@@ -779,10 +779,11 @@ class NotesStorage private constructor(
         analysis: com.elio.lifearchive.core.document.DocumentAnalysis,
         words: List<String>,
         cached: CachedAnalysis,
+        focus: Int? = null,
     ): String {
         var bodyStart = DocumentAnalyzer.yaml(raw)?.last?.plus(1) ?: if (raw.startsWith('\uFEFF')) 1 else 0
         val firstHeading = analysis.headings.firstOrNull()
-        if (firstHeading != null && firstHeading.start >= bodyStart && raw.substring(bodyStart, firstHeading.start).isBlank()) {
+        if (focus == null && firstHeading != null && firstHeading.start >= bodyStart && raw.substring(bodyStart, firstHeading.start).isBlank()) {
             bodyStart = firstHeading.end
         }
         while (bodyStart < raw.length) {
@@ -790,7 +791,7 @@ class NotesStorage private constructor(
             if (raw.substring(bodyStart, lineEnd).isNotBlank()) break
             bodyStart = (lineEnd + 1).coerceAtMost(raw.length)
         }
-        val hit = words.firstNotNullOfOrNull { word -> raw.indexOf(word, bodyStart, ignoreCase = true).takeIf { it >= 0 } }
+        val hit = focus ?: words.firstNotNullOfOrNull { word -> raw.indexOf(word, bodyStart, ignoreCase = true).takeIf { it >= 0 } }
         var start = if (hit == null) bodyStart else (hit - 60).coerceAtLeast(bodyStart)
         var end = if (hit == null) (bodyStart + 320).coerceAtMost(raw.length) else (hit + 160).coerceAtMost(raw.length)
         // 子串边界不能拆开代理对，否则摘要中会出现损坏的字符。
@@ -809,6 +810,51 @@ class NotesStorage private constructor(
         text = excerptWhitespace.replace(text, " ").trim()
         val limited = text.take(160)
         return if (limited.lastOrNull()?.isHighSurrogate() == true) limited.dropLast(1) else limited
+    }
+
+    private data class KnowledgeMatch(
+        val indexed: IndexedLibraryNote,
+        val title: String,
+        val score: Int,
+        val offset: Int?,
+    )
+
+    private fun KnowledgeMatch.originalOffset(): Int? {
+        val match = offset ?: return null
+        if (indexed.raw.startsWith('\uFEFF')) return match
+        // SQLite 绑定文本时可能去掉开头的 BOM，阅读定位以 Markdown 原文的字符位置为准。
+        return documentFile(indexed.record).inputStream().use { stream ->
+            if (stream.read() == 0xEF && stream.read() == 0xBB && stream.read() == 0xBF) match + 1 else match
+        }
+    }
+
+    private fun IndexedLibraryNote.knowledgeMatch(words: List<String>): KnowledgeMatch? {
+        val fileName = record.path.substringAfterLast('/').dropLast(3)
+        val title = analysis.title?.takeIf { it.isNotBlank() }
+            ?: analysis.headings.firstOrNull()?.name?.takeIf { it.isNotBlank() }
+            ?: fileName
+        val path = record.path
+        val bodyStart = DocumentAnalyzer.yaml(raw)?.last?.plus(1) ?: if (raw.startsWith('\uFEFF')) 1 else 0
+        var score = 0
+        var firstBodyMatch: Int? = null
+        for (word in words) {
+            val hasCase = word.any { it.isLowerCase() || it.isUpperCase() || it.isTitleCase() }
+            var offset = raw.indexOf(word, bodyStart, ignoreCase = hasCase)
+            while (offset >= 0 && analysis.links.any { it.start < offset + word.length && offset < it.end }) {
+                offset = raw.indexOf(word, offset + word.length, ignoreCase = hasCase)
+            }
+            if (offset >= 0 && (firstBodyMatch == null || offset < firstBodyMatch)) firstBodyMatch = offset
+            score += when {
+                title.equals(word, ignoreCase = true) -> 12
+                fileName.equals(word, ignoreCase = true) -> 10
+                title.contains(word, ignoreCase = true) -> 8
+                analysis.tags.any { it.contains(word, ignoreCase = true) } -> 6
+                path.contains(word, ignoreCase = true) -> 4
+                offset >= 0 -> 2
+                else -> return null
+            }
+        }
+        return KnowledgeMatch(this, title, score, firstBodyMatch)
     }
 
     private data class ExcerptSegment(val start: Int, val end: Int, val code: Boolean)
@@ -1132,6 +1178,42 @@ class NotesStorage private constructor(
         }
 
         override val progress: Flow<LibraryProgress?> = activityProgress
+        override suspend fun searchKnowledge(query: KnowledgeQuery): NoteResult<KnowledgeListing> = access {
+            val records = state.notes().all().filter { it.deleted == null }
+            val projections = index.projections().all().associateBy { it.id }
+            analysisCache.keys.retainAll(records.map { "${it.id}:${it.version}" }.toSet())
+            val words = query.text.trim().split(Regex("\\s+"))
+                .filter { it.isNotEmpty() }.distinctBy { it.lowercase(Locale.ROOT) }
+            val selectedTag = query.tag
+            val tags = mutableSetOf<String>()
+            val placedTopics = mutableSetOf<String>()
+            val hits = records.mapNotNull { record ->
+                coroutineContext.ensureActive()
+                val indexed = indexedLibraryNote(record, projections[record.id])
+                val placement = NoteOrganization.placement(record.path)
+                val topic = placement.topic ?: NoteOrganization.INBOX
+                tags += indexed.analysis.tags
+                placedTopics += topic
+                if ((query.topic != null && query.topic != topic) ||
+                    (query.kind != null && query.kind != placement.kind) ||
+                    (selectedTag != null && indexed.analysis.tags.none { NoteOrganization.matches(it, selectedTag) })
+                ) return@mapNotNull null
+                indexed.knowledgeMatch(words)
+            }.sortedWith(compareByDescending<KnowledgeMatch> { it.score }
+                .thenBy { it.indexed.record.pathKey })
+            NoteResult.Success(KnowledgeListing(
+                hits = hits.take(50).map { match ->
+                    val note = match.indexed
+                    KnowledgeHit(note.record.summary(), match.title,
+                        excerpt(note.raw, note.analysis, emptyList(), note.cached, focus = match.offset), match.originalOffset())
+                },
+                total = hits.size,
+                topics = (state.notes().topics().map { it.name } + placedTopics.sorted()).distinct(),
+                tags = NoteOrganization.tagTree(tags.toList()),
+                pendingIndex = records.count { it.indexPending || projections[it.id]?.version != it.version },
+            ))
+        }
+
         override suspend fun query(query: NotesQuery): NoteResult<LibraryListing> = access {
             val projections = index.projections().all().associateBy { it.id }
             val records = state.notes().all()

@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import com.elio.jianyu.backup.JianyuCompleteOperation
+import com.elio.jianyu.domain.LifeKnowledge
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -20,6 +21,7 @@ import com.elio.jianyu.ui.theme.SkillRoundtableTheme
 import com.elio.jianyu.ui.theme.spacingForContentDensity
 
 internal val LocalJianyuContentEpoch = staticCompositionLocalOf { "preview" }
+internal val LocalLifeKnowledge = staticCompositionLocalOf<LifeKnowledge?> { null }
 
 @Composable
 fun JianyuEntry(
@@ -28,6 +30,7 @@ fun JianyuEntry(
     onTopLevelChanged: (Boolean) -> Unit,
     onBottomBarMeasured: (Int) -> Unit,
     onDarkThemeChanged: (Boolean) -> Unit,
+    lifeKnowledge: LifeKnowledge? = null,
 ) {
     val preferences by session.services.preferences.state.collectAsStateWithLifecycle()
     val backupOperation by session.services.backup.complete.operation.collectAsStateWithLifecycle()
@@ -54,7 +57,7 @@ fun JianyuEntry(
     val base = LocalDensity.current
     val scale = when (preferences.fontSizeMode) { FontSizeMode.SYSTEM -> 1f; FontSizeMode.SMALL -> .9f; FontSizeMode.LARGE -> 1.15f }
     CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * scale), LocalSessionTasks provides session.tasks,
-        LocalJianyuContentEpoch provides session.contentEpoch) {
+        LocalJianyuContentEpoch provides session.contentEpoch, LocalLifeKnowledge provides lifeKnowledge) {
         SkillRoundtableTheme(darkTheme = dark, reducedMotion = preferences.reducedMotion,
             highContrastText = preferences.highContrastText, spacing = spacingForContentDensity(preferences.contentDensityMode)) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

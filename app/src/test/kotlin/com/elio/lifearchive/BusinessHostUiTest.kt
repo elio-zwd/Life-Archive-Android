@@ -2,6 +2,9 @@ package com.elio.lifearchive
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import com.elio.lifearchive.core.document.RawDocument
+import com.elio.lifearchive.domain.notes.NoteResult
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
@@ -44,6 +47,33 @@ class BusinessHostUiTest {
         compose.onNodeWithTag("business-switch").performClick()
         compose.waitUntil(30_000) { compose.onAllNodesWithTag("chat_input").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("chat_input").assertTextContains("尚未发送的输入，重建后仍应保留")
+    }
+
+    @Test fun lifeKnowledgeOpensSavedNoteThroughTheRealConversationAndReader() {
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
+        val result = runBlocking {
+            compose.activity.notes.create("学习研究/个人笔记/本地资料验收.md",
+                RawDocument("# 合成资料\n\n专用检索短语只出现在保存后的正文。"))
+        }
+        check(result is NoteResult.Committed)
+        focusWindow()
+        compose.onNodeWithTag("business-switch").performClick()
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("chat_input").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("chat_input").performTextInput("保留这段未发送的输入")
+        compose.onNodeWithContentDescription("添加功能").performClick()
+        compose.onNodeWithText("选择资料").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Life 笔记").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Life 笔记").performClick()
+        compose.onNodeWithText("搜索标题或正文").performTextInput("专用检索短语")
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("合成资料").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("合成资料").performClick()
+        compose.onNodeWithText("打开 Life 原文").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("本地资料验收").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("本地资料验收").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回").performClick()
+        focusWindow()
+        compose.onNodeWithTag("business-switch").performClick()
+        compose.onNodeWithTag("chat_input").assertTextContains("保留这段未发送的输入", substring = true)
     }
 
     private fun focusWindow() {

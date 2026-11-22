@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.lifearchive.core.designsystem.DocumentPageTheme
@@ -44,6 +45,8 @@ class MainActivity : ComponentActivity() {
         val businessHost = ViewModelProvider(this)[BusinessHostViewModel::class.java]
         setContent {
             val state by model.state.collectAsStateWithLifecycle()
+            val lifeNote by businessHost.lifeNote.collectAsStateWithLifecycle()
+            val knowledge = remember { LifeKnowledgeAdapter(library, businessHost::openLifeNote) }
             val dark = when (state.preferences.theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.DARK -> true
@@ -55,12 +58,13 @@ class MainActivity : ComponentActivity() {
                 DocumentTheme.GRAPHITE -> DocumentPalette.GRAPHITE
             }
             DocumentPageTheme(palette) {
-              DualBusinessHost(businessHost, switchPositions, palette == DocumentPalette.GRAPHITE) { onSwitcher, onBottomBar ->
+              DualBusinessHost(businessHost, switchPositions, palette == DocumentPalette.GRAPHITE, knowledge) { onSwitcher, onBottomBar ->
                 when {
                     state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
                     !state.ready -> Scaffold { Text("正在恢复本地状态…", modifier = androidx.compose.ui.Modifier.padding(it)) }
                     else -> ArchiveApp(notes, preferences, state.preferences, variant.debugControls, library, remote, backup, readerCache, sync,
-                        onSwitcherAvailabilityChanged = onSwitcher, onBottomBarMeasured = onBottomBar)
+                        onSwitcherAvailabilityChanged = onSwitcher, onBottomBarMeasured = onBottomBar,
+                        lifeNoteRequest = lifeNote, onLifeNoteOpened = businessHost::consumeLifeNote)
                 }
               }
             }

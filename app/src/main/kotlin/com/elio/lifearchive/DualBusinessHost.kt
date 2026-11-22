@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.elio.jianyu.ui.JianyuEntry
+import com.elio.jianyu.domain.LifeKnowledge
 import java.io.IOException
 import kotlinx.coroutines.launch
 
@@ -28,6 +29,7 @@ internal fun DualBusinessHost(
     model: BusinessHostViewModel,
     positions: SwitchPositionStore,
     lifeDark: Boolean,
+    lifeKnowledge: LifeKnowledge? = null,
     lifeContent: @Composable ((Boolean) -> Unit, (Int) -> Unit) -> Unit,
 ) {
     val selected by model.selected.collectAsStateWithLifecycle()
@@ -83,7 +85,8 @@ internal fun DualBusinessHost(
                         CompositionLocalProvider(LocalViewModelStoreOwner provides ready.uiOwner) {
                             JianyuEntry(ready.session, selected == Business.JIANYU,
                                 onTopLevelChanged = { jianyuSwitchAllowed = it },
-                                onBottomBarMeasured = { jianyuBar = it }, onDarkThemeChanged = { jianyuDark = it })
+                                onBottomBarMeasured = { jianyuBar = it }, onDarkThemeChanged = { jianyuDark = it },
+                                lifeKnowledge = lifeKnowledge)
                         }
                     }
                 }
