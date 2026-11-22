@@ -31,7 +31,7 @@
 4. 第四期优化：[电脑端阅读与 Git 修改差异](docs/plans/phase-4-pc-reading.md)已接入源码浏览器版，资料基线状态见[四期 PC 交接](docs/engineering/phase-4-pc-reading-handoff.md)。[笔记分类与整理制度](docs/plans/phase-4-note-organization.md)支持主题／类型归档、三级标签、批量预览和真实内容时间，真机结果单独记录。
 5. [第五期：知识库、资料联动与整 App 备份](docs/plans/phase-5-knowledge-base.md)：开发已启动。见域对话「添加功能 → 选择资料 → Life 笔记」已接入本地搜索、预览及原文跳转。模型调用、保存回复及两域联合备份按计划后续接入。
 
-新增[Android 宠物陪伴实施计划](docs/plans/android-companion.md)：2026-11-23 已开始代码接入，当前二十一个模块。三域菜单、公共 AI 唯一配置与 Key 管理、宠物会话／记忆和本地存储已接入，桌面陪伴当前为文字窗口。原生 Live2D 因缺少 Java Core SDK 尚未接入，Hiyori 仅作技术样板，正式形象后选；实现与验证见[核心交接](docs/engineering/android-companion-core-handoff-20261123.md)。语音等扩展随后逐步加入，新增备份最后实施，现有备份继续保留。第五期联合备份与最后阶段衔接，不作为核心交付前置门槛。
+新增[Android 宠物陪伴实施计划](docs/plans/android-companion.md)：当前二十二个模块。三域菜单、公共 AI 唯一配置与 Key 管理、宠物会话／记忆和本地存储已接入；Cubism SDK for Java 5 R5 的 Hiyori 原生样板接入页面、App 内小窗与系统悬浮窗口，正式形象后选。按 [SDK 配置说明](core/live2d/README.md)设置本机目录，实际结果见[原生交接](docs/engineering/android-companion-native-handoff-20261123.md)，目标手机仍须验收。语音等扩展随后逐步加入，新增备份最后实施，现有备份继续保留。第五期联合备份与最后阶段衔接，不作为核心交付前置门槛。
 
 目标范围、实现与验收分别记录。第一期不接入 AI、不抽取两款 App 的共享模块；旧数据库不迁移。Android App 内版本对比、关系图和手写暂不计划实现。
 
@@ -70,7 +70,7 @@
 
 2026-10-31 新增首页左侧封面、预设／自定义设置及阅读横幅；新旧笔记默认山野插画，完整备份保留选择，Markdown 原文不变。实现、两篇真实入库的隔离示例与验证边界见[封面交接](docs/engineering/phase-1-note-cover-handoff-20261031.md)。
 
-架构依据为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)。当前有二十一个实际模块，含同步、见域、公共 AI 与宠物域；四期分类沿用笔记模块，职责和依赖见架构说明。Debug 与 Release 均接入真实笔记库，Debug 额外提供会话内正文保存失败模拟。默认源码编辑，实时预览仍为实验项；输入、阅读兼容和视觉分别验收。
+架构依据为 [ADR-001：Android 模块化单体架构](docs/architecture/adr-001-android-architecture.md)。当前有二十二个实际模块，含同步、见域、公共 AI、宠物域与原生模型承载；四期分类沿用笔记模块，职责和依赖见架构说明。Debug 与 Release 均接入真实笔记库，Debug 额外提供会话内正文保存失败模拟。默认源码编辑，实时预览仍为实验项；输入、阅读兼容和视觉分别验收。
 
 进行整体架构选型时，先读 [AGENTS.md](AGENTS.md)，再读[整体功能版图](docs/plans/overall-feature-roadmap.md)、[一期范围](docs/plans/phase-1-local-notes.md)、[编辑器决策](docs/plans/phase-1-editor-visual-decisions.md)、第二/三期方向，最后核对[架构约束与待决事项](docs/architecture/README.md)。这些本仓库文档已足够开展架构讨论，不需要先查看旧项目。
 

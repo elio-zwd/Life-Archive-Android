@@ -60,7 +60,7 @@ MVVM/UDF 描述界面状态流，模块化描述工程边界，Repository/Use Ca
 
 ## 3. 模块边界与依赖
 
-2026-11-23 宠物核心接入补充：新增 `domain:ai`（公共契约）与 `data:ai`（唯一配置／凭据、执行器及宠物通用流式网关），见域 domain 通过 API 依赖公共 domain，见域 data 依赖公共 data 并保留会话预算、占用及诊断适配。新增 `domain:pet` 只依赖公共 AI domain；`data:pet` 依赖宠物与公共 AI domain；`feature:pet` 仅依赖这两个 domain，app 显式装配。当前共二十一个实际模块，`checkArchitecture` 已纳入边界。`core:live2d` 尚未创建，原生绘制仍受 SDK 缺失阻塞；实际接入及验证见[核心交接](../engineering/android-companion-core-handoff-20261123.md)。下表保留原有模块职责。
+2026-11-23 宠物核心接入补充：新增 `domain:ai`（公共契约）与 `data:ai`（唯一配置／凭据、执行器及宠物通用流式网关），见域 domain 通过 API 依赖公共 domain，见域 data 依赖公共 data 并保留会话预算、占用及诊断适配。新增 `domain:pet` 只依赖公共 AI domain；`data:pet` 依赖宠物与公共 AI domain；`feature:pet` 依赖这两个 domain 和无业务依赖的 `core:live2d`，app 显式装配并调用原生视图。当前共二十二个实际模块，`checkArchitecture` 已纳入边界。SDK 5 R5 从本机固定哈希的外部目录编译／打包；多窗口统一绘制线程与 EGLContext，分别管理模型资源。实际接入及验证见[原生交接](../engineering/android-companion-native-handoff-20261123.md)。下表保留原有模块职责。
 
 下面是当前实际落地的边界；三期新增模块有真实接口和调用者，不建立远期空模块。
 

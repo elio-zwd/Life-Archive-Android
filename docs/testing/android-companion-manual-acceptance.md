@@ -1,6 +1,6 @@
 # 宠物陪伴独立设备验收
 
-建立日期：2026-11-23。目标：小米 14 Ultra。当前未连接或操作设备，未使用真实远端 Key；所有设备项为 `NOT_VERIFIED`，原生模型项为 `BLOCKED_MISSING_CUBISM_JAVA_CORE`。电脑检查另见[核心交接](../engineering/android-companion-core-handoff-20261123.md)。
+建立日期：2026-11-23。目标：小米 14 Ultra。SDK 5 R5 与 Hiyori 原生代码已接入，当前未连接或操作设备，未使用真实远端 Key；所有设备项为 `NOT_VERIFIED`。电脑检查另见[原生交接](../engineering/android-companion-native-handoff-20261123.md)。
 
 ## 核心与现有功能回归
 
@@ -20,7 +20,7 @@
 | 项目 | 验收操作与预期 | 状态 |
 | --- | --- | --- |
 | 权限 | 主动开启时申请悬浮授权；返回后启动。拒绝／撤销权限时不崩溃，窗口与服务正确停止 | NOT_VERIFIED |
-| 窗口与输入 | 拖动、展开／收起、文字输入、键盘遮挡、横竖屏和窗口边界操作正确；当前形态仅文字窗口 | NOT_VERIFIED |
+| 窗口与输入 | Hiyori 透明模型、气泡、拖动、展开／收起、文字输入、键盘遮挡、横竖屏和窗口边界操作正确 | NOT_VERIFIED |
 | 共用会话 | 桌面与页面显示同一消息；两个入口同时发送只接受一条生成；停止只取消伙伴对应任务 | NOT_VERIFIED |
 | 通知与关闭 | 通知可打开伙伴或停止；通知授权被拒后仍能从 App 关闭；关闭窗口保留资料 | NOT_VERIFIED |
 | 恢复与资源 | 锁屏、后台限制和进程退出后行为明确，不承诺永久保活；回到已有 MainActivity 不丢原输入 | NOT_VERIFIED |
@@ -29,9 +29,9 @@
 
 | 项目 | 门槛 | 状态 |
 | --- | --- | --- |
-| Java Core 接入 | 官方 SDK、许可、JAR、ABI 和构建兼容核对 | BLOCKED_MISSING_CUBISM_JAVA_CORE |
-| Hiyori 原生样板 | 透明绘制、触摸命中、动作／情感联动、Surface 重建及线程释放，App 内与系统窗口分别验证 | BLOCKED_MISSING_CUBISM_JAVA_CORE |
-| 模型性能 | 目标设备帧时间、内存、功耗、隐藏／锁屏／切换模型资源释放 | BLOCKED_MISSING_CUBISM_JAVA_CORE |
+| Java Core 设备加载 | 电脑已核对 5 R5／Core AAR／三个 ABI 并打包；真实 JNI／EGL 冒烟测试 APK 已有源码，须在隔离包运行 | NOT_VERIFIED |
+| Hiyori 原生样板 | 透明绘制、触摸命中、动作／情感联动、Surface 重建及资源释放，页面／App 内／系统窗口分别验证 | NOT_VERIFIED |
+| 模型性能 | 目标设备帧时间、内存、功耗、隐藏／锁屏资源释放及重新打开；当前单模型，无切换正式角色入口 | NOT_VERIFIED |
 | 扩展与备份 | 语音等选定扩展后续另列；新增备份最后实施，不计为本次核心验收失败 | LATER_PHASE |
 
 执行时记录日期、APK SHA-256、设备系统版本、用例、实际结果及仓库外证据路径。只有观测到预期结果才改为 PASS；ADB 返回成功、编译成功或电脑截图不能替代设备与视觉结果。

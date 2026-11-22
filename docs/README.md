@@ -18,7 +18,7 @@
 - [第四期优化：笔记分类与整理制度](plans/phase-4-note-organization.md)：独立实施主题／类型归档、三级标签、批量预览整理与真实内容时间；不强设 AI 内容第三类。
 - [分类整理交接](engineering/note-organization-handoff.md)：接口、备份迁移、工具用法、实际检查和产物；[独立真机清单](testing/note-organization-manual-acceptance.md)区分电脑与设备结果。
 - [第五期：知识库、资料联动与整 App 备份](plans/phase-5-knowledge-base.md)：首版交互、片段发送规则、联合备份与实施验收。开发已开始，见域本地查找 Life 笔记的入口位于对话「选择资料」。
-- [Android 宠物陪伴实施计划](plans/android-companion.md)：2026-11-23 已开始公共 AI 和宠物核心接入，共二十一个模块；核心先行，扩展随后，新增备份最后实施。原生 Live2D 因缺少 Java Core SDK 尚未接入，Hiyori 仅作技术样板，正式形象后选。
+- [Android 宠物陪伴实施计划](plans/android-companion.md)：2026-11-23 公共 AI 和宠物核心已接入，共二十二个模块；Hiyori 原生样板接入页面与两类小窗，目标手机另验。核心先行，扩展随后，新增备份最后实施；正式形象后选。
 
 一期范围及已确认交互以一期计划和决策为依据；三期按 2026-11-04 用户确认先行，计划、实现和验收分别记录。
 
@@ -37,7 +37,7 @@
 
 ## 工程与资料
 
-- [宠物核心与公共 AI 接入交接](engineering/android-companion-core-handoff-20261123.md)：实际接口、统一配置／凭据接管、会话与记忆、三域宿主、文字桌面陪伴、无设备验收脚本及剩余 SDK 门槛；[独立设备清单](testing/android-companion-manual-acceptance.md)不将电脑结果当作真机通过。
+- [宠物核心与公共 AI 接入交接](engineering/android-companion-core-handoff-20261123.md)：统一配置／凭据接管、会话与记忆、三域宿主及首批结果；后续[原生接入交接](engineering/android-companion-native-handoff-20261123.md)记录 SDK、窗口生命周期及新增测试。[独立设备清单](testing/android-companion-manual-acceptance.md)不将电脑结果当作真机通过。
 
 - [二期整合基线](engineering/phase-2-integration-baseline.md)：Life 与见域源码版本、入口、模块及依赖差异、渲染与迁移缺口，以及实际基线检查。
 - [二期共用 Markdown 宿主阶段记录](engineering/phase-2-shared-markdown-handoff.md)：共享资源与 WebView 的独立边界、Life 适配及验证；不代表见域流式样板或整合完成。

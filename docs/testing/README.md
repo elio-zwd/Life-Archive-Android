@@ -4,7 +4,7 @@
 
 Windows 10 x64、PowerShell 7、已有 JDK 17 下运行 `pwsh.exe -NoProfile -File .\verify-companion.ps1`。`-Help` 查看入口，`-WhatIf` 仅预演；`-EvidenceDir` 指定仓库外证据目录。脚本执行公共 AI／宠物与见域回归、定向宿主测试、架构、相关 Debug Lint 和 APK 构建，并从真实测试 XML 核对数量与失败项；NO-SOURCE 或全部跳过不算通过。不会调用 ADB、安装环境或读取真实资料。
 
-脚本自身的合成检查：`pwsh.exe -NoProfile -File .\tools\tests\Run-CompanionVerificationTests.ps1`，验证帮助／预演、失败门禁、有效 XML、产物哈希及明确的未验证状态。实现和结果见[核心交接](../engineering/android-companion-core-handoff-20261123.md)。原生 Live2D 当前缺 Java Core SDK，真机及远端服务另按[设备清单](android-companion-manual-acceptance.md)验收。
+运行前按 [Live2D 配置说明](../../core/live2d/README.md)设置本机官方 SDK 5 R5 路径。脚本自身的合成检查：`pwsh.exe -NoProfile -File .\tools\tests\Run-CompanionVerificationTests.ps1`，验证帮助／预演、失败门禁、有效 XML、原生资源打包、产物哈希及明确的未验证状态。实现和结果见[原生交接](../engineering/android-companion-native-handoff-20261123.md)。脚本还编译 JNI／EGL 设备冒烟测试 APK，但不运行；真机及远端服务另按[设备清单](android-companion-manual-acceptance.md)验收。
 
 ## 二期完整迁移与独立恢复（无设备）
 
