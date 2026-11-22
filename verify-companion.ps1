@@ -19,9 +19,9 @@ if ($Help) {
     return
 }
 $taskSteps = @(
-    @{ Name = 'data-tests'; Arguments = @(':data:ai:testDebugUnitTest', ':data:pet:testDebugUnitTest', ':feature:pet:testDebugUnitTest', ':data:jianyu:testDebugUnitTest', ':domain:jianyu:test') },
+    @{ Name = 'data-tests'; Arguments = @(':core:live2d:testDebugUnitTest', ':data:ai:testDebugUnitTest', ':data:pet:testDebugUnitTest', ':feature:pet:testDebugUnitTest', ':data:jianyu:testDebugUnitTest', ':domain:jianyu:test') },
     @{ Name = 'host-tests'; Arguments = @(':app:testDebugUnitTest', '--tests', '*BusinessHostViewModelTest', '--tests', '*BusinessHostUiTest', '--tests', '*BusinessSwitcherTest', '--tests', '*CompleteBackupIntegrationTest', '--tests', '*VisibilityLifecycleOwnerTest') },
-    @{ Name = 'build-lint'; Arguments = @('checkArchitecture', ':app:assembleDebug', ':app:lintDebug', ':data:ai:lintDebug', ':data:pet:lintDebug', ':feature:pet:lintDebug', ':data:jianyu:lintDebug', ':feature:jianyu:lintDebug') }
+    @{ Name = 'build-lint'; Arguments = @('checkArchitecture', ':app:assembleDebug', ':core:live2d:assembleDebugAndroidTest', ':core:live2d:lintDebug', ':app:lintDebug', ':data:ai:lintDebug', ':data:pet:lintDebug', ':feature:pet:lintDebug', ':data:jianyu:lintDebug', ':feature:jianyu:lintDebug') }
 )
 if ($WhatIf) {
     foreach ($taskStep in $taskSteps) { Write-Output ('.\gradlew.bat ' + ($taskStep.Arguments -join ' ') + ' --console=plain --max-workers=2') }
@@ -39,6 +39,9 @@ $taskEvidence = [IO.Path]::GetFullPath($EvidenceDir)
 if ($taskEvidence.Equals($taskRoot, [StringComparison]::OrdinalIgnoreCase) -or $taskEvidence.StartsWith($taskRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw '验收日志与截图必须放在仓库外。'
 }
+if ((Test-Path -LiteralPath $taskEvidence) -and @(Get-ChildItem -LiteralPath $taskEvidence -Force).Count -gt 0) {
+    throw '证据目录已有内容，请指定新的空目录；不会覆盖旧报告，避免本次失败后误读历史通过结果。'
+}
 New-Item -ItemType Directory -Path $taskEvidence -Force | Out-Null
 $taskPreviousJava = $env:JAVA_HOME
 $taskStarted = [DateTimeOffset]::Now
@@ -53,7 +56,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "$($taskStep.Name) 失败，Gradle 退出码 $LASTEXITCODE；日志保留在 $taskEvidence" }
     }
     $taskCounts = @()
-    foreach ($taskModule in @('data/ai', 'data/pet', 'feature/pet', 'data/jianyu', 'domain/jianyu', 'app')) {
+    foreach ($taskModule in @('core/live2d', 'data/ai', 'data/pet', 'feature/pet', 'data/jianyu', 'domain/jianyu', 'app')) {
         $taskResults = Join-Path $taskRoot ($taskModule + '/build/test-results/' + $(if ($taskModule -eq 'domain/jianyu') { 'test' } else { 'testDebugUnitTest' }))
         $taskTests = 0; $taskFailures = 0; $taskSkipped = 0
         foreach ($taskXml in @(Get-ChildItem -LiteralPath $taskResults -Filter 'TEST-*.xml' -ErrorAction Stop)) {
@@ -67,10 +70,26 @@ try {
     }
     $taskApk = Join-Path $taskRoot 'app/build/outputs/apk/debug/app-debug.apk'
     if (-not (Test-Path -LiteralPath $taskApk)) { throw '构建未生成 Debug APK。' }
+    $taskRequiredAssets = @(
+        'lib/arm64-v8a/libLive2DCubismCoreJNI.so', 'lib/x86/libLive2DCubismCoreJNI.so', 'lib/x86_64/libLive2DCubismCoreJNI.so',
+        'assets/live2d/Hiyori/Hiyori.model3.json', 'assets/live2d/Hiyori/Hiyori.moc3',
+        'assets/live2d/Hiyori/Hiyori.2048/texture_00.png', 'assets/live2d/Hiyori/Hiyori.2048/texture_01.png',
+        'assets/live2d/Hiyori/motions/Hiyori_m04.motion3.json',
+        'assets/com/live2d/sdk/cubism/framework/shaders/standardES/VertShaderSrc.vert',
+        'assets/live2d/licenses/SDK-LICENSE.md', 'assets/live2d/licenses/Core-LICENSE.md', 'assets/live2d/licenses/Framework-LICENSE.md'
+    )
+    $taskArchive = [IO.Compression.ZipFile]::OpenRead($taskApk)
+    try {
+        foreach ($taskAsset in $taskRequiredAssets) {
+            $taskEntry = $taskArchive.GetEntry($taskAsset)
+            if ($null -eq $taskEntry -or $taskEntry.Length -eq 0) { throw "APK 缺少原生伙伴资源：$taskAsset" }
+        }
+    } finally { $taskArchive.Dispose() }
     $taskSummary = @{
         started = $taskStarted.ToString('o'); completed = [DateTimeOffset]::Now.ToString('o')
         testResults = $taskCounts; apk = $taskApk; sha256 = (Get-FileHash -LiteralPath $taskApk -Algorithm SHA256).Hash
-        device = 'NOT_VERIFIED'; nativeLive2D = 'BLOCKED_MISSING_CUBISM_JAVA_CORE'
+        device = 'NOT_VERIFIED'; nativeLive2D = 'PACKAGED_NOT_DEVICE_VERIFIED'
+        nativePackageEntries = $taskRequiredAssets; nativeDeviceSmoke = 'COMPILED_NOT_RUN'
         scope = '电脑核心功能与回归；新增备份后置；不含真实远端模型或设备验收'
     }
     $taskSummary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $taskEvidence 'summary.json') -Encoding utf8

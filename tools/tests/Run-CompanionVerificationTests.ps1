@@ -25,7 +25,7 @@ $ErrorActionPreference = 'Stop'
 Add-Content -LiteralPath (Join-Path $PSScriptRoot 'called.txt') -Value ($args -join ' ')
 $mode = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'mode.txt') -Raw
 if ($mode -eq 'fail') { exit 23 }
-foreach ($module in @('data/ai', 'data/pet', 'feature/pet', 'data/jianyu', 'domain/jianyu', 'app')) {
+foreach ($module in @('core/live2d', 'data/ai', 'data/pet', 'feature/pet', 'data/jianyu', 'domain/jianyu', 'app')) {
     $kind = if ($module -eq 'domain/jianyu') { 'test' } else { 'testDebugUnitTest' }
     $dir = Join-Path $PSScriptRoot ($module + '/build/test-results/' + $kind)
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -34,7 +34,22 @@ foreach ($module in @('data/ai', 'data/pet', 'feature/pet', 'data/jianyu', 'doma
 }
 $apk = Join-Path $PSScriptRoot 'app/build/outputs/apk/debug/app-debug.apk'
 New-Item -ItemType Directory -Path (Split-Path -Parent $apk) -Force | Out-Null
-[IO.File]::WriteAllText($apk, 'synthetic-test-only')
+[IO.File]::Delete($apk)
+$archive = [IO.Compression.ZipFile]::Open($apk, [IO.Compression.ZipArchiveMode]::Create)
+try {
+    foreach ($name in @(
+        'lib/arm64-v8a/libLive2DCubismCoreJNI.so', 'lib/x86/libLive2DCubismCoreJNI.so', 'lib/x86_64/libLive2DCubismCoreJNI.so',
+        'assets/live2d/Hiyori/Hiyori.model3.json', 'assets/live2d/Hiyori/Hiyori.moc3',
+        'assets/live2d/Hiyori/Hiyori.2048/texture_00.png', 'assets/live2d/Hiyori/Hiyori.2048/texture_01.png',
+        'assets/live2d/Hiyori/motions/Hiyori_m04.motion3.json',
+        'assets/com/live2d/sdk/cubism/framework/shaders/standardES/VertShaderSrc.vert',
+        'assets/live2d/licenses/SDK-LICENSE.md', 'assets/live2d/licenses/Core-LICENSE.md', 'assets/live2d/licenses/Framework-LICENSE.md'
+    )) {
+        if ($mode -eq 'missing-native' -and $name.StartsWith('lib/')) { continue }
+        $stream = $archive.CreateEntry($name).Open()
+        try { $stream.WriteByte(42) } finally { $stream.Dispose() }
+    }
+} finally { $archive.Dispose() }
 '@)
     return $fixture
 }
@@ -46,7 +61,7 @@ Assert-Task ($LASTEXITCODE -eq 0) '帮助正常退出'
 Assert-Task ($LASTEXITCODE -eq 0) '预演正常退出'
 Assert-Task (-not (Test-Path -LiteralPath $taskEvidence)) '预演不创建目录'
 Assert-Task (-not (Test-Path -LiteralPath (Join-Path $taskFixture 'called.txt'))) '帮助和预演不调用 Gradle'
-foreach ($taskMode in @('pass', 'fail', 'no-source')) {
+foreach ($taskMode in @('pass', 'fail', 'no-source', 'missing-native')) {
     $taskFixture = New-TaskFixture $taskMode
     $taskEvidence = Join-Path $taskTemp ($taskMode + '-evidence')
     & $taskPwsh -NoProfile -File (Join-Path $taskFixture 'verify-companion.ps1') -JavaHome (Join-Path $taskFixture 'jdk') -EvidenceDir $taskEvidence *> (Join-Path $taskTemp ($taskMode + '.log'))
@@ -55,9 +70,14 @@ foreach ($taskMode in @('pass', 'fail', 'no-source')) {
         Assert-Task ($taskCode -eq 0) '合成通过结果正常退出'
         $summary = Get-Content -LiteralPath (Join-Path $taskEvidence 'summary.json') -Raw | ConvertFrom-Json
         Assert-Task ($summary.device -eq 'NOT_VERIFIED') '电脑通过不冒充真机'
-        Assert-Task ($summary.nativeLive2D -eq 'BLOCKED_MISSING_CUBISM_JAVA_CORE') '明确 SDK 缺口'
-        Assert-Task ($summary.testResults.Count -eq 6) '六组测试都必须有有效结果'
+        Assert-Task ($summary.nativeLive2D -eq 'PACKAGED_NOT_DEVICE_VERIFIED') '打包通过不冒充原生设备渲染通过'
+        Assert-Task ($summary.nativeDeviceSmoke -eq 'COMPILED_NOT_RUN') '设备冒烟仅编译'
+        Assert-Task ($summary.testResults.Count -eq 7) '七组测试都必须有有效结果'
         Assert-Task ($summary.sha256 -eq (Get-FileHash -LiteralPath $summary.apk -Algorithm SHA256).Hash) 'APK 哈希对应产物'
+        $reportHash = (Get-FileHash -LiteralPath (Join-Path $taskEvidence 'summary.json')).Hash
+        & $taskPwsh -NoProfile -File (Join-Path $taskFixture 'verify-companion.ps1') -JavaHome (Join-Path $taskFixture 'jdk') -EvidenceDir $taskEvidence *> (Join-Path $taskTemp 'reused-evidence.log')
+        Assert-Task ($LASTEXITCODE -ne 0) '拒绝覆盖已有证据，避免历史通过掩盖本次失败'
+        Assert-Task ($reportHash -eq (Get-FileHash -LiteralPath (Join-Path $taskEvidence 'summary.json')).Hash) '保留原有报告'
     } else {
         Assert-Task ($taskCode -ne 0) "$taskMode 必须失败"
         Assert-Task (-not (Test-Path -LiteralPath (Join-Path $taskEvidence 'summary.json'))) '失败不生成通过报告'
