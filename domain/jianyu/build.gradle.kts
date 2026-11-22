@@ -4,6 +4,7 @@ plugins {
 }
 kotlin { jvmToolchain(17) }
 dependencies {
+    api(project(":domain:ai"))
     api(libs.coroutines.core)
     implementation(libs.serialization.json)
     testImplementation(libs.junit)

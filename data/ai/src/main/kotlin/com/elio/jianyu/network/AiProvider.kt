@@ -1,5 +1,7 @@
 package com.elio.jianyu.network
-import com.elio.jianyu.storage.jianyuPreferences
+
+// 唯一公共 AI 实现；命名空间保留以兼容已有调用方。
+import com.elio.lifearchive.data.ai.sharedAiPreferences
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,7 +14,7 @@ class AiConfigurationRepository(context: Context) : AiConfiguration {
         const val KEY_MODEL = "model"
     }
 
-    private val preferences = context.applicationContext.jianyuPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val preferences = context.applicationContext.sharedAiPreferences(PREFS_NAME)
     private val _configuration = MutableStateFlow(loadConfiguration())
     override val configuration: StateFlow<AiRuntimeConfiguration> = _configuration.asStateFlow()
 
@@ -27,7 +29,7 @@ class AiConfigurationRepository(context: Context) : AiConfiguration {
     }
 
     override fun reset(): Boolean {
-        val committed = preferences.edit().clear().commit()
+        val committed = preferences.edit().clear().putBoolean("shared_owner_v1", true).commit()
         if (committed) {
             _configuration.value = defaultConfiguration()
         }
@@ -56,7 +58,7 @@ class AiConfigurationRepository(context: Context) : AiConfiguration {
         AiUseCase.entries.forEach { useCase ->
             editor.putString("$KEY_MODEL.${useCase.name}", configuration.modelFor(useCase).name)
         }
-        editor.remove(KEY_PROVIDER).apply()
+        check(editor.remove(KEY_PROVIDER).commit()) { "公共 AI 配置保存失败" }
         _configuration.value = configuration
     }
 }
@@ -75,7 +77,7 @@ private val GEMINI_MODELS_WITHOUT_MINIMAL_THINKING = setOf(
     AiModel.GEMINI_25_FLASH_LITE,
 )
 
-internal fun AiModel.geminiInteractionThinkingLevel(requestedLevel: String): String {
+fun AiModel.geminiInteractionThinkingLevel(requestedLevel: String): String {
     require(provider == AiProvider.GEMINI) { "只有 Gemini 模型可以使用 Interactions thinking_level" }
     require(requestedLevel in setOf("minimal", "low", "medium", "high")) {
         "Gemini 不支持思考档位：$requestedLevel"

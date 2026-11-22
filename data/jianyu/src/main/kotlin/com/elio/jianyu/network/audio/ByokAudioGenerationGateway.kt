@@ -164,7 +164,7 @@ private class GeminiRepositoryAudioByokKeyProvider(
 
     override fun attemptPlan(): List<AudioByokKeyLease> {
         return keys.createAttemptPlan(sessionId = 0L).map { lease ->
-            AudioByokKeyLease(lease.keyId, requireNotNull(keys.secretFor(lease.keyId)))
+            AudioByokKeyLease(lease.keyId, requireNotNull(keys.availableSecretFor(lease.keyId)))
         }
     }
 

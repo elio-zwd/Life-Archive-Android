@@ -1,102 +1,30 @@
 package com.elio.jianyu.network
 
 import android.content.Context
-import com.elio.jianyu.network.retry.ApiCallFailure
-import com.elio.jianyu.telemetry.TelemetryRepository
+import com.elio.lifearchive.data.ai.SharedAiRuntime
 
-/** AI 模块组合入口：统一暴露提供商配置、Key 仓库与请求执行器。 */
+/** 见域兼容入口；凭据、配置和实际重试执行均由公共 AI 唯一持有。 */
 object AiManager {
-    @Volatile
-    private var initialized = false
-
-    private lateinit var configurationRepository: AiConfigurationRepository
-    private lateinit var geminiKeys: ProviderKeyRepository
-    private lateinit var deepSeekKeys: ProviderKeyRepository
-    private lateinit var geminiExecutor: AiRequestExecutor
-    private lateinit var deepSeekExecutor: AiRequestExecutor
-
-    @Synchronized
-    fun initialize(context: Context) {
-        if (initialized) return
-        val appContext = context.applicationContext
-        TelemetryRepository.init(appContext)
-        configurationRepository = AiConfigurationRepository(appContext)
-        geminiKeys = ProviderKeyRepository(appContext, AiProvider.GEMINI)
-        deepSeekKeys = ProviderKeyRepository(appContext, AiProvider.DEEPSEEK)
-        geminiExecutor = AiRequestExecutor(
-            AiProvider.GEMINI,
-            ProviderKeyAttemptReporterAdapter(geminiKeys),
-        )
-        deepSeekExecutor = AiRequestExecutor(
-            AiProvider.DEEPSEEK,
-            ProviderKeyAttemptReporterAdapter(deepSeekKeys),
-        )
-        initialized = true
-    }
-
-    fun configuration(context: Context): AiConfigurationRepository {
-        initialize(context)
-        return configurationRepository
-    }
-
-    @Synchronized
-    internal fun reloadConfiguration(context: Context) {
-        initialize(context)
-        configurationRepository = AiConfigurationRepository(context.applicationContext)
-    }
-
-    fun keys(context: Context, provider: AiProvider): ProviderKeyRepository {
-        initialize(context)
-        return when (provider) {
-            AiProvider.GEMINI -> geminiKeys
-            AiProvider.DEEPSEEK -> deepSeekKeys
-        }
-    }
-
-    fun keysForUseCase(context: Context, useCase: AiUseCase): ProviderKeyRepository {
-        val model = configuration(context).configuration.value.modelFor(useCase)
-        return keys(context, model.provider)
-    }
-
-    internal fun requests(context: Context, provider: AiProvider): AiRequestExecutor {
-        initialize(context)
-        return when (provider) {
-            AiProvider.GEMINI -> geminiExecutor
-            AiProvider.DEEPSEEK -> deepSeekExecutor
-        }
-    }
-
+    fun initialize(context: Context) { attachDiagnosticLookup(context) }
+    fun configuration(context: Context): AiConfigurationRepository = SharedAiRuntime.get(context).configuration
+    internal fun reloadConfiguration(context: Context) { initialize(context) }
+    fun keys(context: Context, provider: AiProvider): ProviderKeyRepository = SharedAiRuntime.get(context).keys(provider)
+    fun keysForUseCase(context: Context, useCase: AiUseCase): ProviderKeyRepository =
+        keys(context, configuration(context).configuration.value.modelFor(useCase).provider)
+    internal fun requests(context: Context, provider: AiProvider): AiRequestExecutor =
+        AiRequestExecutor(SharedAiRuntime.get(context).executor(provider))
     suspend fun validateKey(context: Context, provider: AiProvider, keyId: String): ApiKeyValidationState {
-        val repository = keys(context, provider)
-        return repository.validateKey(keyId, validatorFor(provider))
+        SharedAiRuntime.get(context).validateKey(provider, keyId)
+        return keys(context, provider).summaries.value.firstOrNull { it.id == keyId }?.validationState ?: ApiKeyValidationState.INVALID
     }
+    suspend fun validateKeys(context: Context, provider: AiProvider, keyIds: List<String>) =
+        SharedAiRuntime.get(context).validateKeys(provider, keyIds)
 
-    suspend fun validateKeys(context: Context, provider: AiProvider, keyIds: List<String>) {
-        keys(context, provider).validateKeys(keyIds, validatorFor(provider))
-    }
-
-    fun findKeyIdOrNull(secret: String): String? {
-        if (!initialized) return null
-        return listOf(geminiKeys, deepSeekKeys)
-            .firstNotNullOfOrNull { repository -> repository.findKeyIdOrNull(secret) }
-    }
-
-    private fun validatorFor(provider: AiProvider): suspend (String) -> ApiKeyValidationResult = when (provider) {
-        AiProvider.GEMINI -> GeminiRestTransport::validateKey
-        AiProvider.DEEPSEEK -> DeepSeekTransport::validateKey
-    }
-
-    private class ProviderKeyAttemptReporterAdapter(
-        private val repository: ProviderKeyRepository,
-    ) : ProviderKeyAttemptReporter {
-        override fun secretFor(keyId: String): String? = repository.availableSecretFor(keyId)
-
-        override fun recordSuccess(sessionId: Long, keyId: String) {
-            repository.recordSuccess(sessionId, keyId)
-        }
-
-        override fun recordFailure(keyId: String, failure: ApiCallFailure) {
-            repository.recordFailure(keyId, failure)
-        }
+    // 仅供诊断脱敏查找显示名，不初始化或持有第二套凭据仓库。
+    fun findKeyIdOrNull(secret: String): String? = keyLabelLookup?.invoke(secret)
+    @Volatile private var keyLabelLookup: ((String) -> String?)? = null
+    fun attachDiagnosticLookup(context: Context) {
+        val runtime = SharedAiRuntime.get(context)
+        keyLabelLookup = { secret -> AiProvider.entries.firstNotNullOfOrNull { runtime.keys(it).findKeyIdOrNull(secret) } }
     }
 }

@@ -1,5 +1,7 @@
 package com.elio.jianyu.network.retry
 
+// 公共 AI 契约保留原命名空间，避免改写现有见域调用方和持久化枚举。
+
 /**
  * 封装 API 调用失败的底层异常分类。
  * cause 只用于程序内重试决策，不得直接拼接到日志、UI 或持久化遥测。

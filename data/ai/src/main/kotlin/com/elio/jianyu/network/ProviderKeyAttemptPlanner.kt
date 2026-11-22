@@ -1,5 +1,7 @@
 package com.elio.jianyu.network
 
+// 唯一公共 AI 实现；命名空间保留以兼容已有调用方。
+
 import com.elio.jianyu.network.keys.ApiKeyLease
 
 /** 纯排序规则：不读取 Android 状态，也不持有任一提供商的密钥池。 */

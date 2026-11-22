@@ -12,6 +12,8 @@ internal object CompleteSettings {
     fun capture(preferences: (String) -> SharedPreferences): String {
         val profiles = JSONObject()
         for (name in names.sorted()) {
+            // 保留旧包字段以兼容格式；公共 AI 配置不再属于见域快照。
+            if (name == "ai_runtime_configuration") { profiles.put(name, JSONObject()); continue }
             val entries = JSONObject()
             for ((key, value) in preferences(name).all.toSortedMap()) {
                 require(allowed(name, key)) { "未支持的设置项：$name.$key；完整导出已停止" }
@@ -62,6 +64,7 @@ internal object CompleteSettings {
     fun apply(raw: String, preferences: (String) -> SharedPreferences) {
         val profiles = validate(raw)
         for (name in names.sorted()) {
+            if (name == "ai_runtime_configuration") continue
             val editor = preferences(name).edit().clear()
             val entries = profiles.getJSONObject(name)
             for (key in entries.keys()) {
@@ -78,6 +81,8 @@ internal object CompleteSettings {
             check(editor.commit()) { "无法写入见域设置；须回滚" }
         }
     }
+
+    fun restoredSnapshot(raw: String): String = validate(raw).put("ai_runtime_configuration", JSONObject()).toString()
 
     fun write(file: File, raw: String) {
         validate(raw)

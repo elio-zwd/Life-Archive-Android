@@ -1,5 +1,7 @@
 package com.elio.jianyu.network.retry
 
+// 唯一公共 AI 实现；命名空间保留以兼容已有调用方。
+
 import java.math.BigInteger
 import java.text.ParsePosition
 import java.text.SimpleDateFormat
@@ -78,7 +80,7 @@ object ApiRetryPolicy {
 }
 
 /** 等待时间和到期时间相加时饱和，不能因溢出变成负数并提前重试。 */
-internal fun saturatingAddMs(first: Long, second: Long): Long {
+fun saturatingAddMs(first: Long, second: Long): Long {
     val positive = second.coerceAtLeast(0L)
     return if (first > Long.MAX_VALUE - positive) Long.MAX_VALUE else first + positive
 }

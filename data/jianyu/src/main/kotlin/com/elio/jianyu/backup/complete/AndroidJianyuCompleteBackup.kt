@@ -29,9 +29,8 @@ internal object CompleteTransferRecovery {
             app.jianyuPreferences(it, Context.MODE_PRIVATE)
         }
     }
-    fun resetCredentials(context: Context): Boolean = AiProvider.entries.map { provider ->
-        runCatching { AiManager.keys(context, provider).clear() }.getOrDefault(false)
-    }.all { it }
+    // 见域任务在维护入口已结束；恢复只替换该域资料，不能删除公共凭据。
+    fun resetCredentials(context: Context): Boolean = true
     fun recover(context: Context) {
         val destination = target(context)
         CompleteReplacement(destination).recover { check(resetCredentials(context)) { "见域凭据清理尚未完成，恢复记录已保留" } }
@@ -133,7 +132,8 @@ internal class AndroidJianyuCompleteBackup private constructor(context: Context)
             val notices = CompleteDatabase.prepareExport(staging) { app.ownedAudioFile(it) }
             val rows = CompleteDatabase.inspect(File(staging, "database.sqlite"), originalRows)
             val info = app.packageManager.getPackageInfo(app.packageName, 0)
-            val manifest = CompleteArchiveCodec.describe(staging, app.packageName, info.versionName ?: "未知", rows, notices)
+            val manifest = CompleteArchiveCodec.describe(staging, app.packageName, info.versionName ?: "未知", rows,
+                notices + "此包只包含见域资料，不包含公共 AI 配置、Key 或伙伴资料；恢复时保留本机公共 AI 设置。")
             FileOutputStream(archive).use { output -> CompleteArchiveCodec.write(staging, manifest, password, output); output.fd.sync() }
             verifyArchive(archive.inputStream(), password, manifest)
             mutableOperation.value = JianyuCompleteOperation.Busy("备份已验证，正在保存到所选文件…")
@@ -179,7 +179,7 @@ internal class AndroidJianyuCompleteBackup private constructor(context: Context)
                 afterReopen = {
                     CompleteDatabase.inspect(target.database, incoming.manifest.rows)
                     verifyRestoredFiles(incoming.manifest)
-                    check(CompleteSettings.capture(target.preferences) == readSettings(incoming.directory)) { "恢复后的见域设置核对失败" }
+                    check(CompleteSettings.capture(target.preferences) == CompleteSettings.restoredSnapshot(readSettings(incoming.directory))) { "恢复后的见域设置核对失败" }
                     AppPreferences.initialize(app)
                     AiManager.reloadConfiguration(app)
                     replacement.finalizeCommit {
@@ -198,14 +198,14 @@ internal class AndroidJianyuCompleteBackup private constructor(context: Context)
                 if (applied) check(JianyuAppRuntimeProvider.retryOpen(app)) { "恢复失败，见域暂时不能打开；回滚资料和日志已保留，Life 可继续使用" }
                 if (committed) {
                     verifiedExportFingerprint = null
-                    return@start "见域已恢复，后续凭据清理经重试完成；API Key 需要重新配置。Life 笔记未被替换。"
+                    return@start "见域已恢复并完成收尾；公共 AI 配置和 Key 保留。Life 笔记未被替换。"
                 }
                 requireMaintenanceSuccess(outcome)
             }
-            // 凭据不从包内恢复；提交后清除原见域设备凭据，避免新资料隐式继承旧授权。
+            // 凭据不从包内恢复，公共配置也不随单域资料回滚；旧见域任务已在维护入口结束。
             verifiedExportFingerprint = null
-            if (clearedCredentials) "见域已恢复并逐项核对。API Key 需要重新配置；Life 笔记未被替换。"
-            else "见域内容已恢复；本机见域凭据未能全部清理，请在 API 设置中重新核对。Life 笔记未被替换。"
+            if (clearedCredentials) "见域已恢复并逐项核对；公共 AI 配置和 Key 保留。Life 笔记未被替换。"
+            else "见域内容已恢复，收尾未完成，请重试。Life 笔记未被替换。"
         } finally {
             discardPrepared()
         }

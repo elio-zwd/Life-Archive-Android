@@ -1,6 +1,8 @@
 package com.elio.jianyu.network
 
-import com.elio.jianyu.storage.jianyuNoBackupFilesDir
+// 唯一公共 AI 实现；命名空间保留以兼容已有调用方。
+
+import com.elio.lifearchive.data.ai.sharedAiKeyFile
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
@@ -28,10 +30,17 @@ private data class EncryptedApiKeyEnvelope(
 /**
  * 使用 Android Keystore 加密完整密钥池，并写入不会参与系统备份的目录。
  */
+internal interface ApiKeyStore {
+    val lastError: String?
+    fun read(): List<ApiKeyRecord>
+    fun write(records: List<ApiKeyRecord>): Boolean
+    fun clear(): Boolean
+}
+
 class EncryptedApiKeyStore(
     context: Context,
     fileName: String,
-) {
+) : ApiKeyStore {
     companion object {
         private const val KEY_ALIAS = "skill_roundtable_api_key_v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
@@ -39,15 +48,15 @@ class EncryptedApiKeyStore(
     }
 
     private val json = Json { ignoreUnknownKeys = true }
-    private val atomicFile = AtomicFile(File(context.jianyuNoBackupFilesDir, fileName))
+    private val atomicFile = AtomicFile(context.sharedAiKeyFile(fileName))
     private val lock = Any()
 
     @Volatile
-    var lastError: String? = null
+    override var lastError: String? = null
         private set
 
-    fun read(): List<ApiKeyRecord> = synchronized(lock) {
-        if (!atomicFile.baseFile.exists()) return@synchronized emptyList()
+    override fun read(): List<ApiKeyRecord> = synchronized(lock) {
+        if (!atomicFile.baseFile.exists() && !File(atomicFile.baseFile.path + ".bak").exists()) return@synchronized emptyList()
         try {
             val envelope = json.decodeFromString<EncryptedApiKeyEnvelope>(
                 atomicFile.readFully().toString(Charsets.UTF_8)
@@ -67,7 +76,7 @@ class EncryptedApiKeyStore(
         }
     }
 
-    fun write(records: List<ApiKeyRecord>): Boolean = synchronized(lock) {
+    override fun write(records: List<ApiKeyRecord>): Boolean = synchronized(lock) {
         var stream: FileOutputStream? = null
         try {
             val plaintext = json.encodeToString(ListSerializer(ApiKeyRecord.serializer()), records)
@@ -90,7 +99,7 @@ class EncryptedApiKeyStore(
         }
     }
 
-    fun clear(): Boolean = synchronized(lock) {
+    override fun clear(): Boolean = synchronized(lock) {
         return@synchronized try {
             atomicFile.delete()
             check(!atomicFile.baseFile.exists() && !File(atomicFile.baseFile.absolutePath + ".bak").exists() &&

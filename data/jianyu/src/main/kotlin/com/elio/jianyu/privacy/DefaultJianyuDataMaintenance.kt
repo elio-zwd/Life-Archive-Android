@@ -65,10 +65,7 @@ private suspend fun clearAllLocalData(
             when (repository.clearAllData()) {
                 is RepositoryResult.Success -> {
                     onDatabaseCleared()
-                    val keyResults = AiProvider.entries.map { provider ->
-                        AiManager.keys(context, provider).clear()
-                    }
-                    val modelConfigurationCleared = AiManager.configuration(context).reset()
+                    // 清理见域内容不能撤销宠物等业务正在使用的公共凭据或配置。
                     val telemetryCleared = TelemetryRepository.clearAllTelemetry(context)
                     val appPreferencesCleared = AppPreferences.reset(context)
                     val officialSkillPreferencesCleared =
@@ -80,9 +77,7 @@ private suspend fun clearAllLocalData(
                     val snapshotsCleared = SnapshotCatalog.clearAll(context)
                     val snapshotKeyCleared = AndroidKeystoreSnapshotKeyProvider().deleteExisting()
                     val audioFilesCleared = clearAppOwnedAudioFiles(context)
-                    val cleanupSucceeded = keyResults.all { it } &&
-                        modelConfigurationCleared &&
-                        telemetryCleared &&
+                    val cleanupSucceeded = telemetryCleared &&
                         appPreferencesCleared &&
                         officialSkillPreferencesCleared &&
                         conversationPreferencesCleared &&

@@ -1,5 +1,7 @@
 package com.elio.jianyu.network
 
+// 公共 AI 契约保留原命名空间，避免改写现有见域调用方和持久化枚举。
+
 import kotlinx.coroutines.flow.StateFlow
 
 interface AiConfiguration {

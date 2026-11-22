@@ -18,6 +18,7 @@ android {
 kotlin { jvmToolchain(17) }
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {
+    api(project(":data:ai"))
     api(project(":domain:jianyu"))
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)

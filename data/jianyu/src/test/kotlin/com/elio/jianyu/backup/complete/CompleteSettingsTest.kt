@@ -13,6 +13,18 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class CompleteSettingsTest {
+    @Test fun legacyAiSettingsAreValidatedButCannotRollbackSharedConfiguration() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefix = java.util.UUID.randomUUID().toString()
+        val preferences = { name: String -> context.getSharedPreferences("shared-$prefix-$name", 0) }
+        preferences("ai_runtime_configuration").edit().putString("model.PET_REPLY", "current").commit()
+        val incoming = JSONObject(CompleteSettings.capture(preferences)).apply {
+            getJSONObject("ai_runtime_configuration").put("model.PET_REPLY", JSONObject().put("type", "string").put("value", "old"))
+        }.toString()
+        CompleteSettings.apply(incoming, preferences)
+        assertEquals("current", preferences("ai_runtime_configuration").getString("model.PET_REPLY", null))
+        assertEquals(CompleteSettings.restoredSnapshot(incoming), CompleteSettings.capture(preferences))
+    }
     @Test fun settingsRoundTripPreservesTypesAndExcludesLifeAndCredentials() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val key = UUID.randomUUID().toString()

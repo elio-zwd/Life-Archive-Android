@@ -738,7 +738,7 @@ private fun AiManagementConfirmationDialog(
             modifier = Modifier.testTag(AiManagementTestTags.CLEAR_CONFIRM),
             onDismissRequest = onDismiss,
             title = { Text("清空全部 ${provider.displayName} Key？") },
-            text = { Text("此操作无法撤销，另一个提供商的 Key 不受影响。") },
+            text = { Text("此操作无法撤销；见域和伙伴共用的该提供商 Key 都将被删除，另一个提供商不受影响。") },
             confirmButton = {
                 TextButton(onClick = onConfirmClear) {
                     Text("全部删除", color = MaterialTheme.colorScheme.error)

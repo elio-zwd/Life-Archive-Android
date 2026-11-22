@@ -35,7 +35,7 @@ internal object CompleteArchiveCodec {
             .put("roomVersion", 18).put("schema", SCHEMA).put("sourcePackage", sourcePackage)
             .put("sourceVersion", sourceVersion).put("createdAt", createdAt).put("rows", JSONObject(rows))
             .put("files", JSONArray(files.map { JSONObject().put("path", it.path).put("size", it.size).put("sha256", it.sha256) }))
-            .put("notes", JSONArray(notes)).put("excluded", JSONArray(listOf("credentials", "device-keystore", "diagnostics", "derived-cache", "device-snapshots", "host-position"))).toString()
+            .put("notes", JSONArray(notes)).put("excluded", JSONArray(listOf("credentials", "shared-ai-configuration", "pet-domain", "device-keystore", "diagnostics", "derived-cache", "device-snapshots", "host-position"))).toString()
     }
 
     fun write(directory: File, manifest: Manifest, password: String, output: OutputStream) {

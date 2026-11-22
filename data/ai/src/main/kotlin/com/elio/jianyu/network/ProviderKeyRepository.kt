@@ -1,6 +1,8 @@
 package com.elio.jianyu.network
 
-import com.elio.jianyu.storage.jianyuPreferences
+// 唯一公共 AI 实现；命名空间保留以兼容已有调用方。
+
+import com.elio.lifearchive.data.ai.sharedAiPreferences
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -33,7 +35,7 @@ data class ProviderSessionKey(
  */
 class ProviderKeyRepository internal constructor(
     private val provider: AiProvider,
-    private val store: EncryptedApiKeyStore,
+    private val store: ApiKeyStore,
     private val prefs: SharedPreferences,
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) : ProviderKeys {
@@ -41,7 +43,7 @@ class ProviderKeyRepository internal constructor(
     constructor(context: Context, provider: AiProvider) : this(
         provider,
         EncryptedApiKeyStore(context.applicationContext, "${provider.storageId}_api_keys.enc"),
-        context.applicationContext.jianyuPreferences("${provider.storageId}_api_key_prefs", Context.MODE_PRIVATE),
+        context.applicationContext.sharedAiPreferences("${provider.storageId}_api_key_prefs"),
     )
 
     private companion object {
@@ -101,7 +103,7 @@ class ProviderKeyRepository internal constructor(
                 fingerprint = fingerprintApiKey(key),
             )
         }
-        if (created.isNotEmpty()) save(existing + created)
+        if (created.isNotEmpty()) check(save(existing + created)) { "公共 AI 凭据未能保存，请重试" }
         return BatchImportResult(
             added = created.size,
             duplicates = duplicates,
@@ -185,7 +187,7 @@ class ProviderKeyRepository internal constructor(
         if (!success) return false
         validations.clear()
         // 清空 Key 后仍保留迁移标记，避免下一次启动误清新 Key 的冷却。
-        prefs.edit().clear().putInt(KEY_COOLDOWN_POLICY, COOLDOWN_POLICY_VERSION).apply()
+        prefs.edit().clear().putBoolean("shared_owner_v1", true).putInt(KEY_COOLDOWN_POLICY, COOLDOWN_POLICY_VERSION).apply()
         refreshSummaries()
         return true
     }
@@ -255,7 +257,7 @@ class ProviderKeyRepository internal constructor(
     }
 
     @Synchronized
-    internal fun recordSuccess(sessionId: Long, keyId: String) {
+    fun recordSuccess(sessionId: Long, keyId: String) {
         if (records().none { it.id == keyId }) return
         prefs.edit()
             .putString("session_key_$sessionId", keyId)
@@ -265,7 +267,7 @@ class ProviderKeyRepository internal constructor(
     }
 
     @Synchronized
-    internal fun recordFailure(keyId: String, failure: ApiCallFailure) {
+    fun recordFailure(keyId: String, failure: ApiCallFailure) {
         if (records().none { it.id == keyId }) return
         when (failure) {
             is ApiCallFailure.Http -> when (failure.code) {
@@ -294,7 +296,7 @@ class ProviderKeyRepository internal constructor(
         ?.key
 
     @Synchronized
-    internal fun availableSecretFor(keyId: String): String? = availableRecords().firstOrNull { it.id == keyId }?.key
+    fun availableSecretFor(keyId: String): String? = availableRecords().firstOrNull { it.id == keyId }?.key
 
     private fun records(): List<ApiKeyRecord> = store.read()
 

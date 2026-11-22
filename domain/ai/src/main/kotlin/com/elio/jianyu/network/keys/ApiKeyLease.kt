@@ -1,5 +1,7 @@
 package com.elio.jianyu.network.keys
 
+// 网络边界共用的无明文凭据租约。
+
 import com.elio.jianyu.network.ApiKeySource
 import com.elio.jianyu.network.AiProvider
 
