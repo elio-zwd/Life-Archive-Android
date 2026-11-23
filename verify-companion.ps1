@@ -20,7 +20,7 @@ if ($Help) {
 }
 $taskSteps = @(
     @{ Name = 'data-tests'; Arguments = @(':core:live2d:testDebugUnitTest', ':data:ai:testDebugUnitTest', ':data:pet:testDebugUnitTest', ':feature:pet:testDebugUnitTest', ':data:jianyu:testDebugUnitTest', ':domain:jianyu:test') },
-    @{ Name = 'host-tests'; Arguments = @(':app:testDebugUnitTest', '--tests', '*BusinessHostViewModelTest', '--tests', '*BusinessHostUiTest', '--tests', '*BusinessSwitcherTest', '--tests', '*CompleteBackupIntegrationTest', '--tests', '*VisibilityLifecycleOwnerTest') },
+    @{ Name = 'host-tests'; Arguments = @(':app:testDebugUnitTest', '--tests', '*BusinessHostViewModelTest', '--tests', '*BusinessHostUiTest', '--tests', '*CompanionOverlayPanelTest', '--tests', '*BusinessSwitcherTest', '--tests', '*CompleteBackupIntegrationTest', '--tests', '*VisibilityLifecycleOwnerTest') },
     @{ Name = 'build-lint'; Arguments = @('checkArchitecture', ':app:assembleDebug', ':core:live2d:assembleDebugAndroidTest', ':core:live2d:lintDebug', ':app:lintDebug', ':data:ai:lintDebug', ':data:pet:lintDebug', ':feature:pet:lintDebug', ':data:jianyu:lintDebug', ':feature:jianyu:lintDebug') }
 )
 if ($WhatIf) {
