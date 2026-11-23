@@ -4,6 +4,14 @@ import kotlinx.coroutines.flow.StateFlow
 
 const val DEFAULT_COMPANION_MODEL_ID = "Hiyori"
 
+data class ImportedLive2DModel(
+    val id: String,
+    val displayName: String,
+    val directoryPath: String,
+    val modelJson: String,
+    val importedAt: Long,
+)
+
 data class CompanionProfile(
     val name: String = "伙伴",
     val personality: String = "温和、自然、有主见。认真倾听，记得共同经历，尊重用户的选择，不用奖惩或内疚感催促用户。",
@@ -32,6 +40,7 @@ data class CompanionState(
     val messages: List<CompanionMessage> = emptyList(),
     val memories: List<CompanionMemory> = emptyList(),
     val overlay: OverlaySettings = OverlaySettings(),
+    val importedModels: List<ImportedLive2DModel> = emptyList(),
 ) {
     val generating: Boolean get() = messages.any { it.status == ReplyStatus.GENERATING }
 }
@@ -43,6 +52,8 @@ interface CompanionRepository {
     suspend fun saveDraft(text: String)
     suspend fun setInAppVisible(visible: Boolean)
     suspend fun selectModel(modelId: String)
+    suspend fun importModelFromTree(treeUri: String): ImportedLive2DModel
+    suspend fun deleteImportedModel(modelId: String): Boolean
     suspend fun send(text: String, operationId: String): Boolean
     suspend fun retry(messageId: String): Boolean
     suspend fun cancel()

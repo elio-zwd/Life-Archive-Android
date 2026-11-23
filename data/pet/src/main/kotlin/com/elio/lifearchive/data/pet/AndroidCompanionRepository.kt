@@ -18,6 +18,7 @@ class AndroidCompanionRepository internal constructor(
     private val database: () -> CompanionDatabase,
     private val ai: AiGateway,
     private val scope: CoroutineScope,
+    private val modelStore: LocalLive2DModelStore? = null,
     private val loadLines: () -> List<CompanionLine> = { CompanionTrigger.entries.map { CompanionLine(it.name, "嗯，我在。", it, CompanionEmotion.HAPPY) } },
 ) : CompanionRepository {
     constructor(context: Context, ai: AiGateway) : this(
@@ -27,6 +28,7 @@ class AndroidCompanionRepository internal constructor(
                 .build()
         },
         ai, CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        LocalLive2DModelStore(context),
         { context.applicationContext.assets.open("companion-lines.json").bufferedReader().use { parseCompanionLines(it.readText()) } },
     )
     private val mutable = MutableStateFlow(CompanionState())
@@ -59,10 +61,17 @@ class AndroidCompanionRepository internal constructor(
 
     private fun publish() {
         val profile = requireNotNull(dao.profile())
-        mutable.value = CompanionState(true, profile.toDomain(),
-            dao.messages().map { CompanionMessage(it.id, it.operationId, MessageRole.valueOf(it.role), it.text,
-                ReplyStatus.valueOf(it.status), it.createdAt, CompanionEmotion.valueOf(it.emotion), it.sourceMessageId, it.error) },
-            dao.memories().map { CompanionMemory(it.id, it.text, it.sourceMessageId, it.revision) }, decodeOverlay(dao.overlay()))
+        mutable.value = CompanionState(
+            ready = true,
+            profile = profile.toDomain(),
+            messages = dao.messages().map {
+                CompanionMessage(it.id, it.operationId, MessageRole.valueOf(it.role), it.text,
+                    ReplyStatus.valueOf(it.status), it.createdAt, CompanionEmotion.valueOf(it.emotion), it.sourceMessageId, it.error)
+            },
+            memories = dao.memories().map { CompanionMemory(it.id, it.text, it.sourceMessageId, it.revision) },
+            overlay = decodeOverlay(dao.overlay()),
+            importedModels = modelStore?.list().orEmpty(),
+        )
     }
     private suspend fun <T> change(profileOnly: Boolean = false, block: () -> T): T = withContext(Dispatchers.IO) {
         initialize()
@@ -86,6 +95,22 @@ class AndroidCompanionRepository internal constructor(
         val normalized = modelId.trim()
         require(normalized.length in 1..120) { "模型标识无效" }
         change(profileOnly = true) { dao.model(normalized) }
+    }
+    override suspend fun importModelFromTree(treeUri: String): ImportedLive2DModel = withContext(Dispatchers.IO) {
+        val store = requireNotNull(modelStore) { "当前环境不支持本地模型导入。" }
+        val imported = store.importFromTreeUri(treeUri)
+        change { dao.model(imported.id) }
+        imported
+    }
+    override suspend fun deleteImportedModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
+        val store = modelStore ?: return@withContext false
+        change {
+            val deleted = store.delete(modelId)
+            if (deleted && dao.profile()?.modelId == modelId) {
+                dao.model(DEFAULT_COMPANION_MODEL_ID)
+            }
+            deleted
+        }
     }
 
     override suspend fun updateOverlay(transform: (OverlaySettings) -> OverlaySettings) {

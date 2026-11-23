@@ -22,6 +22,8 @@ data class Live2DModelSpec(
     val source: Live2DModelSource,
     val compactScale: Float = 0.74f,
 ) {
+    val isBuiltIn: Boolean get() = source is Live2DModelSource.Asset
+
     init {
         require(id.isNotBlank()) { "模型 ID 不能为空" }
         require(displayName.isNotBlank()) { "模型显示名不能为空" }
@@ -65,6 +67,16 @@ object Live2DModelCatalog {
     }
 
     fun unregister(id: String): Boolean = dynamicModels.removeAll { it.id == id }
+
+    /** 按持久化外部模型列表幂等同步容器，避免覆盖内置模型或产生重复条目。 */
+    @Synchronized
+    fun syncExternal(specs: List<Live2DModelSpec>) {
+        val builtInIds = builtIn.mapTo(HashSet()) { it.id }
+        val filtered = specs.filter { it.id !in builtInIds }.distinctBy { it.id }
+        if (dynamicModels.toList() == filtered) return
+        dynamicModels.clear()
+        dynamicModels.addAll(filtered)
+    }
 
     /** 扫描本地目录中的 *.model3.json，便于后续接入外部导入的 Live2D 模型。 */
     fun discoverInDirectory(
