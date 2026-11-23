@@ -55,6 +55,7 @@ internal fun DualBusinessHost(
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val windowFocused = LocalWindowInfo.current.isWindowFocused
+    var switchMenuExpanded by remember(selected) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
     val activeDark = if (selected == Business.JIANYU && jianyu is JianyuHostState.Ready) jianyuDark else lifeDark
@@ -112,7 +113,8 @@ internal fun DualBusinessHost(
         if (enteredPet && petVisible && selected != Business.PET && allowed && windowFocused) {
             Box(Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(bottom = with(density) { bar.toDp() } + 80.dp, end = 16.dp)) { inAppCompanion { petVisible = it } }
         }
-        if (allowed && windowFocused && bar > 0 && size.width > 0 && size.height > 0) {
+        // 菜单 Popup 会接管窗口焦点；展开期间保留锚点，避免失焦移除整棵菜单。
+        if (allowed && (windowFocused || switchMenuExpanded) && bar > 0 && size.width > 0 && size.height > 0) {
             val margin = with(density) { 12.dp.roundToPx() }
             val bounds = SwitchBounds.create(size.width, size.height, buttonSize,
                 safe.getLeft(density, direction), safe.getTop(density), safe.getRight(density, direction),
@@ -123,7 +125,8 @@ internal fun DualBusinessHost(
                 focus.clearFocus(force = true)
                 keyboard?.hide()
                 model.select(target)
-            }, onMeasured = { buttonSize = it }, companionVisible = petVisible)
+            }, onMeasured = { buttonSize = it }, expanded = switchMenuExpanded,
+                onExpandedChange = { switchMenuExpanded = it }, companionVisible = petVisible)
         }
     }
 }

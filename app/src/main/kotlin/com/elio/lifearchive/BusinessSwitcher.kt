@@ -47,9 +47,10 @@ internal fun BusinessSwitcher(
     onPosition: (SwitchPosition) -> Unit,
     onSelect: (Business) -> Unit,
     onMeasured: (IntSize) -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     companionVisible: Boolean = false,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     var localPosition by remember { mutableStateOf(position) }
     var dragging by remember { mutableStateOf(false) }
     var dragPoint by remember { mutableStateOf(Offset.Zero) }
@@ -74,16 +75,16 @@ internal fun BusinessSwitcher(
                 dragPoint = bounds.clamp(dragPoint + delta)
             }
         }) {
-        FloatingActionButton(onClick = { if (!dragging) expanded = true }, modifier = Modifier
+        FloatingActionButton(onClick = { if (!dragging) onExpandedChange(true) }, modifier = Modifier
             .testTag("business-switch").semantics { contentDescription = "切换业务" }) {
             Text(label, modifier = Modifier.padding(horizontal = 16.dp))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
             Business.entries.forEach { business -> DropdownMenuItem(
                 text = { Text(when (business) { Business.LIFE -> "Life"; Business.JIANYU -> "见域"; Business.PET -> "伙伴" }) },
                 modifier = Modifier.testTag("business-select-${business.name}"),
                 enabled = business != current,
-                onClick = { expanded = false; onSelect(business) },
+                onClick = { onExpandedChange(false); onSelect(business) },
             ) }
         }
     }

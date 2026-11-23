@@ -88,6 +88,26 @@ class BusinessHostUiTest {
         compose.onNodeWithTag("business-select-$name").performClick()
     }
 
+    @Test fun switchMenuSurvivesFocusTransferToPopupAndAllowsSelection() {
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
+        focusWindow()
+        compose.onNodeWithTag("business-switch").performClick()
+        // 真机的可聚焦 Popup 会让 Activity 窗口失焦；Robolectric 需显式发送该事件。
+        compose.runOnIdle { compose.activity.window.decorView.dispatchWindowFocusChanged(false) }
+        compose.mainClock.advanceTimeBy(3_000)
+        compose.onNodeWithTag("business-select-LIFE").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("business-select-JIANYU").assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("business-select-PET").assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("business-select-JIANYU").performClick()
+        compose.onNodeWithTag("business-select-PET").assertDoesNotExist()
+        compose.runOnIdle { compose.activity.window.decorView.dispatchWindowFocusChanged(true) }
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("chat_input").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("chat_input").assertIsDisplayed()
+        // 菜单关闭后仍保留原有规则：其他窗口取得焦点时隐藏悬浮入口。
+        compose.runOnIdle { compose.activity.window.decorView.dispatchWindowFocusChanged(false) }
+        compose.onNodeWithTag("business-switch").assertDoesNotExist()
+    }
+
     @Test
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     fun petDraftAndMemorySurviveThreeDomainSwitchAndRecreation() {
