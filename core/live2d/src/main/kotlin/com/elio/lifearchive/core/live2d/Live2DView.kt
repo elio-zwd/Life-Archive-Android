@@ -6,7 +6,7 @@ import android.view.MotionEvent
 import android.view.TextureView
 import kotlin.math.abs
 
-/** 原生透明 TextureView；宿主明确设置 active，避免页面存活就持续渲染。 */
+/** 原生透明 TextureView；宿主明确设置 active 与 model，避免页面存活就持续渲染。 */
 class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
     var onStatus: (String?) -> Unit = {}
     var onTap: () -> Unit = {}
@@ -16,6 +16,7 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
     private var active = false
     private var mood = "CALM"
     private var token = "initial"
+    private var modelSpec: Live2DModelSpec = Live2DModelCatalog.resolve(null)
     private var downX = 0f
     private var downY = 0f
     private var compactFraming = false
@@ -24,6 +25,13 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
         surfaceTextureListener = this
         isClickable = true
         contentDescription = "伙伴形象，轻触互动"
+    }
+    val currentModelSpec: Live2DModelSpec get() = modelSpec
+    fun setModel(modelId: String?) = setModel(Live2DModelCatalog.resolve(modelId))
+    fun setModel(spec: Live2DModelSpec) {
+        if (modelSpec == spec) return
+        modelSpec = spec
+        lease?.let { renderThread?.model(it, spec) }
     }
     fun setActive(value: Boolean) { active = value; updateVisibility() }
     fun setCompactFraming(enabled: Boolean) { compactFraming = enabled; lease?.let { renderThread?.framing(it, enabled) } }
@@ -39,7 +47,7 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
         val id = Any()
         lease = id
         renderThread = Pool.acquire().also { engine ->
-            engine.attach(id, surface, context.applicationContext.assets, width, height,
+            engine.attach(id, surface, context.applicationContext.assets, width, height, modelSpec,
                 error = { post { if (lease === id) onStatus("形象暂时无法显示，可切换页面重试；对话和记忆仍可使用。") } },
                 ready = { post { if (lease === id) onStatus(null) } })
             engine.cue(id, token, mood)

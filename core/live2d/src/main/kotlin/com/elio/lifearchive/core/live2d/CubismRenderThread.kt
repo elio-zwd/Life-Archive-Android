@@ -22,7 +22,7 @@ internal class CubismRenderThread {
     private var scheduled = false
     private var previous = 0L
     private class Window(val texture: SurfaceTexture, val assets: AssetManager, var width: Int, var height: Int,
-                         val error: () -> Unit, val ready: () -> Unit) {
+                         var modelSpec: Live2DModelSpec, val error: () -> Unit, val ready: () -> Unit) {
         var surface: Surface? = null
         var egl = EGL14.EGL_NO_SURFACE
         var model: NativeCubismModel? = null
@@ -32,10 +32,37 @@ internal class CubismRenderThread {
         lateinit var session: RenderSession
     }
 
-    fun attach(id: Any, texture: SurfaceTexture, assets: AssetManager, width: Int, height: Int, error: () -> Unit, ready: () -> Unit) = handler.post {
-        val window = Window(texture, assets, width.coerceAtLeast(1), height.coerceAtLeast(1), error, ready)
+    fun attach(
+        id: Any,
+        texture: SurfaceTexture,
+        assets: AssetManager,
+        width: Int,
+        height: Int,
+        modelSpec: Live2DModelSpec,
+        error: () -> Unit,
+        ready: () -> Unit,
+    ) = handler.post {
+        val window = Window(texture, assets, width.coerceAtLeast(1), height.coerceAtLeast(1), modelSpec, error, ready)
         window.session = RenderSession({ open(window) }, { release(window) })
         windows[id] = window
+    }
+    fun model(id: Any, spec: Live2DModelSpec) = handler.post {
+        windows[id]?.let { window ->
+            if (window.modelSpec == spec) return@let
+            window.modelSpec = spec
+            if (window.session.opened) {
+                guarded(window) {
+                    current(window)
+                    window.model?.close()
+                    window.model = null
+                    window.model = NativeCubismModel.create(window.modelSpec, window.assets, window.width, window.height).also {
+                        it.cue(window.mood)
+                        it.compactFraming(window.compactFraming)
+                    }
+                    window.ready()
+                }
+            }
+        }
     }
     fun visible(id: Any, active: Boolean) = handler.post {
         windows[id]?.let { window -> guarded(window) { window.session.visible(active) } }
@@ -95,7 +122,8 @@ internal class CubismRenderThread {
             window.egl = EGL14.eglCreateWindowSurface(display, config, window.surface, intArrayOf(EGL14.EGL_NONE), 0)
             check(window.egl != EGL14.EGL_NO_SURFACE)
             current(window)
-            window.model = NativeCubismModel.create(window.assets, window.width, window.height).also { it.cue(window.mood); it.compactFraming(window.compactFraming) }
+            window.model = NativeCubismModel.create(window.modelSpec, window.assets, window.width, window.height)
+                .also { it.cue(window.mood); it.compactFraming(window.compactFraming) }
             window.ready()
         } catch (error: Exception) { release(window); throw error }
         catch (error: LinkageError) { release(window); throw error }
