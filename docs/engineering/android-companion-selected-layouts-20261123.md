@@ -2,6 +2,8 @@
 
 日期：2026-11-23。以用户后续选型为准，沿用既有记忆 B 卡片，补齐陪伴、设置、两类悬浮及记忆／人格编辑。设计比较板见[方案目录](../design/companion-candidates-20261123/README.md)。
 
+后续修正：用户反馈记忆页顶部缺少人物，已单独补齐[随包人物头图](../design/companion-memory-portrait-20261123.md)。本文 142 项结果与 APK 哈希属于整体布局交付基线，最新补图后的定向结果和产物另见该记录。
+
 ## 实际行为
 
 | 页面／状态 | 当前实现 |
@@ -14,7 +16,7 @@
 
 结束对话／收起输入面板返回轻量状态，隐藏／关闭窗口不主动取消已提交的回复；取消生成使用“停止”动作。记忆删除确认继续采用原确认对话框，已选底部弹层用于记忆新增／更正与名称／人格编辑。
 
-大形象使用与悬浮相同的 Cubism 承载能力，不使用角色静态截图替代动画。Hiyori 仍为技术样板，未选定正式角色；本次不引入比较板中的生成角色和场景图片。App 内与系统窗口有各自模型／Surface，继续由共用绘制线程／EGLContext 协调。
+大形象使用与悬浮相同的 Cubism 承载能力，不使用角色静态截图替代动画。Hiyori 仍为技术样板，未选定正式角色；整体布局接入时尚未引入比较板中的生成角色和场景图片，后续仅记忆头图补入展示插画。App 内与系统窗口有各自模型／Surface，继续由共用绘制线程／EGLContext 协调。
 
 App 内小窗和伙伴页共用 Activity 的伙伴 ViewModel、Repository 与草稿。系统窗口从同一 Repository 观察状态，草稿串行保存，程序回填不触发另一次写入；较早回执不覆盖正在输入的本地草稿。发送与取消仍经原任务协调，不另建聊天或 AI Key。系统窗口未完成资料初始化时禁用输入；主动关闭／通知停止先等待已排队的草稿写入。系统杀进程后仍以已持久化状态为准，不承诺未提交表单或进行中的业务持续运行。
 
@@ -57,7 +59,7 @@ pwsh.exe -NoProfile -File .\tools\tests\Run-CompanionVerificationTests.ps1
 
 快速查看：[陪伴 C](D:/Temp/life-archive-companion-previews/conversation-graphite.png)、[设置 B](D:/Temp/life-archive-companion-previews/settings-warm.png)、[记忆弹层](D:/Temp/life-archive-companion-previews/memory-sheet-warm.png)、[人格弹层](D:/Temp/life-archive-companion-previews/profile-sheet-warm.png)、[App 内轻量](D:/Temp/life-archive-companion-previews/in-app-idle.png)、[App 内对话](D:/Temp/life-archive-companion-previews/in-app-dialogue.png)、[系统轻量](D:/Temp/life-archive-companion-previews/system-idle-warm.png)、[系统对话](D:/Temp/life-archive-companion-previews/system-dialogue-warm.png)。
 
-Robolectric 不能在 Windows 加载 Android Cubism JNI 并渲染模型，预览中的模型区域透明留空，没有合成假角色充当运行证据。旧手记卡片交接中记录的 432dp 原生图形弹窗 `AppNotIdleException`，在本次新底部弹层的上述重建与实际预览检查中未复现；这仍不能替代手机输入法及弹层行为验收。
+Robolectric 不能在 Windows 加载 Android Cubism JNI 并渲染模型，动态模型区域透明留空，没有合成假角色充当模型运行证据。记忆头图补齐后可直接显示随包插画，最新记忆截图不再留空。旧手记卡片交接中记录的 432dp 原生图形弹窗 `AppNotIdleException`，在本次新底部弹层的上述重建与实际预览检查中未复现；这仍不能替代手机输入法及弹层行为验收。
 
 ## 设备边界
 

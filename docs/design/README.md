@@ -1,5 +1,7 @@
 # 设计资料归档
 
+2026-11-23 用户反馈共同记忆顶部缺少人物，已补[随包人物头图](companion-memory-portrait-20261123.md)，包含素材、实际提示词及定向验收；记忆页头不再依赖 GL 显示人物，陪伴与悬浮保留动态 Live2D。
+
 2026-11-23 [伙伴界面方案](companion-candidates-20261123/README.md)已选：陪伴 C（原生动态大形象）、记忆 B、设置 B、悬浮正常 A／对话 B、记忆及人格编辑 B；公共 AI 布局待选。实际实现及验证见[选定布局交接](../engineering/android-companion-selected-layouts-20261123.md)。比较板及提示词保留为设计依据，不作为设备验收，不改变已有 Life／见域页面的确认状态。
 
 2026-11-01 新增 [Life Archive 图标图片 v1](brand/life-archive-app-icon-v1.md)：参考见域当前 B 款的配色与圆润几何风格，以书页和档案为主体。用户已确认图片并接入 Android 普通／圆形自适应及单色主题图标；PNG、提示词和构建检查已归档，手机桌面实测另验。
