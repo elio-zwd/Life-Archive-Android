@@ -8,6 +8,12 @@ Windows 10 x64、PowerShell 7、已有 JDK 17 下运行 `pwsh.exe -NoProfile -Fi
 
 选定布局接入后的页面、底部编辑弹层、共享草稿及系统窗口视图测试也纳入上述脚本（`CompanionLayoutsTest`、`BusinessHostUiTest`、`CompanionOverlayPanelTest` 等）；实际结果和桌面预览位置见[选定布局交接](../engineering/android-companion-selected-layouts-20261123.md)。窗口 View 测试不代表系统权限、键盘、触摸或真实悬浮服务已经设备验收。
 
+## 桌面陪伴（设备，须明确授权）
+
+桌面陪伴的新增验证见[桌面交接](../engineering/android-companion-desktop-20261123.md)。`DesktopOverlayDeviceTest` 默认跳过，必须在已授权、已核对包名和设备的环境中显式传入 `-e desktop-overlay true` 才会启动悬浮服务并操作窗口；不清库、不发送聊天，会恢复角色位置和草稿。先编译 `:app:assembleDebugAndroidTest`，再保留数据安装主 APK 与测试 APK。
+
+测试 APK 另含受 `BIND_INPUT_METHOD` 保护的 `DesktopTestIme`，不进入主 APK。硬件键盘模拟器的预装输入法若只产生零高度窗口，可临时启用此 220dp 测试键盘，传入 `-e test-ime true` 检查真实 IME 窗口、输入／退格及按钮避让；用 `try/finally` 恢复原输入法并禁用测试键盘。它验证系统窗口协作，不能替代小米手机实际中文输入法验收。测试不会自动改输入法，设备准备与恢复由明确授权的调用者执行。
+
 ## 二期完整迁移与独立恢复（无设备）
 
 支持范围、互通夹具来源与失败保护见[完整迁移交接](../engineering/phase-2-complete-backup-handoff.md)。完整见域测试与真实装配入口：

@@ -19,6 +19,7 @@
 - [分类整理交接](engineering/note-organization-handoff.md)：接口、备份迁移、工具用法、实际检查和产物；[独立真机清单](testing/note-organization-manual-acceptance.md)区分电脑与设备结果。
 - [第五期：知识库、资料联动与整 App 备份](plans/phase-5-knowledge-base.md)：首版交互、片段发送规则、联合备份与实施验收。开发已开始，见域本地查找 Life 笔记的入口位于对话「选择资料」。
 - [Android 宠物陪伴实施计划](plans/android-companion.md)：2026-11-23 公共 AI 和宠物核心已接入，共二十二个模块；Hiyori 原生样板接入页面与两类小窗，目标手机另验。核心先行，扩展随后，新增备份最后实施；正式形象后选。
+- [桌面角色交互交接](engineering/android-companion-desktop-20261123.md)：纯角色常驻、抚摸／长按拖动、临时聊天、事件问候、设置迁移和验证；[词库维护 Prompt](prompts/companion-lines.md)供电脑端 Codex 与维护 skill 增量完善随包台词。
 
 一期范围及已确认交互以一期计划和决策为依据；三期按 2026-11-04 用户确认先行，计划、实现和验收分别记录。
 
