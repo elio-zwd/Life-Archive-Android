@@ -13,7 +13,7 @@ import com.elio.lifearchive.core.live2d.Live2DView
 import com.elio.lifearchive.domain.pet.*
 
 @Composable
-fun CompanionAvatar(state: CompanionState, modifier: Modifier = Modifier, onTap: () -> Unit = {}) {
+fun CompanionAvatar(state: CompanionState, modifier: Modifier = Modifier, onTap: () -> Unit = {}, allowParentScroll: Boolean = false) {
     val owner = LocalLifecycleOwner.current
     val currentTap by rememberUpdatedState(onTap)
     val message = state.messages.lastOrNull { it.role == MessageRole.COMPANION }
@@ -30,6 +30,7 @@ fun CompanionAvatar(state: CompanionState, modifier: Modifier = Modifier, onTap:
     }
     Box(modifier) {
         AndroidView(factory = { view }, modifier = Modifier.fillMaxSize(), update = {
+            it.allowParentScroll = allowParentScroll
             it.onStatus = { error -> status = error }
             it.onTap = { currentTap() }
             it.setCue(token, mood)

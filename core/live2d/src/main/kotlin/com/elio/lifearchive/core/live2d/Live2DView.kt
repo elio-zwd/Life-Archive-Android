@@ -10,6 +10,7 @@ import kotlin.math.abs
 class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
     var onStatus: (String?) -> Unit = {}
     var onTap: () -> Unit = {}
+    var allowParentScroll: Boolean = false
     private var renderThread: CubismRenderThread? = null
     private var lease: Any? = null
     private var active = false
@@ -60,7 +61,7 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val id = lease ?: return super.onTouchEvent(event)
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; parent?.requestDisallowInterceptTouchEvent(true) }
+            MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; if (!allowParentScroll) parent?.requestDisallowInterceptTouchEvent(true) }
             MotionEvent.ACTION_MOVE -> renderThread?.touch(id, (event.x / width.coerceAtLeast(1) * 2 - 1).coerceIn(-1f, 1f),
                 (1 - event.y / height.coerceAtLeast(1) * 2).coerceIn(-1f, 1f), false)
             MotionEvent.ACTION_UP -> {
