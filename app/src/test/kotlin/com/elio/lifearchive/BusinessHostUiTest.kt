@@ -116,7 +116,7 @@ class BusinessHostUiTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("pet-input").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("pet-input").assertTextContains("给伙伴的未发送输入")
         compose.onNodeWithText("记忆", useUnmergedTree = true).performClick()
-        compose.onNodeWithText("合成资料：周末喜欢散步").assertIsDisplayed()
+        compose.onNodeWithText("合成资料：周末喜欢散步").performScrollTo().assertIsDisplayed()
         val repository = compose.activity.companionProvider.get()
         val memoryId = repository.state.value.memories.single().id
         captureCompanion("memories")
@@ -153,6 +153,7 @@ class BusinessHostUiTest {
             compose.runOnIdle { runBlocking { compose.activity.preferences.setDocumentTheme(theme) } }
             compose.waitForIdle()
             compose.onNodeWithText("共同记忆").assertIsDisplayed()
+            compose.onNodeWithTag("pet-memory-portrait").assertIsDisplayed()
             val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
             compose.onNodeWithText("共同记忆").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(results) }
             org.junit.Assert.assertEquals(com.elio.lifearchive.core.designsystem.DocumentPalette.valueOf(theme.name).colors.ink,

@@ -90,7 +90,6 @@ fun CompanionRoute(
                         onAdd = { focus.clearFocus(); memoryId = null; memoryText = ""; memorySource = null; memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true },
                         onEdit = { focus.clearFocus(); memoryId = it.id; memoryRevision = it.revision; memorySource = it.sourceMessageId; memoryText = it.text; memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true },
                         onDelete = { deleteMemory = it },
-                        avatar = { CompanionAvatar(state, Modifier.fillMaxSize()) },
                     )
                 }
                 else -> {

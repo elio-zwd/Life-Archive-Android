@@ -2,6 +2,7 @@ package com.elio.lifearchive.feature.pet
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -19,9 +20,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.elio.lifearchive.domain.pet.CompanionMemory
 import com.elio.lifearchive.domain.pet.CompanionState
@@ -33,7 +37,6 @@ internal fun CompanionMemories(
     onAdd: () -> Unit,
     onEdit: (CompanionMemory) -> Unit,
     onDelete: (CompanionMemory) -> Unit,
-    avatar: @Composable () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
@@ -52,13 +55,15 @@ internal fun CompanionMemories(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f).padding(start = 12.dp, top = 12.dp, bottom = 20.dp)) {
-                    Text(state.profile.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(state.profile.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text("Hiyori · 技术样板", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                     Text("与你共同书写，\n珍藏重要的记忆。", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodyMedium)
                 }
-                Box(Modifier.width(112.dp).height(148.dp)) {
+                Box(Modifier.width(168.dp).height(184.dp)) {
                     Sprig(Modifier.align(Alignment.BottomEnd).size(68.dp))
-                    avatar()
+                    // 记忆手记页使用随包插画，人物显示不依赖 GL Surface 是否创建成功。
+                    Image(painterResource(R.drawable.companion_memory_portrait_v1), contentDescription = "伙伴人物插画",
+                        modifier = Modifier.fillMaxSize().testTag("pet-memory-portrait"), contentScale = ContentScale.Crop, alignment = Alignment.TopEnd)
                 }
             }
         }

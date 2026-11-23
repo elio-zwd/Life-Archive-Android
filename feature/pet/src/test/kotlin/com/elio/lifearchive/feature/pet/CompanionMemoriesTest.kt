@@ -20,6 +20,24 @@ import org.robolectric.annotation.Config
 class CompanionMemoriesTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun headerIncludesAPackagedVisiblePortraitWithTransparentCorners() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val bitmap = android.graphics.BitmapFactory.decodeResource(context.resources, R.drawable.companion_memory_portrait_v1)
+        assertNotNull(bitmap)
+        try {
+            assertTrue(bitmap.hasAlpha())
+            assertEquals(0, android.graphics.Color.alpha(bitmap.getPixel(0, 0)))
+            assertTrue(android.graphics.Color.alpha(bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)) > 200)
+        } finally { bitmap.recycle() }
+        compose.setContent { MaterialTheme { CompanionMemories(CompanionState(), {}, {}, {}) } }
+        compose.onNodeWithTag("pet-memory-portrait").assertIsDisplayed()
+        compose.onNodeWithContentDescription("伙伴人物插画").assertIsDisplayed()
+        val portrait = compose.onNodeWithTag("pet-memory-portrait").fetchSemanticsNode().boundsInRoot
+        val name = compose.onNodeWithText("伙伴", substring = false).fetchSemanticsNode().boundsInRoot
+        assertTrue("人物放在寄语右侧，不能覆盖名称", portrait.left >= name.right)
+    }
+
     @Test fun twoColumnsKeepSourceAndActionsBoundToTheRightMemory() {
         val manual = CompanionMemory("manual", "周末喜欢散步", null, 1)
         val conversation = CompanionMemory("chat", "喜欢安静的交流方式", "message-1", 3)
