@@ -101,7 +101,7 @@ class SharedAiRuntime internal constructor(
                             send(AiEvent.Text(text.toString()))
                         }
                         if (model.provider == AiProvider.GEMINI && event["candidates"]?.jsonArray?.firstOrNull()
-                                ?.jsonObject?.get("finishReason")?.jsonPrimitive?.content == "STOP") { complete = true; break }
+                                ?.jsonObject?.get("finishReason")?.jsonPrimitive?.contentOrNull == "STOP") { complete = true; break }
                     }
                     if (!complete || text.isBlank()) throw SerializationException("回答未完成")
                     text.toString()

@@ -39,6 +39,7 @@ import com.elio.jianyu.domain.LifeKnowledgeResult
 import com.elio.jianyu.domain.LifeNoteKind
 import com.elio.jianyu.domain.OpenLifeNote
 import com.elio.jianyu.ui.lifecycle.sessionCoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -148,6 +149,10 @@ internal fun LifeKnowledgeDialog(knowledge: LifeKnowledge, onDismiss: () -> Unit
                             OpenLifeNote.MISSING -> openError = "这篇笔记已移入回收站或不存在"
                             OpenLifeNote.UNAVAILABLE -> openError = "暂时无法打开原文，请重试"
                         }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        openError = "暂时无法打开原文，请重试"
                     } finally {
                         opening = false
                     }

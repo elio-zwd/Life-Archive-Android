@@ -823,9 +823,11 @@ class NotesStorage private constructor(
         val match = offset ?: return null
         if (indexed.raw.startsWith('\uFEFF')) return match
         // SQLite 绑定文本时可能去掉开头的 BOM，阅读定位以 Markdown 原文的字符位置为准。
-        return documentFile(indexed.record).inputStream().use { stream ->
-            if (stream.read() == 0xEF && stream.read() == 0xBB && stream.read() == 0xBF) match + 1 else match
-        }
+        return runCatching {
+            documentFile(indexed.record).inputStream().use { stream ->
+                if (stream.read() == 0xEF && stream.read() == 0xBB && stream.read() == 0xBF) match + 1 else match
+            }
+        }.getOrDefault(match)
     }
 
     private fun IndexedLibraryNote.knowledgeMatch(words: List<String>): KnowledgeMatch? {
