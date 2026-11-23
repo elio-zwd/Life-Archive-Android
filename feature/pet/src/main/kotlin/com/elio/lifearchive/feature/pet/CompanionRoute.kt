@@ -1,11 +1,8 @@
 package com.elio.lifearchive.feature.pet
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,31 +28,32 @@ fun CompanionRoute(
     onOverlay: () -> Unit,
     onStopOverlay: () -> Unit,
     onInAppVisibility: (Boolean) -> Unit = {},
+    openChatRequest: Long = 0,
 ) {
-    val model: CompanionViewModel = viewModel(factory = remember(repository) { object : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T = CompanionViewModel(repository) as T
-    } })
+    val model = companionViewModel(repository)
     val state by model.state.collectAsStateWithLifecycle()
     val draft by model.draft.collectAsStateWithLifecycle()
     val error by model.error.collectAsStateWithLifecycle()
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    var editMemory by remember { mutableStateOf<CompanionMemory?>(null) }
-    var addMemory by rememberSaveable { mutableStateOf(false) }
+    var handledChatRequest by rememberSaveable { mutableLongStateOf(0) }
+    LaunchedEffect(openChatRequest) {
+        if (openChatRequest > handledChatRequest) { tab = 0; handledChatRequest = openChatRequest }
+    }
+    var memoryEditorOpen by rememberSaveable { mutableStateOf(false) }
+    var memorySubmissionId by rememberSaveable { mutableStateOf("") }
+    val savedMemorySubmission by model.savedMemorySubmission.collectAsStateWithLifecycle()
+    LaunchedEffect(savedMemorySubmission, memoryEditorOpen) {
+        if (memoryEditorOpen && savedMemorySubmission == memorySubmissionId) memoryEditorOpen = false
+    }
+    var memoryId by rememberSaveable { mutableStateOf<String?>(null) }
+    var memoryRevision by rememberSaveable { mutableLongStateOf(0L) }
     var memorySource by rememberSaveable { mutableStateOf<String?>(null) }
     var memoryText by rememberSaveable { mutableStateOf("") }
     var deleteMemory by remember { mutableStateOf<CompanionMemory?>(null) }
     var showAi by rememberSaveable { mutableStateOf(false) }
     var editProfile by rememberSaveable { mutableStateOf(false) }
-    var touched by remember { mutableStateOf(false) }
-    var collapsed by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(touched) { if (touched) { kotlinx.coroutines.delay(2500); touched = false } }
-    val list = rememberLazyListState()
-    val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
     LaunchedEffect(state.profile.showInApp) { onInAppVisibility(state.profile.showInApp) }
-    LaunchedEffect(state.messages.lastOrNull()?.id, state.generating) {
-        if (state.messages.isNotEmpty()) list.animateScrollToItem(state.messages.lastIndex)
-    }
     Scaffold(Modifier.fillMaxSize().testTag("pet-root"), bottomBar = {
         NavigationBar(Modifier.onSizeChanged { onBottomBarMeasured(it.height) }) {
             listOf("陪伴", "记忆", "设置").forEachIndexed { index, label ->
@@ -64,9 +62,9 @@ fun CompanionRoute(
             }
         }
     }) { padding ->
-        Column(Modifier.padding(padding).statusBarsPadding().fillMaxSize().padding(horizontal = if (tab == 1) 0.dp else 18.dp)) {
-          if (tab != 1) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.padding(padding).statusBarsPadding().fillMaxSize()) {
+          if (tab == 0) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Text(state.profile.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Text("日常里的陪伴", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 TextButton(onClick = { showAi = true }) { Text("公共 AI") }
@@ -80,108 +78,46 @@ fun CompanionRoute(
             if (!state.ready) { LinearProgressIndicator(Modifier.fillMaxWidth()); return@Column }
             when (tab) {
                 0 -> {
-                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                        val stageHeight = (maxHeight * 0.35f).coerceAtMost(180.dp)
-                        val roomForStage = maxHeight >= 140.dp
-                        Column(Modifier.fillMaxSize()) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(if (touched) "嗯，我在。" else "Hiyori · 技术样板", style = MaterialTheme.typography.labelMedium)
-                                TextButton(onClick = { collapsed = !collapsed }) { Text(if (collapsed) "展开形象" else "收起形象") }
-                            }
-                            if (!collapsed && !keyboardOpen && roomForStage) CompanionAvatar(state, Modifier.fillMaxWidth().height(stageHeight), onTap = { touched = true })
-                            LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
-                                if (state.messages.isEmpty()) item(key = "welcome") {
-                                    Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                                        Column(Modifier.padding(20.dp)) {
-                                            Text("今天，想聊点什么？", style = MaterialTheme.typography.titleLarge)
-                                            Spacer(Modifier.height(8.dp))
-                                            Text("可以聊聊刚发生的小事，也可以把希望伙伴记住的事放进记忆。")
-                                            Text("轻触伙伴可互动；正式形象之后再选。", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodySmall)
-                                        }
-                                    }
-                                }
-                        items(state.messages, key = { it.id }) { message ->
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor =
-                                if (message.role == MessageRole.USER) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
-                                Column(Modifier.padding(14.dp)) {
-                                    Text(if (message.role == MessageRole.USER) "我" else state.profile.name, style = MaterialTheme.typography.labelMedium)
-                                    Spacer(Modifier.height(6.dp))
-                                    if (message.status == ReplyStatus.GENERATING) {
-                                        Text("正在想怎么回应你…"); LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-                                    } else if (message.status != ReplyStatus.COMPLETE) {
-                                        Text(message.error ?: "回应未完成")
-                                        TextButton(onClick = { model.retry(message.id) }, enabled = !state.generating) { Text("重新回应") }
-                                    } else {
-                                        Text(message.text)
-                                        TextButton(onClick = { memoryText = message.text.take(2000); memorySource = message.id; addMemory = true }) { Text("记住这件事") }
-                                    }
-                                }
-                            }
-                        }
-                            }
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth().imePadding().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(draft, model::draft, Modifier.weight(1f).testTag("pet-input"), label = { Text("和伙伴说说话") }, maxLines = 4)
-                        Spacer(Modifier.width(8.dp))
-                        if (state.generating) TextButton(onClick = { model.cancel() }) { Text("停止") }
-                        else Button(onClick = model::send, enabled = draft.isNotBlank(), modifier = Modifier.testTag("pet-send")) { Text("发送") }
-                    }
+                    CompanionConversation(state, draft, model::draft, model::send, { model.cancel() }, { model.retry(it) },
+                        onRemember = { message ->
+                            focus.clearFocus(); memoryId = null; memorySource = message.id
+                            memoryText = message.text.take(2000); memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true
+                        }, avatar = { modifier, tap -> CompanionAvatar(state, modifier, tap) })
                 }
                 1 -> {
                     CompanionMemories(
                         state = state,
-                        onAdd = { focus.clearFocus(); memoryText = ""; memorySource = null; addMemory = true },
-                        onEdit = { focus.clearFocus(); editMemory = it; memoryText = it.text },
+                        onAdd = { focus.clearFocus(); memoryId = null; memoryText = ""; memorySource = null; memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true },
+                        onEdit = { focus.clearFocus(); memoryId = it.id; memoryRevision = it.revision; memorySource = it.sourceMessageId; memoryText = it.text; memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true },
                         onDelete = { deleteMemory = it },
                         avatar = { CompanionAvatar(state, Modifier.fillMaxSize()) },
                     )
                 }
                 else -> {
-                  Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                    Text("伙伴设定", style = MaterialTheme.typography.titleMedium)
-                    Text(state.profile.personality, Modifier.padding(vertical = 12.dp))
-                    OutlinedButton(onClick = { editProfile = true }) { Text("修改名称与人格") }
-                    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("在 App 内显示伙伴", Modifier.weight(1f))
-                        Switch(state.profile.showInApp, { model.visible(it) }, modifier = Modifier.testTag("pet-in-app-visible"))
-                    }
-                    Text("桌面陪伴", style = MaterialTheme.typography.titleMedium)
-                    Text("开启后，可在桌面或其他 App 上与伙伴交流。", Modifier.padding(vertical = 12.dp))
-                    Row { OutlinedButton(onClick = onOverlay) { Text("开启桌面陪伴") }
-                        TextButton(onClick = onStopOverlay) { Text("关闭") } }
-                  }
+                    CompanionSettings(state, { focus.clearFocus(); editProfile = true }, { model.visible(it) }, onOverlay, onStopOverlay,
+                        { showAi = true }, avatar = { CompanionAvatar(state, it) })
                 }
             }
         }
     }
-    if (addMemory || editMemory != null) AlertDialog(onDismissRequest = { addMemory = false; editMemory = null },
-        title = { Text(if (editMemory == null) "添加共同记忆" else "更正记忆") },
-        text = { OutlinedTextField(memoryText, { if (it.length <= 2000) memoryText = it },
-            modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp), minLines = 3, maxLines = 8,
-            label = { Text("希望伙伴记住的事") }) },
-        confirmButton = { TextButton(enabled = memoryText.isNotBlank(), onClick = {
-            editMemory?.let { model.edit(it, memoryText) } ?: model.memory(memoryText, memorySource)
-            addMemory = false; editMemory = null
-        }) { Text("保存") } }, dismissButton = { TextButton(onClick = { addMemory = false; editMemory = null }) { Text("取消") } })
+    if (memoryEditorOpen) MemoryEditorSheet(memoryText, { memoryText = it }, memoryId != null, memorySource != null,
+        onDismiss = { memoryEditorOpen = false }, onSave = {
+            model.saveMemory(memoryId?.let { CompanionMemory(it, memoryText, memorySource, memoryRevision) }, memoryText, memorySource, memorySubmissionId)
+        })
     deleteMemory?.let { memory -> AlertDialog(onDismissRequest = { deleteMemory = null }, title = { Text("删除这条记忆？") },
         text = { Text("删除后，后续交流不再使用这条记忆；原对话仍保留。") },
         confirmButton = { TextButton(onClick = { model.delete(memory); deleteMemory = null }) { Text("删除") } },
         dismissButton = { TextButton(onClick = { deleteMemory = null }) { Text("取消") } }) }
-    if (editProfile) ProfileDialog(state.profile, onDismiss = { editProfile = false }, onSave = { name, personality -> model.profile(name, personality); editProfile = false })
+    if (editProfile) ProfileEditorSheet(state.profile, onDismiss = { editProfile = false }, onSave = model::saveProfile)
     if (showAi) SharedAiDialog(ai) { showAi = false }
 }
 
-@Composable private fun ProfileDialog(profile: CompanionProfile, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
-    var name by rememberSaveable { mutableStateOf(profile.name) }
-    var personality by rememberSaveable { mutableStateOf(profile.personality) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("伙伴设定") }, text = { Column {
-        OutlinedTextField(name, { if (it.length <= 40) name = it }, label = { Text("名字") })
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(personality, { if (it.length <= 4000) personality = it }, label = { Text("人格与相处方式") }, minLines = 3)
-    } }, confirmButton = { TextButton(enabled = name.isNotBlank() && personality.isNotBlank(), onClick = { onSave(name, personality) }) { Text("保存") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
-}
+@Composable
+internal fun companionViewModel(repository: CompanionRepository): CompanionViewModel = viewModel(factory = remember(repository) {
+    object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T = CompanionViewModel(repository) as T
+    }
+})
 
 @Composable private fun SharedAiDialog(ai: AiServices, dismiss: () -> Unit) {
     val config by ai.configuration.configuration.collectAsStateWithLifecycle()
