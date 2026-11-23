@@ -18,6 +18,19 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class BusinessHostViewModelTest {
+    @Test fun openingCompanionChatIsAnExplicitRestorableRequestWithoutStartingJianyu() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val saved = SavedStateHandle()
+        val owner = ModelOwner(FakeRuntime(), saved)
+        try {
+            owner.model.openCompanionChat(); runCurrent()
+            assertEquals(Business.PET, owner.model.selected.value)
+            assertEquals(1L, owner.model.companionChatRequest.value)
+            owner.model.select(Business.LIFE); owner.model.openCompanionChat(); runCurrent()
+            assertEquals(2L, saved.get<Long>("companion_chat_request"))
+            assertEquals(0, owner.providerCalls)
+        } finally { owner.viewModelStore.clear(); runCurrent(); Dispatchers.resetMain() }
+    }
     @Test fun petSelectionDoesNotInitializeJianyuAndSurvivesReconstruction() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val owner = ModelOwner(FakeRuntime(), SavedStateHandle(mapOf("host.selected-business" to "PET")))

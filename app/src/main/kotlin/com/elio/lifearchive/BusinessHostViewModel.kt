@@ -31,6 +31,7 @@ internal class BusinessHostViewModel @Inject constructor(
 ) : ViewModel() {
     private val selectedMutable = MutableStateFlow(Business.entries.find { it.name == savedState.get<String>(SELECTED) } ?: Business.LIFE)
     val selected = selectedMutable.asStateFlow()
+    val companionChatRequest = savedState.getStateFlow("companion_chat_request", 0L)
     private val jianyuMutable = MutableStateFlow<JianyuHostState>(JianyuHostState.Idle)
     val jianyu = jianyuMutable.asStateFlow()
     private val lifeNoteMutable = MutableStateFlow<NoteDestination?>(null)
@@ -49,6 +50,10 @@ internal class BusinessHostViewModel @Inject constructor(
     }
 
     fun retryJianyu() = ensureJianyu(retry = true)
+    fun openCompanionChat() {
+        savedState["companion_chat_request"] = companionChatRequest.value + 1
+        select(Business.PET)
+    }
 
     fun openLifeNote(destination: NoteDestination) {
         lifeNoteMutable.value = destination

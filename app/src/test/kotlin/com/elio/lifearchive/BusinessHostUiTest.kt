@@ -102,6 +102,9 @@ class BusinessHostUiTest {
         compose.onNodeWithText("记忆", useUnmergedTree = true).performClick()
         compose.onNodeWithTag("pet-memory-add").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText("希望伙伴记住的事").performTextInput("合成资料：周末喜欢散步")
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("pet-memory-text").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("pet-memory-text").assertTextContains("合成资料：周末喜欢散步")
         compose.onNodeWithText("保存").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("合成资料：周末喜欢散步").fetchSemanticsNodes().isNotEmpty() }
         focusWindow(); switchTo("LIFE")
@@ -155,15 +158,30 @@ class BusinessHostUiTest {
             org.junit.Assert.assertEquals(com.elio.lifearchive.core.designsystem.DocumentPalette.valueOf(theme.name).colors.ink,
                 results.single().layoutInput.style.color)
             captureCompanion("memories-${theme.name.lowercase()}")
+            val memoryId = repository.state.value.memories.first().id
+            compose.onNodeWithTag("pet-memory-edit-$memoryId").performScrollTo().performClick()
+            captureCompanion("memory-sheet-${theme.name.lowercase()}", dialog = true)
+            compose.onNodeWithText("取消").performClick()
+            compose.onNodeWithTag("pet-tab-0").performClick()
+            compose.onNodeWithTag("pet-large-avatar").assertIsDisplayed()
+            captureCompanion("conversation-${theme.name.lowercase()}")
+            compose.onNodeWithTag("pet-tab-2").performClick()
+            captureCompanion("settings-${theme.name.lowercase()}")
+            compose.onNodeWithTag("pet-profile-edit").performScrollTo().performClick()
+            captureCompanion("profile-sheet-${theme.name.lowercase()}", dialog = true)
+            compose.onNodeWithText("取消").performClick()
+            compose.onNodeWithTag("pet-tab-1").performClick()
         }
     }
 
-    private fun captureCompanion(name: String) {
+    private fun captureCompanion(name: String, dialog: Boolean = false) {
         val directory = java.io.File(System.getProperty("java.io.tmpdir"), "life-archive-companion-previews").apply { mkdirs() }
         compose.runOnIdle {
             val view = compose.activity.findViewById<android.view.View>(android.R.id.content)
             val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
-            view.draw(android.graphics.Canvas(bitmap))
+            val canvas = android.graphics.Canvas(bitmap)
+            view.draw(canvas)
+            if (dialog) org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView.draw(canvas)
             java.io.File(directory, "$name.png").outputStream().use { output -> bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output) }
             bitmap.recycle()
         }
@@ -188,5 +206,44 @@ class BusinessHostUiTest {
         compose.onNode(hasText("收起") and hasAnyAncestor(hasTestTag("in-app-companion"))).performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("in-app-companion").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag("in-app-companion").assertDoesNotExist()
+    }
+
+    @Test @Config(sdk = [34], application = LifeArchiveApplication::class, qualifiers = "w432dp-h960dp-mdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun inAppDialogueAndPageContinueTheSameDraft() {
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
+        focusWindow(); switchTo("PET")
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("pet-input").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("pet-input").performTextInput("同一份草稿")
+        compose.onNodeWithTag("pet-tab-2").performClick()
+        compose.onNodeWithTag("pet-in-app-visible").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(isToggleable() and isOn()).fetchSemanticsNodes().isNotEmpty() }
+        focusWindow(); switchTo("LIFE")
+        captureCompanion("in-app-idle")
+        compose.onNodeWithTag("in-app-companion-chat").performClick()
+        compose.onNodeWithTag("in-app-companion-input").performScrollTo().assertTextContains("同一份草稿")
+        compose.onNodeWithTag("in-app-companion-input").performTextInput("，在小窗继续")
+        captureCompanion("in-app-dialogue")
+        compose.onNodeWithText("结束对话").performScrollTo().performClick()
+        compose.onNodeWithTag("in-app-companion-dialogue").assertDoesNotExist()
+        compose.onNodeWithTag("in-app-companion-chat").performClick()
+        compose.onNodeWithText("回到伙伴").performScrollTo().performClick()
+        compose.onNodeWithTag("pet-input").assertTextContains("同一份草稿，在小窗继续")
+    }
+
+    @Test fun profileSheetRetainsUnsavedTextAcrossActivityRecreation() {
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
+        focusWindow(); switchTo("PET")
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("pet-input").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("pet-tab-2").performClick()
+        compose.onNodeWithTag("pet-profile-edit").performScrollTo().performClick()
+        compose.onNodeWithTag("pet-profile-name").performTextClearance()
+        compose.onNodeWithTag("pet-profile-name").performTextInput("小日和")
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("pet-profile-name").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("pet-profile-name").assertTextContains("小日和")
+        compose.onNodeWithTag("pet-editor-save").performClick()
+        compose.waitUntil(10_000) { compose.activity.companionProvider.get().state.value.profile.name == "小日和" }
+        compose.onNodeWithTag("pet-editor-sheet").assertDoesNotExist()
     }
 }
