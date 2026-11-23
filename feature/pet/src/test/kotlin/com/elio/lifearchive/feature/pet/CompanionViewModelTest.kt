@@ -29,6 +29,7 @@ class CompanionViewModelTest {
             state.value = state.value.copy(profile = state.value.profile.copy(draft = text))
         }
         override suspend fun setInAppVisible(visible: Boolean) {}
+        override suspend fun selectModel(modelId: String) { state.value = state.value.copy(profile = state.value.profile.copy(modelId = modelId)) }
         override suspend fun send(text: String, operationId: String): Boolean { sends++; sendGate.await(); return true }
         override suspend fun retry(messageId: String) = false
         override suspend fun cancel() {}
@@ -109,6 +110,15 @@ class CompanionViewModelTest {
             model.draft("a".repeat(16_050)); runCurrent()
             assertEquals(16_000, model.draft.value.length)
             assertEquals(16_000, repo.drafts.last().length)
+        } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
+    @Test fun selectingModelUpdatesCompanionProfileState() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = Repository(); val model = CompanionViewModel(repo)
+        try {
+            runCurrent()
+            model.selectModel("Ren"); runCurrent()
+            assertEquals("Ren", model.state.value.profile.modelId)
         } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
     }
 }

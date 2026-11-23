@@ -21,7 +21,11 @@ class AndroidCompanionRepository internal constructor(
     private val loadLines: () -> List<CompanionLine> = { CompanionTrigger.entries.map { CompanionLine(it.name, "嗯，我在。", it, CompanionEmotion.HAPPY) } },
 ) : CompanionRepository {
     constructor(context: Context, ai: AiGateway) : this(
-        { Room.databaseBuilder(context.applicationContext, CompanionDatabase::class.java, "companion.db").addMigrations(CompanionDatabase.MIGRATION_1_2).build() },
+        {
+            Room.databaseBuilder(context.applicationContext, CompanionDatabase::class.java, "companion.db")
+                .addMigrations(CompanionDatabase.MIGRATION_1_2, CompanionDatabase.MIGRATION_2_3)
+                .build()
+        },
         ai, CoroutineScope(SupervisorJob() + Dispatchers.IO),
         { context.applicationContext.assets.open("companion-lines.json").bufferedReader().use { parseCompanionLines(it.readText()) } },
     )
@@ -41,7 +45,7 @@ class AndroidCompanionRepository internal constructor(
             try {
                 val default = CompanionProfile()
                 opened.runInTransaction {
-                    opened.companion().initialize(ProfileRow(name = default.name, personality = default.personality))
+                    opened.companion().initialize(ProfileRow(name = default.name, personality = default.personality, modelId = default.modelId))
                     opened.companion().interrupt()
                 }
                 lines = loadLines()
@@ -51,9 +55,11 @@ class AndroidCompanionRepository internal constructor(
         }
     }
 
+    private fun ProfileRow.toDomain() = CompanionProfile(name, personality, draft, showInApp, modelId.ifBlank { DEFAULT_COMPANION_MODEL_ID })
+
     private fun publish() {
         val profile = requireNotNull(dao.profile())
-        mutable.value = CompanionState(true, CompanionProfile(profile.name, profile.personality, profile.draft, profile.showInApp),
+        mutable.value = CompanionState(true, profile.toDomain(),
             dao.messages().map { CompanionMessage(it.id, it.operationId, MessageRole.valueOf(it.role), it.text,
                 ReplyStatus.valueOf(it.status), it.createdAt, CompanionEmotion.valueOf(it.emotion), it.sourceMessageId, it.error) },
             dao.memories().map { CompanionMemory(it.id, it.text, it.sourceMessageId, it.revision) }, decodeOverlay(dao.overlay()))
@@ -65,7 +71,7 @@ class AndroidCompanionRepository internal constructor(
                 if (profileOnly) {
                     // 高频草稿写入只刷新档案，避免每次按键重读全部消息与记忆。
                     val profile = requireNotNull(dao.profile())
-                    mutable.value = mutable.value.copy(profile = CompanionProfile(profile.name, profile.personality, profile.draft, profile.showInApp))
+                    mutable.value = mutable.value.copy(profile = profile.toDomain())
                 } else publish()
             }
         }
@@ -76,6 +82,11 @@ class AndroidCompanionRepository internal constructor(
     }
     override suspend fun saveDraft(text: String) { require(text.length <= 16_000); change(profileOnly = true) { dao.draft(text) } }
     override suspend fun setInAppVisible(visible: Boolean) { change(profileOnly = true) { dao.visible(visible) } }
+    override suspend fun selectModel(modelId: String) {
+        val normalized = modelId.trim()
+        require(normalized.length in 1..120) { "模型标识无效" }
+        change(profileOnly = true) { dao.model(normalized) }
+    }
 
     override suspend fun updateOverlay(transform: (OverlaySettings) -> OverlaySettings) {
         change { dao.overlay(OverlayRow(settings = encodeOverlay(transform(decodeOverlay(dao.overlay())).normalized()))) }

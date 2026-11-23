@@ -2,11 +2,14 @@ package com.elio.lifearchive.domain.pet
 
 import kotlinx.coroutines.flow.StateFlow
 
+const val DEFAULT_COMPANION_MODEL_ID = "Hiyori"
+
 data class CompanionProfile(
     val name: String = "伙伴",
     val personality: String = "温和、自然、有主见。认真倾听，记得共同经历，尊重用户的选择，不用奖惩或内疚感催促用户。",
     val draft: String = "",
     val showInApp: Boolean = false,
+    val modelId: String = DEFAULT_COMPANION_MODEL_ID,
 )
 enum class MessageRole { USER, COMPANION }
 enum class ReplyStatus { COMPLETE, GENERATING, CANCELLED, FAILED, INTERRUPTED }
@@ -39,6 +42,7 @@ interface CompanionRepository {
     suspend fun updateProfile(name: String, personality: String)
     suspend fun saveDraft(text: String)
     suspend fun setInAppVisible(visible: Boolean)
+    suspend fun selectModel(modelId: String)
     suspend fun send(text: String, operationId: String): Boolean
     suspend fun retry(messageId: String): Boolean
     suspend fun cancel()

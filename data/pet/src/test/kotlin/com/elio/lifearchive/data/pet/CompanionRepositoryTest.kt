@@ -97,4 +97,26 @@ class CompanionRepositoryTest {
         assertEquals(CompanionEmotion.CALM, parseReply("普通文字").second)
         try { parseReply("{\"action\":\"delete_all\"}"); fail() } catch (_: IllegalArgumentException) {}
     }
+    @Test fun selectedModelPersistsAcrossReopenAndRejectsBlankId() = runBlocking {
+        val name = "pet-model-${java.util.UUID.randomUUID()}.db"
+        val first = Room.databaseBuilder(context, CompanionDatabase::class.java, name)
+            .addMigrations(CompanionDatabase.MIGRATION_1_2, CompanionDatabase.MIGRATION_2_3).allowMainThreadQueries().build()
+        val scope1 = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val repo = AndroidCompanionRepository({ first }, AiGateway { error("不能联网") }, scope1)
+            repo.initialize()
+            assertEquals(DEFAULT_COMPANION_MODEL_ID, repo.state.value.profile.modelId)
+            repo.selectModel("Mao")
+            assertEquals("Mao", repo.state.value.profile.modelId)
+            try { repo.selectModel("   "); fail() } catch (_: IllegalArgumentException) {}
+        } finally { scope1.cancel(); first.close() }
+        val reopened = Room.databaseBuilder(context, CompanionDatabase::class.java, name)
+            .addMigrations(CompanionDatabase.MIGRATION_1_2, CompanionDatabase.MIGRATION_2_3).allowMainThreadQueries().build()
+        val scope2 = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val repo = AndroidCompanionRepository({ reopened }, AiGateway { error("不能联网") }, scope2)
+            repo.initialize()
+            assertEquals("Mao", repo.state.value.profile.modelId)
+        } finally { scope2.cancel(); reopened.close() }
+    }
 }

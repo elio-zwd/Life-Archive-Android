@@ -99,7 +99,8 @@ fun CompanionRoute(
                 }
                 else -> {
                     CompanionSettings(state, { focus.clearFocus(); model.dismissError(); editProfile = true }, { model.visible(it) }, onOverlay, onStopOverlay,
-                        { showAi = true }, avatar = { CompanionAvatar(state, it, allowParentScroll = true) }, onDesktopSettings = { desktopSettings = true })
+                        { showAi = true }, avatar = { CompanionAvatar(state, it, allowParentScroll = true) },
+                        onDesktopSettings = { desktopSettings = true }, onSelectModel = model::selectModel)
                 }
             }
         }

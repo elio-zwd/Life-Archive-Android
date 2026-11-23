@@ -135,6 +135,7 @@ class CompanionOverlayService : Service() {
                 repository = repo
                 repo.state.collect { state ->
                     val first = !initialized
+                    view.model.setModel(state.profile.modelId)
                     if (!dragging && state.overlay != lastSettings) placeRole(state.overlay)
                     lastSettings = state.overlay
                     chat?.render(state, updateDraft = draftWrite?.isActive != true && !sending)

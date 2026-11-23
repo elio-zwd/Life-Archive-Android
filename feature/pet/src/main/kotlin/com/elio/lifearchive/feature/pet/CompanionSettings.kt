@@ -14,6 +14,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.elio.lifearchive.core.live2d.Live2DModelCatalog
+import com.elio.lifearchive.core.live2d.Live2DModelSpec
 import com.elio.lifearchive.domain.pet.CompanionState
 
 @Composable
@@ -26,8 +28,11 @@ internal fun CompanionSettings(
     onAi: () -> Unit,
     avatar: @Composable (Modifier) -> Unit,
     onDesktopSettings: () -> Unit = {},
+    onSelectModel: (String) -> Unit = {},
+    models: List<Live2DModelSpec> = Live2DModelCatalog.all(),
 ) {
     val colors = MaterialTheme.colorScheme
+    val currentModel = models.firstOrNull { it.id == state.profile.modelId } ?: Live2DModelCatalog.resolve(state.profile.modelId)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("伙伴设置", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Surface(shape = RoundedCornerShape(24.dp), color = colors.secondaryContainer, modifier = Modifier.testTag("pet-identity-card")) {
@@ -35,12 +40,33 @@ internal fun CompanionSettings(
               Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = 10.dp)) {
                     Text(state.profile.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text("Hiyori · 技术样板", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.labelSmall)
+                    Text("${currentModel.displayName} · ${currentModel.subtitle}", Modifier.padding(top = 6.dp).testTag("pet-current-model"), style = MaterialTheme.typography.labelSmall)
                     Text(state.profile.personality, Modifier.padding(top = 14.dp), maxLines = 4, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                 }
                 avatar(Modifier.width(112.dp).height(184.dp))
               }
               FilledTonalButton(onClick = onEdit, modifier = Modifier.padding(top = 8.dp).testTag("pet-profile-edit")) { Text("修改名称与人格") }
+            }
+        }
+        Card(Modifier.fillMaxWidth().testTag("pet-model-card"), shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text("角色形象", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "通用 Live2D 模型容器 · 共 ${models.size} 个可用模型，切换后实时同步到陪伴页、小窗与桌面悬浮。",
+                    Modifier.padding(top = 6.dp, bottom = 10.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    models.forEach { spec ->
+                        FilterChip(
+                            selected = spec.id == currentModel.id,
+                            onClick = { onSelectModel(spec.id) },
+                            modifier = Modifier.testTag("pet-model-${spec.id}"),
+                            label = { Text(spec.displayName) },
+                        )
+                    }
+                }
             }
         }
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {

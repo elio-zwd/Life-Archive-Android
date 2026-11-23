@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.elio.lifearchive.core.live2d.Live2DModelCatalog
 import com.elio.lifearchive.domain.pet.CompanionMemory
 import com.elio.lifearchive.domain.pet.CompanionState
 
@@ -40,6 +41,7 @@ internal fun CompanionMemories(
 ) {
     val colors = MaterialTheme.colorScheme
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val currentModel = Live2DModelCatalog.resolve(state.profile.modelId)
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Adaptive(150.dp * fontScale),
         modifier = Modifier.fillMaxSize().testTag("pet-memory-grid"),
@@ -56,7 +58,7 @@ internal fun CompanionMemories(
             ) {
                 Column(Modifier.weight(1f).padding(start = 12.dp, top = 12.dp, bottom = 20.dp)) {
                     Text(state.profile.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text("Hiyori · 技术样板", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                    Text("${currentModel.displayName} · Live2D", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                     Text("与你共同书写，\n珍藏重要的记忆。", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodyMedium)
                 }
                 Box(Modifier.width(168.dp).height(184.dp)) {

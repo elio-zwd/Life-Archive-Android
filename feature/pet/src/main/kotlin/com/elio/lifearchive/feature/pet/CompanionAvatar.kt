@@ -33,6 +33,7 @@ fun CompanionAvatar(state: CompanionState, modifier: Modifier = Modifier, onTap:
             it.allowParentScroll = allowParentScroll
             it.onStatus = { error -> status = error }
             it.onTap = { currentTap() }
+            it.setModel(state.profile.modelId)
             it.setCue(token, mood)
         }, onRelease = { it.setActive(false); it.onStatus = {}; it.onTap = {} })
         status?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }

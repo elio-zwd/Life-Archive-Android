@@ -133,7 +133,7 @@ class DesktopCompanionTest {
             db.version = 1
         }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        fun open() = Room.databaseBuilder(context, CompanionDatabase::class.java, name).addMigrations(CompanionDatabase.MIGRATION_1_2).allowMainThreadQueries().build()
+        fun open() = Room.databaseBuilder(context, CompanionDatabase::class.java, name).addMigrations(CompanionDatabase.MIGRATION_1_2, CompanionDatabase.MIGRATION_2_3).allowMainThreadQueries().build()
         var database = open()
         try {
             var repo = AndroidCompanionRepository({ database }, AiGateway { error("不能联网") }, scope)

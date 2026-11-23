@@ -1,9 +1,10 @@
 package com.elio.lifearchive.data.pet
 
 import androidx.room.*
-import kotlinx.coroutines.flow.Flow
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.elio.lifearchive.domain.pet.DEFAULT_COMPANION_MODEL_ID
+import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "overlay")
 internal data class OverlayRow(@PrimaryKey val id: Int = 1, val settings: String = "{}")
@@ -12,6 +13,7 @@ internal data class OverlayRow(@PrimaryKey val id: Int = 1, val settings: String
 internal data class ProfileRow(
     @PrimaryKey val id: Int = 1, val name: String, val personality: String,
     val draft: String = "", val showInApp: Boolean = false,
+    val modelId: String = DEFAULT_COMPANION_MODEL_ID,
 )
 @Entity(tableName = "messages", indices = [Index("operationId"), Index("createdAt")])
 internal data class MessageRow(
@@ -33,6 +35,7 @@ internal interface CompanionDao {
     @Query("UPDATE profile SET name = :name, personality = :personality WHERE id = 1") fun profile(name: String, personality: String)
     @Query("UPDATE profile SET draft = :text WHERE id = 1") fun draft(text: String)
     @Query("UPDATE profile SET showInApp = :visible WHERE id = 1") fun visible(visible: Boolean)
+    @Query("UPDATE profile SET modelId = :modelId WHERE id = 1") fun model(modelId: String)
     @Query("SELECT * FROM messages ORDER BY createdAt, rowid") fun messages(): List<MessageRow>
     @Query("SELECT * FROM messages WHERE id = :id") fun message(id: String): MessageRow?
     @Query("SELECT COUNT(*) FROM messages WHERE operationId = :operation") fun operationExists(operation: String): Int
@@ -46,13 +49,18 @@ internal interface CompanionDao {
     @Query("SELECT COUNT(*) FROM messages") fun changes(): Flow<Int>
 }
 
-@Database(entities = [ProfileRow::class, MessageRow::class, MemoryRow::class, OverlayRow::class], version = 2, exportSchema = true)
+@Database(entities = [ProfileRow::class, MessageRow::class, MemoryRow::class, OverlayRow::class], version = 3, exportSchema = true)
 internal abstract class CompanionDatabase : RoomDatabase() {
     abstract fun companion(): CompanionDao
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `overlay` (`id` INTEGER NOT NULL, `settings` TEXT NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `profile` ADD COLUMN `modelId` TEXT NOT NULL DEFAULT '$DEFAULT_COMPANION_MODEL_ID'")
             }
         }
     }

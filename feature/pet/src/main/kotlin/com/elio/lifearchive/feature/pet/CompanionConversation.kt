@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.elio.lifearchive.core.live2d.Live2DModelCatalog
 import com.elio.lifearchive.domain.pet.*
 
 @Composable
@@ -37,6 +38,7 @@ internal fun CompanionConversation(
     }
     val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val colors = MaterialTheme.colorScheme
+    val currentModel = Live2DModelCatalog.resolve(state.profile.modelId)
     BoxWithConstraints(Modifier.fillMaxSize().testTag("pet-conversation")) {
         val stageFits = !keyboardOpen && maxHeight >= 280.dp
         val showStage = !collapsed && stageFits
@@ -46,7 +48,7 @@ internal fun CompanionConversation(
             if (showStage) avatar(Modifier.fillMaxWidth().height(stageHeight).align(Alignment.TopCenter).testTag("pet-large-avatar")) { touched = true }
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (touched) "嗯，我在。" else "Hiyori · 技术样板", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+                    Text(if (touched) "嗯，我在。" else "${currentModel.displayName} · Live2D", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
                     if (collapsed || stageFits) TextButton(onClick = { collapsed = !collapsed }, modifier = Modifier.testTag("pet-avatar-toggle")) { Text(if (collapsed) "展开形象" else "收起形象") }
                 }
                 if (showStage) Spacer(Modifier.weight(1f))

@@ -130,4 +130,24 @@ class CompanionLayoutsTest {
         compose.onNodeWithTag("pet-large-avatar").assertDoesNotExist()
         compose.onNodeWithTag("pet-avatar-toggle").assertDoesNotExist()
     }
+    @Test fun settingsModelContainerListsAllBuiltInModelsAndSwitchesSelection() {
+        var selected by mutableStateOf("Hiyori")
+        compose.setContent {
+            MaterialTheme {
+                CompanionSettings(
+                    CompanionState(profile = CompanionProfile(modelId = selected)),
+                    {}, {}, {}, {}, {},
+                    avatar = { Box(it) },
+                    onSelectModel = { selected = it },
+                )
+            }
+        }
+        compose.onNodeWithTag("pet-model-card").performScrollTo().assertIsDisplayed()
+        listOf("Hiyori", "Mao", "Ren", "Haru", "Rice", "Mark", "Wanko", "Natori").forEach { id ->
+            compose.onNodeWithTag("pet-model-$id").assertExists()
+        }
+        compose.onNodeWithTag("pet-model-Mao").performScrollTo().performClick()
+        assertEquals("Mao", selected)
+        compose.onNodeWithTag("pet-current-model").assertTextContains("Mao", substring = true)
+    }
 }
