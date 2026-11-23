@@ -108,4 +108,26 @@ class CompanionLayoutsTest {
         compose.onNodeWithText("取消").performClick()
         assertTrue(dismissed); assertEquals(0, saves)
     }
+
+    @Test fun memorySheetDisplaysSpecificErrorAndClipsOverlongPaste() {
+        var text by mutableStateOf("")
+        compose.setContent {
+            MaterialTheme {
+                MemoryEditorSheet(text, { text = it }, false, false, {}, errorMessage = "记忆已达 500 条，请先整理。") { false }
+            }
+        }
+        compose.onNodeWithTag("pet-memory-text").performTextInput("字".repeat(2020))
+        assertEquals(2000, text.length)
+        compose.onNodeWithTag("pet-editor-save").performClick()
+        compose.onNodeWithTag("pet-editor-error").assertTextEquals("记忆已达 500 条，请先整理。")
+    }
+
+    @Test @Config(sdk = [34], qualifiers = "w320dp-h240dp-mdpi")
+    fun autoHiddenShortWindowHidesAvatarToggleButton() {
+        compose.setContent {
+            MaterialTheme { CompanionConversation(CompanionState(), "", {}, {}, {}, {}, {}, avatar = { modifier, _ -> Box(modifier) }) }
+        }
+        compose.onNodeWithTag("pet-large-avatar").assertDoesNotExist()
+        compose.onNodeWithTag("pet-avatar-toggle").assertDoesNotExist()
+    }
 }

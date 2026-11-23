@@ -17,8 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.elio.jianyu.network.*
 import com.elio.lifearchive.domain.pet.*
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
+
 
 @Composable
 fun CompanionRoute(
@@ -80,35 +79,35 @@ fun CompanionRoute(
                 0 -> {
                     CompanionConversation(state, draft, model::draft, model::send, { model.cancel() }, { model.retry(it) },
                         onRemember = { message ->
-                            focus.clearFocus(); memoryId = null; memorySource = message.id
+                            focus.clearFocus(); model.dismissError(); memoryId = null; memorySource = message.id
                             memoryText = message.text.take(2000); memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true
                         }, avatar = { modifier, tap -> CompanionAvatar(state, modifier, tap) })
                 }
                 1 -> {
                     CompanionMemories(
                         state = state,
-                        onAdd = { focus.clearFocus(); memoryId = null; memoryText = ""; memorySource = null; memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true },
-                        onEdit = { focus.clearFocus(); memoryId = it.id; memoryRevision = it.revision; memorySource = it.sourceMessageId; memoryText = it.text; memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true },
+                        onAdd = { focus.clearFocus(); model.dismissError(); memoryId = null; memoryText = ""; memorySource = null; memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true },
+                        onEdit = { focus.clearFocus(); model.dismissError(); memoryId = it.id; memoryRevision = it.revision; memorySource = it.sourceMessageId; memoryText = it.text; memorySubmissionId = java.util.UUID.randomUUID().toString(); memoryEditorOpen = true },
                         onDelete = { deleteMemory = it },
                     )
                 }
                 else -> {
-                    CompanionSettings(state, { focus.clearFocus(); editProfile = true }, { model.visible(it) }, onOverlay, onStopOverlay,
-                        { showAi = true }, avatar = { CompanionAvatar(state, it) })
+                    CompanionSettings(state, { focus.clearFocus(); model.dismissError(); editProfile = true }, { model.visible(it) }, onOverlay, onStopOverlay,
+                        { showAi = true }, avatar = { CompanionAvatar(state, it, allowParentScroll = true) })
                 }
             }
         }
     }
     if (memoryEditorOpen) MemoryEditorSheet(memoryText, { memoryText = it }, memoryId != null, memorySource != null,
-        onDismiss = { memoryEditorOpen = false }, onSave = {
+        onDismiss = { memoryEditorOpen = false }, errorMessage = error, onSave = {
             model.saveMemory(memoryId?.let { CompanionMemory(it, memoryText, memorySource, memoryRevision) }, memoryText, memorySource, memorySubmissionId)
         })
     deleteMemory?.let { memory -> AlertDialog(onDismissRequest = { deleteMemory = null }, title = { Text("删除这条记忆？") },
         text = { Text("删除后，后续交流不再使用这条记忆；原对话仍保留。") },
         confirmButton = { TextButton(onClick = { model.delete(memory); deleteMemory = null }) { Text("删除") } },
         dismissButton = { TextButton(onClick = { deleteMemory = null }) { Text("取消") } }) }
-    if (editProfile) ProfileEditorSheet(state.profile, onDismiss = { editProfile = false }, onSave = model::saveProfile)
-    if (showAi) SharedAiDialog(ai) { showAi = false }
+    if (editProfile) ProfileEditorSheet(state.profile, onDismiss = { editProfile = false }, errorMessage = error, onSave = model::saveProfile)
+    if (showAi) SharedAiDialog(ai, model) { showAi = false }
 }
 
 @Composable
@@ -118,38 +117,36 @@ internal fun companionViewModel(repository: CompanionRepository): CompanionViewM
     }
 })
 
-@Composable private fun SharedAiDialog(ai: AiServices, dismiss: () -> Unit) {
+@Composable private fun SharedAiDialog(ai: AiServices, viewModel: CompanionViewModel, dismiss: () -> Unit) {
     val config by ai.configuration.configuration.collectAsStateWithLifecycle()
     var provider by rememberSaveable { mutableStateOf(AiProvider.GEMINI) }
     var rawKeys by remember { mutableStateOf("") }
-    var result by remember { mutableStateOf<String?>(null) }
+    var selectionError by remember { mutableStateOf<String?>(null) }
+    val importResult by viewModel.aiImportResult.collectAsStateWithLifecycle()
     val summaries by ai.keys(provider).summaries.collectAsStateWithLifecycle()
     val storageError by ai.keys(provider).storageError.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
     AlertDialog(onDismissRequest = dismiss, title = { Text("公共 AI 设置") }, text = {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { Text("与见域共用同一份 Key，伙伴对话可独立选择模型。") }
             items(AiModel.entries.filter { it.provider in AiUseCase.PET_REPLY.supportedProviders }) { model ->
                 FilterChip(selected = config.modelFor(AiUseCase.PET_REPLY) == model, onClick = {
-                    runCatching { ai.configuration.selectModel(AiUseCase.PET_REPLY, model) }.onFailure { result = "模型选择未保存，请重试。" }
+                    runCatching { ai.configuration.selectModel(AiUseCase.PET_REPLY, model) }
+                        .onSuccess { selectionError = null }
+                        .onFailure { selectionError = "模型选择未保存，请重试。" }
                 }, label = { Text(model.displayName) })
             }
             item { HorizontalDivider(); Row { AiProvider.entries.forEach { entry ->
-                TextButton(onClick = { provider = entry; rawKeys = ""; result = null }) { Text(if (provider == entry) "✓ ${entry.displayName}" else entry.displayName) }
+                TextButton(onClick = { provider = entry; rawKeys = ""; selectionError = null; viewModel.clearAiImportResult() }) {
+                    Text(if (provider == entry) "✓ ${entry.displayName}" else entry.displayName)
+                }
             } } }
             item { OutlinedTextField(rawKeys, { rawKeys = it }, label = { Text("导入 ${provider.displayName} Key") }, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), maxLines = 3) }
             item { Button(enabled = rawKeys.isNotBlank(), onClick = {
                 val selectedProvider = provider
                 val importedRaw = rawKeys
                 rawKeys = ""
-                scope.launch {
-                    try {
-                        val imported = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ai.keys(selectedProvider).importBatch(importedRaw) }
-                        result = "已导入 ${imported.added} 个，重复 ${imported.duplicates} 个。"
-                        ai.validateKeys(selectedProvider, imported.importedIds)
-                    } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { result = "Key 导入或校验未完成，请重试。" }
-                }
+                selectionError = null
+                viewModel.importAndValidateKeys(ai, selectedProvider, importedRaw)
             }) { Text("导入并校验") } }
             items(summaries, key = { it.id }) { key -> Text("${key.displayName}  ${key.maskedKey}  ${when (key.validationState) {
                 ApiKeyValidationState.UNVERIFIED -> "未校验"
@@ -159,7 +156,10 @@ internal fun companionViewModel(repository: CompanionRepository): CompanionViewM
                 ApiKeyValidationState.NETWORK_ERROR -> "网络校验失败"
                 ApiKeyValidationState.RATE_LIMITED -> "暂时限流"
             }}") }
-            item { storageError?.let { Text(it, color = MaterialTheme.colorScheme.error) }; result?.let { Text(it) } }
+            item {
+                storageError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                (selectionError ?: importResult)?.let { Text(it) }
+            }
         }
     }, confirmButton = { TextButton(onClick = dismiss) { Text("完成") } })
 }

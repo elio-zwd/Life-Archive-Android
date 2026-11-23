@@ -21,6 +21,7 @@ internal fun CompanionEditorSheet(
     valid: Boolean,
     onDismiss: () -> Unit,
     onSave: suspend () -> Boolean,
+    errorMessage: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     var saving by remember { mutableStateOf(false) }
@@ -32,7 +33,7 @@ internal fun CompanionEditorSheet(
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).imePadding().padding(horizontal = 20.dp).testTag("pet-editor-sheet")) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
-            if (failed) Text("未保存，请核对后重试；若记忆已变化，请重新打开。", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            if (failed) Text(errorMessage ?: "未保存，请核对后重试；若记忆已变化，请重新打开。", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("pet-editor-error"))
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss, enabled = !saving) { Text("取消") }
                 Spacer(Modifier.width(8.dp))
@@ -49,22 +50,38 @@ internal fun CompanionEditorSheet(
 }
 
 @Composable
-internal fun MemoryEditorSheet(text: String, onText: (String) -> Unit, editing: Boolean, fromConversation: Boolean, onDismiss: () -> Unit, onSave: suspend () -> Boolean) {
-    CompanionEditorSheet(if (editing) "更正记忆" else "添加共同记忆", text.isNotBlank(), onDismiss, onSave) {
+internal fun MemoryEditorSheet(
+    text: String,
+    onText: (String) -> Unit,
+    editing: Boolean,
+    fromConversation: Boolean,
+    onDismiss: () -> Unit,
+    errorMessage: String? = null,
+    onSave: suspend () -> Boolean,
+) {
+    CompanionEditorSheet(if (editing) "更正记忆" else "添加共同记忆", text.isNotBlank(), onDismiss, onSave, errorMessage) {
         Text(if (fromConversation) "来自共同对话" else "手动添加", style = MaterialTheme.typography.labelMedium)
-        OutlinedTextField(text, { if (it.length <= 2000) onText(it) }, Modifier.fillMaxWidth().testTag("pet-memory-text"),
-            label = { Text("希望伙伴记住的事") }, minLines = 3, maxLines = 8)
+        OutlinedTextField(text, { onText(it.take(2000)) }, Modifier.fillMaxWidth().testTag("pet-memory-text"),
+            label = { Text("希望伙伴记住的事") }, minLines = 3, maxLines = 8,
+            supportingText = if (text.length >= 2000) { { Text("已达 2000 字上限") } } else null)
         Text(if (editing) "只更正这条记忆，原对话仍保留。" else "保存后，伙伴可以在后续交流中参考这条记忆。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-internal fun ProfileEditorSheet(profile: CompanionProfile, onDismiss: () -> Unit, onSave: suspend (String, String) -> Boolean) {
+internal fun ProfileEditorSheet(
+    profile: CompanionProfile,
+    onDismiss: () -> Unit,
+    errorMessage: String? = null,
+    onSave: suspend (String, String) -> Boolean,
+) {
     var name by rememberSaveable { mutableStateOf(profile.name) }
     var personality by rememberSaveable { mutableStateOf(profile.personality) }
-    CompanionEditorSheet("伙伴设定", name.isNotBlank() && personality.isNotBlank(), onDismiss, { onSave(name, personality) }) {
-        OutlinedTextField(name, { if (it.length <= 40) name = it }, Modifier.fillMaxWidth().testTag("pet-profile-name"), label = { Text("名字") }, singleLine = true)
-        OutlinedTextField(personality, { if (it.length <= 4000) personality = it }, Modifier.fillMaxWidth().testTag("pet-profile-personality"),
-            label = { Text("人格与相处方式") }, minLines = 3, maxLines = 8)
+    CompanionEditorSheet("伙伴设定", name.isNotBlank() && personality.isNotBlank(), onDismiss, { onSave(name, personality) }, errorMessage) {
+        OutlinedTextField(name, { name = it.take(40) }, Modifier.fillMaxWidth().testTag("pet-profile-name"), label = { Text("名字") }, singleLine = true,
+            supportingText = if (name.length >= 40) { { Text("已达 40 字上限") } } else null)
+        OutlinedTextField(personality, { personality = it.take(4000) }, Modifier.fillMaxWidth().testTag("pet-profile-personality"),
+            label = { Text("人格与相处方式") }, minLines = 3, maxLines = 8,
+            supportingText = if (personality.length >= 4000) { { Text("已达 4000 字上限") } } else null)
     }
 }

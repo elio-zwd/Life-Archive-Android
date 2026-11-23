@@ -17,6 +17,7 @@ class CompanionViewModelTest {
         var draftGate: CompletableDeferred<Unit>? = null
         var memoryGate: CompletableDeferred<Unit>? = null
         var memories = 0
+        var rememberError: Exception? = null
         val drafts = mutableListOf<String>()
         override suspend fun initialize() {}
         override suspend fun updateProfile(name: String, personality: String) {}
@@ -28,7 +29,7 @@ class CompanionViewModelTest {
         override suspend fun send(text: String, operationId: String): Boolean { sends++; sendGate.await(); return true }
         override suspend fun retry(messageId: String) = false
         override suspend fun cancel() {}
-        override suspend fun remember(text: String, sourceMessageId: String?) { memoryGate?.await(); memories++ }
+        override suspend fun remember(text: String, sourceMessageId: String?) { memoryGate?.await(); rememberError?.let { throw it }; memories++ }
         override suspend fun editMemory(id: String, revision: Long, text: String) = false
         override suspend fun deleteMemory(id: String, revision: Long) = false
     }
@@ -92,6 +93,19 @@ class CompanionViewModelTest {
             assertEquals("same-sheet", model.savedMemorySubmission.value)
             assertTrue(model.saveMemory(null, "重要的小事", null, "same-sheet"))
             assertEquals(1, repo.memories)
+        } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
+    @Test fun validationErrorMessageIsSurfacedAndOverlongDraftIsClipped() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = Repository().apply { rememberError = IllegalArgumentException("记忆已达 500 条，请先整理。") }
+        val model = CompanionViewModel(repo)
+        try {
+            runCurrent()
+            assertFalse(model.saveMemory(null, "第 501 条", null))
+            assertEquals("记忆已达 500 条，请先整理。", model.error.value)
+            model.draft("a".repeat(16_050)); runCurrent()
+            assertEquals(16_000, model.draft.value.length)
+            assertEquals(16_000, repo.drafts.last().length)
         } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
     }
 }

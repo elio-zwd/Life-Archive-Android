@@ -38,7 +38,8 @@ internal fun CompanionConversation(
     val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val colors = MaterialTheme.colorScheme
     BoxWithConstraints(Modifier.fillMaxSize().testTag("pet-conversation")) {
-        val showStage = !collapsed && !keyboardOpen && maxHeight >= 280.dp
+        val stageFits = !keyboardOpen && maxHeight >= 280.dp
+        val showStage = !collapsed && stageFits
         val stageHeight = maxHeight * 0.68f
         val panelHeight = maxHeight * 0.48f
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colors.surfaceContainerHigh, colors.surface)))) {
@@ -46,7 +47,7 @@ internal fun CompanionConversation(
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(if (touched) "嗯，我在。" else "Hiyori · 技术样板", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
-                    TextButton(onClick = { collapsed = !collapsed }, modifier = Modifier.testTag("pet-avatar-toggle")) { Text(if (collapsed) "展开形象" else "收起形象") }
+                    if (collapsed || stageFits) TextButton(onClick = { collapsed = !collapsed }, modifier = Modifier.testTag("pet-avatar-toggle")) { Text(if (collapsed) "展开形象" else "收起形象") }
                 }
                 if (showStage) Spacer(Modifier.weight(1f))
                 Surface(

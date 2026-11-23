@@ -31,7 +31,7 @@ fun CompanionDock(repository: CompanionRepository, expanded: Boolean, onExpand: 
             Surface(Modifier.weight(1f), shape = RoundedCornerShape(18.dp), tonalElevation = 2.dp) {
                 Text(bubble.take(if (expanded) 180 else 60), Modifier.padding(10.dp), maxLines = if (expanded) 5 else 3, style = MaterialTheme.typography.bodySmall)
             }
-            CompanionAvatar(state, Modifier.width(if (expanded) 104.dp else 72.dp).height(if (expanded) 144.dp else 154.dp), onTap = { touched = true })
+            CompanionAvatar(state, Modifier.width(if (expanded) 104.dp else 72.dp).height(if (expanded) 144.dp else 154.dp), onTap = { touched = true }, allowParentScroll = true)
         }
         if (expanded) Surface(shape = RoundedCornerShape(22.dp), tonalElevation = 4.dp, modifier = Modifier.testTag("in-app-companion-dialogue")) {
             Column(Modifier.padding(10.dp).imePadding()) {
@@ -39,8 +39,13 @@ fun CompanionDock(repository: CompanionRepository, expanded: Boolean, onExpand: 
                 LaunchedEffect(draft) {
                     if (input.text != draft) input = TextFieldValue(draft, TextRange(draft.length))
                 }
-                OutlinedTextField(input, { if (it.text.length <= 16_000) { input = it; model.draft(it.text) } },
-                    Modifier.fillMaxWidth().testTag("in-app-companion-input"), label = { Text("和伙伴说说话") }, maxLines = 3)
+                OutlinedTextField(input, {
+                    val clipped = if (it.text.length <= 16_000) it else it.copy(
+                        text = it.text.take(16_000),
+                        selection = TextRange(minOf(it.selection.start, 16_000), minOf(it.selection.end, 16_000)),
+                    )
+                    input = clipped; model.draft(clipped.text)
+                }, Modifier.fillMaxWidth().testTag("in-app-companion-input"), label = { Text("和伙伴说说话") }, maxLines = 3)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (state.generating) TextButton(onClick = { model.cancel() }) { Text("停止") }

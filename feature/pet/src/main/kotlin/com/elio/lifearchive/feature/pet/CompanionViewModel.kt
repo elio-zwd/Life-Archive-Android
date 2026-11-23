@@ -2,6 +2,8 @@ package com.elio.lifearchive.feature.pet
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elio.jianyu.network.AiProvider
+import com.elio.jianyu.network.AiServices
 import com.elio.lifearchive.domain.pet.*
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -12,7 +14,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class CompanionViewModel(private val repository: CompanionRepository) : ViewModel() {
     val state = repository.state
@@ -26,6 +30,8 @@ class CompanionViewModel(private val repository: CompanionRepository) : ViewMode
     private var memorySubmission: Pair<String, Deferred<Boolean>>? = null
     private val savedMemorySubmissionMutable = MutableStateFlow<String?>(null)
     val savedMemorySubmission = savedMemorySubmissionMutable.asStateFlow()
+    private val aiImportResultMutable = MutableStateFlow<String?>(null)
+    val aiImportResult = aiImportResultMutable.asStateFlow()
     init { initialize() }
     init {
         viewModelScope.launch {
@@ -39,12 +45,13 @@ class CompanionViewModel(private val repository: CompanionRepository) : ViewMode
         mutableDraft.value = repository.state.value.profile.draft
     }
     fun draft(value: String) {
-        if (value.length > 16_000) return
-        mutableDraft.value = value
+        val clipped = value.take(16_000)
+        if (clipped == mutableDraft.value) return
+        mutableDraft.value = clipped
         val previous = draftWrite
         draftWrite = action {
-            previous?.join(); repository.saveDraft(value)
-            if (mutableDraft.value == value) mutableDraft.value = repository.state.value.profile.draft
+            previous?.join(); repository.saveDraft(clipped)
+            if (mutableDraft.value == clipped) mutableDraft.value = repository.state.value.profile.draft
         }
     }
     fun send() {
@@ -91,12 +98,23 @@ class CompanionViewModel(private val repository: CompanionRepository) : ViewMode
     suspend fun saveProfile(name: String, personality: String): Boolean = save {
         repository.updateProfile(name, personality); true
     }
+    fun clearAiImportResult() { aiImportResultMutable.value = null }
+    fun importAndValidateKeys(ai: AiServices, provider: AiProvider, rawKeys: String): Job = viewModelScope.launch {
+        try {
+            val imported = withContext(Dispatchers.IO) { ai.keys(provider).importBatch(rawKeys) }
+            aiImportResultMutable.value = "已导入 ${imported.added} 个，重复 ${imported.duplicates} 个。"
+            ai.validateKeys(provider, imported.importedIds)
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { aiImportResultMutable.value = "Key 导入或校验未完成，请重试。" }
+    }
     private suspend fun save(block: suspend () -> Boolean): Boolean = try { block() }
     catch (cancelled: CancellationException) { throw cancelled }
+    catch (error: IllegalArgumentException) { mutableError.value = error.message?.takeIf { it.isNotBlank() } ?: "输入内容不符合要求，请核对后重试。"; false }
     catch (_: Exception) { mutableError.value = "操作未完成，请重试。"; false }
     private fun action(block: suspend () -> Unit): Job = viewModelScope.launch {
         try { block() }
         catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: IllegalArgumentException) { mutableError.value = error.message?.takeIf { it.isNotBlank() } ?: "输入内容不符合要求，请核对后重试。" }
         catch (_: Exception) { mutableError.value = "操作未完成，请重试。" }
     }
 }
