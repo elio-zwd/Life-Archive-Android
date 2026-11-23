@@ -179,4 +179,19 @@ class CompanionLayoutsTest {
         assertEquals("local-tororo", deletedId)
         compose.onNodeWithTag("pet-model-notice").assertTextEquals("已导入「Tororo」并切换。")
     }
+
+    @Test fun desktopSettingsDialogTogglesAutoPassthroughAndAutoWalk() {
+        var saved: OverlaySettings? = null
+        compose.setContent {
+            MaterialTheme {
+                DesktopCompanionSettings(OverlaySettings(autoPassthrough = true, autoWalk = true), dismiss = {}, save = { saved = it })
+            }
+        }
+        compose.onNodeWithTag("pet-overlay-passthrough").performScrollTo().performClick()
+        compose.onNodeWithTag("pet-overlay-autowalk").performScrollTo().performClick()
+        compose.onNodeWithText("保存").performClick()
+        assertNotNull(saved)
+        assertFalse(saved!!.autoPassthrough)
+        assertFalse(saved!!.autoWalk)
+    }
 }

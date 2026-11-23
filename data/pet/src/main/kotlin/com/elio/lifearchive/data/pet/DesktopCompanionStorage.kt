@@ -15,6 +15,8 @@ internal fun decodeOverlay(raw: String?): OverlaySettings {
         mutedUntil = long("mutedUntil"), lastGreetingAt = long("lastGreetingAt"),
         greetingDay = obj["day"]?.jsonPrimitive?.contentOrNull ?: "", greetingsToday = long("count").toInt().coerceIn(0, 4),
         screenOffAt = long("screenOffAt"),
+        autoPassthrough = obj["autoPassthrough"]?.jsonPrimitive?.booleanOrNull ?: true,
+        autoWalk = obj["autoWalk"]?.jsonPrimitive?.booleanOrNull ?: true,
     ).normalized()
 }
 
@@ -23,6 +25,7 @@ internal fun encodeOverlay(value: OverlaySettings): String = buildJsonObject {
     put("mode", value.greetingMode.name); put("quietStart", value.quietStartHour); put("quietEnd", value.quietEndHour)
     put("mutedUntil", value.mutedUntil); put("lastGreetingAt", value.lastGreetingAt)
     put("day", value.greetingDay); put("count", value.greetingsToday); put("screenOffAt", value.screenOffAt)
+    put("autoPassthrough", value.autoPassthrough); put("autoWalk", value.autoWalk)
 }.toString()
 
 internal fun parseCompanionLines(raw: String): List<CompanionLine> = Json.parseToJsonElement(raw).jsonArray.map { element ->

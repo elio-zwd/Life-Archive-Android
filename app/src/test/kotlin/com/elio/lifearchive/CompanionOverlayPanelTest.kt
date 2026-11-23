@@ -73,4 +73,20 @@ class CompanionOverlayPanelTest {
             assertTrue((chat.send.parent as View).bottom <= chat.height)
         }
     }
+
+    @Test fun overlayWindowLayoutAdaptsWidthToModelAspectAndExpandsFullWidthInPassthrough() {
+        val bounds = Rect(10, 40, 1090, 2040)
+        val settings = OverlaySettings(heightFraction = 0.25f, xFraction = 0.5f, yFraction = 0.5f)
+        val narrow = overlayWindowLayout(bounds, settings, modelAspect = 0.6f, passthrough = false, minHeightPx = 100)
+        val wide = overlayWindowLayout(bounds, settings, modelAspect = 1.2f, passthrough = false, minHeightPx = 100)
+        assertEquals(500, narrow.height)
+        assertEquals(300, narrow.width)
+        assertEquals(600, wide.width)
+        assertTrue(wide.width > narrow.width)
+
+        val full = overlayWindowLayout(bounds, settings, modelAspect = 0.75f, passthrough = true, minHeightPx = 100)
+        assertEquals(bounds.left, full.x)
+        assertEquals(bounds.width(), full.width)
+        assertEquals(500, full.height)
+    }
 }

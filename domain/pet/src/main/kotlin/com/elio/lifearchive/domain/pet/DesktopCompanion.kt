@@ -15,6 +15,8 @@ data class OverlaySettings(
     val greetingDay: String = "",
     val greetingsToday: Int = 0,
     val screenOffAt: Long = 0,
+    val autoPassthrough: Boolean = true,
+    val autoWalk: Boolean = true,
 ) {
     fun normalized() = copy(heightFraction = heightFraction.takeIf { it.isFinite() }?.coerceIn(.15f, .4f) ?: .25f,
         xFraction = xFraction.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: .85f,

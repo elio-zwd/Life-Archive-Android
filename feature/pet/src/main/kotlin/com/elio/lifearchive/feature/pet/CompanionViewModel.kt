@@ -107,7 +107,8 @@ class CompanionViewModel(private val repository: CompanionRepository) : ViewMode
     fun clearModelNotice() { mutableModelNotice.value = null }
     fun overlaySettings(value: OverlaySettings) = action {
         repository.updateOverlay { it.copy(heightFraction = value.heightFraction, greetingMode = value.greetingMode,
-            quietStartHour = value.quietStartHour, quietEndHour = value.quietEndHour) }
+            quietStartHour = value.quietStartHour, quietEndHour = value.quietEndHour,
+            autoPassthrough = value.autoPassthrough, autoWalk = value.autoWalk) }
     }
     fun memory(text: String, source: String? = null) = action { repository.remember(text, source) }
     fun edit(memory: CompanionMemory, text: String) = action {

@@ -17,7 +17,13 @@ import com.elio.lifearchive.domain.pet.*
 internal class CompanionOverlayPanel(context: Context) : FrameLayout(context) {
     val model = Live2DView(context)
     init { model.setCompactFraming(true); addView(model, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
-    fun release() { model.setActive(false); model.onStatus = {}; model.onTap = {}; model.setOnTouchListener(null) }
+    fun release() {
+        model.setActive(false)
+        model.onStatus = {}
+        model.onTap = {}
+        model.onModelLoaded = {}
+        model.setOnTouchListener(null)
+    }
 }
 
 internal class CompanionOverlayChat(context: Context) : LinearLayout(context) {
@@ -82,9 +88,28 @@ internal class CompanionOverlayChat(context: Context) : LinearLayout(context) {
 }
 
 internal data class OverlayPlacement(val x: Int, val y: Int)
+internal data class OverlayWindowBounds(val x: Int, val y: Int, val width: Int, val height: Int)
+
 internal fun overlayPlacement(x: Int, y: Int, width: Int, height: Int, bounds: Rect, dock: Boolean): OverlayPlacement {
     val right = (bounds.right - width).coerceAtLeast(bounds.left)
     val bottom = (bounds.bottom - height).coerceAtLeast(bounds.top)
     val safeX = x.coerceIn(bounds.left, right)
     return OverlayPlacement(if (!dock) safeX else if (safeX - bounds.left < right - safeX) bounds.left else right, y.coerceIn(bounds.top, bottom))
+}
+
+/** 根据模型真实画布比例与穿透状态计算悬浮窗位置与尺寸；穿透时横向铺满屏幕以便完整呈现横向特效与走动。 */
+internal fun overlayWindowLayout(
+    bounds: Rect,
+    settings: OverlaySettings,
+    modelAspect: Float,
+    passthrough: Boolean,
+    minHeightPx: Int,
+): OverlayWindowBounds {
+    val safeAspect = modelAspect.takeIf { it.isFinite() }?.coerceIn(0.55f, 1.80f) ?: 0.75f
+    val height = (bounds.height() * settings.heightFraction).toInt().coerceIn(minHeightPx.coerceAtMost(bounds.height()), bounds.height())
+    val width = if (passthrough) bounds.width()
+    else (height * safeAspect).toInt().coerceIn((minHeightPx * 0.55f).toInt().coerceAtMost(bounds.width()), bounds.width())
+    val x = if (passthrough) bounds.left else bounds.left + ((bounds.width() - width) * settings.xFraction).toInt()
+    val y = bounds.top + ((bounds.height() - height) * settings.yFraction).toInt()
+    return OverlayWindowBounds(x, y, width, height)
 }

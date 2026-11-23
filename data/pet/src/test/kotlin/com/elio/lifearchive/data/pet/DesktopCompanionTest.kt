@@ -147,4 +147,14 @@ class DesktopCompanionTest {
             assertEquals(GreetingMode.OFF, repo.state.value.overlay.greetingMode)
         } finally { scope.cancel(); database.close() }
     }
+
+    @Test fun passthroughAndAutoWalkSettingsPersistAndDefaultToEnabled() = runBlocking {
+        fixture(AiGateway { error("不能联网") }) { repo ->
+            assertTrue(repo.state.value.overlay.autoPassthrough)
+            assertTrue(repo.state.value.overlay.autoWalk)
+            repo.updateOverlay { it.copy(autoPassthrough = false, autoWalk = false) }
+            assertFalse(repo.state.value.overlay.autoPassthrough)
+            assertFalse(repo.state.value.overlay.autoWalk)
+        }
+    }
 }

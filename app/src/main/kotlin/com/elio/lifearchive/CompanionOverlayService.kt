@@ -5,6 +5,10 @@ import android.content.*
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.*
 import android.provider.Settings
 import android.view.*
@@ -14,6 +18,7 @@ import androidx.compose.ui.graphics.toArgb
 import com.elio.lifearchive.core.designsystem.DocumentPalette
 import com.elio.lifearchive.core.designsystem.colors
 import com.elio.lifearchive.core.live2d.Live2DModelCatalog
+import com.elio.lifearchive.core.live2d.Live2DModelMetrics
 import com.elio.lifearchive.core.live2d.Live2DModelSource
 import com.elio.lifearchive.core.live2d.Live2DModelSpec
 import com.elio.lifearchive.core.preferences.*
@@ -26,6 +31,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import kotlinx.coroutines.*
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /** 服务只管理系统窗口；聊天和主动问候分别通过伙伴公开接口提交。 */
 @AndroidEntryPoint
@@ -34,6 +40,7 @@ class CompanionOverlayService : Service() {
     @Inject lateinit var preferences: PreferencesRepository
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var wm: WindowManager
+    private var sensorManager: SensorManager? = null
     private var panel: CompanionOverlayPanel? = null
     private var repository: CompanionRepository? = null
     private var gesture: CompanionTouchGesture? = null
@@ -41,12 +48,17 @@ class CompanionOverlayService : Service() {
     private var chat: CompanionOverlayChat? = null
     private var dismissJob: Job? = null
     private var greetingJob: Job? = null
+    private var passthroughJob: Job? = null
     private var draftWrite: Job? = null
     private var draftVersion = 0L
     private var sending = false
     private var palette = DocumentPalette.BLUE
     private var pref: UserPreferences? = null
     private var lastSettings: OverlaySettings? = null
+    private var modelMetrics = Live2DModelMetrics()
+    private var passthrough = false
+    private var shakeRegistered = false
+    private var lastShakeAt = 0L
     private var initialized = false
     private var dragging = false
     private var dragStartX = 0
@@ -59,15 +71,33 @@ class CompanionOverlayService : Service() {
     private var roleBounds = Rect()
     private val params = windowParams(false)
 
+    private val shakeListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            if (!passthrough || !unlocked()) return
+            val gx = event.values[0] / SensorManager.GRAVITY_EARTH
+            val gy = event.values[1] / SensorManager.GRAVITY_EARTH
+            val gz = event.values[2] / SensorManager.GRAVITY_EARTH
+            val gForce = sqrt((gx * gx + gy * gy + gz * gz).toDouble()).toFloat()
+            val now = SystemClock.elapsedRealtime()
+            if (gForce >= SHAKE_G_THRESHOLD && now - lastShakeAt > 1_200L) {
+                lastShakeAt = now
+                wakeFromPassthrough(showHint = true)
+            }
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+    }
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                hideAuxiliary(); greetingJob?.cancel(); gesture?.cancel()
+                hideAuxiliary(); greetingJob?.cancel(); passthroughJob?.cancel(); gesture?.cancel()
+                unregisterShake()
                 panel?.visibility = View.INVISIBLE; panel?.model?.setActive(false)
                 val now = System.currentTimeMillis()
                 scope.launch { safeUpdate { it.copy(screenOffAt = now) } }
             } else if (unlocked()) {
                 panel?.visibility = View.VISIBLE; panel?.model?.setActive(true)
+                if (passthrough) registerShake() else scheduleAutoPassthrough()
                 if (intent?.action == Intent.ACTION_USER_PRESENT) greet(CompanionTrigger.RETURN)
             }
         }
@@ -76,6 +106,7 @@ class CompanionOverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         wm = getSystemService(WindowManager::class.java)
+        sensorManager = getSystemService(SensorManager::class.java)
         orientation = resources.configuration.orientation
         val filter = IntentFilter().apply { addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT) }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(screenReceiver, filter, RECEIVER_NOT_EXPORTED)
@@ -83,19 +114,44 @@ class CompanionOverlayService : Service() {
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == STOP) { stopAfterDraft(); return START_NOT_STICKY }
+        if (intent?.action == WAKE) {
+            if (panel != null) wakeFromPassthrough(showHint = true)
+            return START_NOT_STICKY
+        }
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return START_NOT_STICKY }
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "桌面陪伴", NotificationManager.IMPORTANCE_LOW))
-        val stop = PendingIntent.getService(this, 1, stopIntent(this), PendingIntent.FLAG_IMMUTABLE)
-        val open = PendingIntent.getActivity(this, 2, openIntent(), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         try {
-            startForeground(1024, Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("伙伴正在桌面陪伴").setContentText("轻触互动，按住一秒可移动或打开菜单。")
-                .setContentIntent(open).setOngoing(true).addAction(Notification.Action.Builder(null, "停止", stop).build()).build())
+            startForeground(NOTIFICATION_ID, buildNotification())
         } catch (_: RuntimeException) { stopSelf(); return START_NOT_STICKY }
         running = true
         if (panel == null) attach()
         return START_NOT_STICKY
+    }
+
+    private fun buildNotification(): Notification {
+        val stop = PendingIntent.getService(this, 1, stopIntent(this), PendingIntent.FLAG_IMMUTABLE)
+        val open = PendingIntent.getActivity(this, 2, openIntent(), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val builder = Notification.Builder(this, CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(if (passthrough) "伙伴已进入穿透模式" else "伙伴正在桌面陪伴")
+            .setContentText(
+                if (passthrough) "点击穿透到底层应用；点「唤醒互动」或轻摇手机恢复。"
+                else "轻触互动，按住一秒可移动或打开菜单。"
+            )
+            .setContentIntent(open)
+            .setOngoing(true)
+        if (passthrough) {
+            val wake = PendingIntent.getService(this, 3, wakeIntent(this), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            builder.addAction(Notification.Action.Builder(null, "唤醒互动", wake).build())
+        }
+        builder.addAction(Notification.Action.Builder(null, "停止", stop).build())
+        return builder.build()
+    }
+
+    private fun updateNotification() {
+        if (!running) return
+        runCatching { getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification()) }
     }
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
@@ -104,6 +160,12 @@ class CompanionOverlayService : Service() {
         placeRole(OverlaySettings())
         view.model.onStatus = { if (it != null) bubble("形象暂时无法显示，可关闭后重试。") }
         view.model.onTap = { react(CompanionTrigger.BODY) }
+        view.model.onModelLoaded = { metrics ->
+            modelMetrics = metrics
+            val current = lastSettings ?: OverlaySettings()
+            if (!dragging) placeRole(current)
+            syncStageAndWalk(current)
+        }
         view.model.contentDescription = "桌面伙伴，轻触互动，滑动抚摸，按住一秒移动或打开菜单"
         view.model.setOnLongClickListener { showMenu(); true }
         gesture = CompanionTouchGesture(view.model,
@@ -120,13 +182,15 @@ class CompanionOverlayService : Service() {
             tap = { y -> react(if (y < view.model.height * .36f) CompanionTrigger.HEAD else CompanionTrigger.BODY) },
             drag = { dx, dy ->
                 dragging = true
+                passthroughJob?.cancel()
                 val point = overlayPlacement(dragStartX + dx.toInt(), dragStartY + dy.toInt(), params.width, params.height, safeBounds(), false)
                 params.x = point.x; params.y = point.y; updateRole()
             },
-            finishDrag = { dragging = false; savePosition() },
+            finishDrag = { dragging = false; savePosition(); scheduleAutoPassthrough() },
             menu = { showMenu() },
             interaction = {
                 lastInteraction = SystemClock.elapsedRealtime(); greetingJob?.cancel(); hideAuxiliary()
+                scheduleAutoPassthrough()
                 dragStartX = params.x; dragStartY = params.y
             },
         )
@@ -144,6 +208,12 @@ class CompanionOverlayService : Service() {
                     view.model.setModel(state.profile.modelId)
                     if (!dragging && state.overlay != lastSettings) placeRole(state.overlay)
                     lastSettings = state.overlay
+                    if (!state.overlay.autoPassthrough && passthrough) {
+                        wakeFromPassthrough(showHint = false)
+                    } else if (state.overlay.autoPassthrough && !passthrough && initialized) {
+                        scheduleAutoPassthrough()
+                    }
+                    syncStageAndWalk(state.overlay)
                     chat?.render(state, updateDraft = draftWrite?.isActive != true && !sending)
                     val message = state.messages.lastOrNull { it.role == MessageRole.COMPANION }
                     val cue = message?.id.toString() + ":" + message?.status
@@ -155,6 +225,7 @@ class CompanionOverlayService : Service() {
                         initialized = true
                         view.visibility = if (unlocked()) View.VISIBLE else View.INVISIBLE
                         view.model.setActive(unlocked()); greet(CompanionTrigger.START)
+                        scheduleAutoPassthrough()
                     }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -164,10 +235,73 @@ class CompanionOverlayService : Service() {
         scope.launch { while (isActive) { delay(1_000); if (!Settings.canDrawOverlays(this@CompanionOverlayService)) { stopSelf(); break } } }
     }
 
+    private fun scheduleAutoPassthrough() {
+        passthroughJob?.cancel()
+        val settings = lastSettings ?: return
+        if (!initialized || !settings.autoPassthrough || passthrough || dragging || auxiliary != null || !unlocked()) return
+        passthroughJob = scope.launch {
+            delay(PASSTHROUGH_IDLE_MS)
+            if (initialized && (lastSettings?.autoPassthrough == true) && !passthrough && !dragging && auxiliary == null && unlocked()) {
+                enterPassthrough()
+            }
+        }
+    }
+
+    private fun enterPassthrough() {
+        if (passthrough) return
+        passthroughJob?.cancel()
+        hideAuxiliary()
+        gesture?.cancel()
+        passthrough = true
+        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        val settings = lastSettings ?: OverlaySettings()
+        placeRole(settings)
+        syncStageAndWalk(settings)
+        registerShake()
+        updateNotification()
+    }
+
+    private fun wakeFromPassthrough(showHint: Boolean) {
+        if (!passthrough) {
+            scheduleAutoPassthrough()
+            return
+        }
+        passthrough = false
+        unregisterShake()
+        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        val settings = lastSettings ?: OverlaySettings()
+        placeRole(settings)
+        syncStageAndWalk(settings)
+        updateNotification()
+        lastInteraction = SystemClock.elapsedRealtime()
+        if (showHint) bubble("已唤醒互动，5 秒无操作后自动恢复穿透。")
+        scheduleAutoPassthrough()
+    }
+
+    private fun syncStageAndWalk(settings: OverlaySettings) {
+        val view = panel?.model ?: return
+        view.setStage(fullWidth = passthrough, xFraction = settings.xFraction)
+        view.setAutoWalk(settings.autoWalk && modelMetrics.hasLocomotion && !dragging && auxiliary == null)
+    }
+
+    private fun registerShake() {
+        if (shakeRegistered) return
+        val sm = sensorManager ?: return
+        val accel = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return
+        shakeRegistered = sm.registerListener(shakeListener, accel, SensorManager.SENSOR_DELAY_UI)
+    }
+
+    private fun unregisterShake() {
+        if (!shakeRegistered) return
+        sensorManager?.unregisterListener(shakeListener)
+        shakeRegistered = false
+    }
+
     private fun react(trigger: CompanionTrigger) {
         val now = SystemClock.elapsedRealtime()
         if (now - lastReaction < 180) return
         lastReaction = now; panel?.model?.react(trigger.name)
+        scheduleAutoPassthrough()
         if (now - lastTouchBubble >= 12_000 && repository != null) {
             lastTouchBubble = now; bubble(repository!!.localReaction(trigger).text)
         }
@@ -189,9 +323,11 @@ class CompanionOverlayService : Service() {
     }
 
     private fun showMenu() {
+        passthroughJob?.cancel()
         val body = card()
         menuItem(body, "聊天", null) { showChat() }
         menuItem(body, "调整大小", null) { showSize() }
+        menuItem(body, "立即进入穿透", null) { enterPassthrough() }
         menuItem(body, "安静一小时", null) {
             scope.launch { safeUpdate { it.copy(mutedUntil = System.currentTimeMillis() + 3_600_000) } }; hideAuxiliary()
         }
@@ -200,6 +336,7 @@ class CompanionOverlayService : Service() {
         showAuxiliary(body, dp(178), false, 8_000)
     }
     private fun showSize() {
+        passthroughJob?.cancel()
         val body = card()
         val value = TextView(this).apply { textSize = 14f; setTextColor(palette.colors.ink.toArgb()) }
         body.addView(value)
@@ -218,8 +355,15 @@ class CompanionOverlayService : Service() {
         showAuxiliary(body, dp(232), false)
     }
     private fun showSettings() {
+        passthroughJob?.cancel()
         val body = card()
         val settings = repository?.state?.value?.overlay ?: OverlaySettings()
+        menuItem(body, (if (settings.autoPassthrough) "✓ " else "") + "5 秒无操作自动穿透", null) {
+            scope.launch { safeUpdate { it.copy(autoPassthrough = !it.autoPassthrough) }; showSettings() }
+        }
+        menuItem(body, (if (settings.autoWalk) "✓ " else "") + "支持时自动横向走动", null) {
+            scope.launch { safeUpdate { it.copy(autoWalk = !it.autoWalk) }; showSettings() }
+        }
         GreetingMode.entries.forEach { mode ->
             menuItem(body, (if (settings.greetingMode == mode) "✓ " else "") + when (mode) {
                 GreetingMode.OFF -> "关闭主动发言"; GreetingMode.LOCAL -> "本地短句"; GreetingMode.LOCAL_AI -> "本地＋AI"
@@ -242,6 +386,7 @@ class CompanionOverlayService : Service() {
 
     private fun showChat() {
         greetingJob?.cancel()
+        passthroughJob?.cancel()
         val view = CompanionOverlayChat(this)
         view.palette(palette)
         repository?.state?.value?.let { view.render(it) }
@@ -353,6 +498,8 @@ class CompanionOverlayService : Service() {
             runCatching { wm.removeViewImmediate(view) }
         }
         auxiliary = null; chat = null
+        lastSettings?.let { syncStageAndWalk(it) }
+        scheduleAutoPassthrough()
     }
     private fun safeBounds(): Rect = if (Build.VERSION.SDK_INT >= 30) {
         val metrics = wm.currentWindowMetrics
@@ -367,13 +514,15 @@ class CompanionOverlayService : Service() {
     private fun placeRole(settings: OverlaySettings) {
         val bounds = safeBounds()
         roleBounds = Rect(bounds)
-        params.height = (bounds.height() * settings.heightFraction).toInt().coerceIn(dp(72).coerceAtMost(bounds.height()), bounds.height())
-        params.width = minOf((params.height * .42f).toInt(), bounds.width())
-        params.x = bounds.left + ((bounds.width() - params.width) * settings.xFraction).toInt()
-        params.y = bounds.top + ((bounds.height() - params.height) * settings.yFraction).toInt()
+        val target = overlayWindowLayout(bounds, settings, modelMetrics.canvasAspect, passthrough, dp(72))
+        params.width = target.width
+        params.height = target.height
+        params.x = target.x
+        params.y = target.y
         updateRole()
     }
     private fun savePosition() {
+        if (passthrough) return
         val bounds = safeBounds()
         val x = (params.x - bounds.left).toFloat() / (bounds.width() - params.width).coerceAtLeast(1)
         val y = (params.y - bounds.top).toFloat() / (bounds.height() - params.height).coerceAtLeast(1)
@@ -417,14 +566,20 @@ class CompanionOverlayService : Service() {
     ).apply { gravity = Gravity.TOP or Gravity.START }
     override fun onDestroy() {
         running = false
+        passthroughJob?.cancel(); unregisterShake()
         gesture?.cancel(); hideAuxiliary(); scope.cancel(); panel?.release()
         panel?.let { runCatching { wm.removeViewImmediate(it) } }; panel = null
         unregisterReceiver(screenReceiver); stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy()
     }
     companion object {
         private const val CHANNEL = "companion-overlay"
+        private const val NOTIFICATION_ID = 1024
         private const val STOP = "companion.stop"
+        private const val WAKE = "companion.wake"
+        private const val PASSTHROUGH_IDLE_MS = 5_000L
+        private const val SHAKE_G_THRESHOLD = 2.15f
         @Volatile internal var running = false
         internal fun stopIntent(context: Context): Intent = Intent(context, CompanionOverlayService::class.java).setAction(STOP)
+        internal fun wakeIntent(context: Context): Intent = Intent(context, CompanionOverlayService::class.java).setAction(WAKE)
     }
 }
