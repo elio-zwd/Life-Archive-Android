@@ -42,7 +42,7 @@ desktop.ini
 logs/
 
 # Temporary / scratch files
-work/
+/work/
 *.tmp
 *.swp
 
