@@ -28,6 +28,7 @@ data class CompanionState(
     val profile: CompanionProfile = CompanionProfile(),
     val messages: List<CompanionMessage> = emptyList(),
     val memories: List<CompanionMemory> = emptyList(),
+    val overlay: OverlaySettings = OverlaySettings(),
 ) {
     val generating: Boolean get() = messages.any { it.status == ReplyStatus.GENERATING }
 }
@@ -44,4 +45,7 @@ interface CompanionRepository {
     suspend fun remember(text: String, sourceMessageId: String? = null)
     suspend fun editMemory(id: String, revision: Long, text: String): Boolean
     suspend fun deleteMemory(id: String, revision: Long): Boolean
+    suspend fun updateOverlay(transform: (OverlaySettings) -> OverlaySettings)
+    fun localReaction(trigger: CompanionTrigger): CompanionGreeting
+    suspend fun greeting(trigger: CompanionTrigger, now: Long, hour: Int, day: String): CompanionGreeting?
 }

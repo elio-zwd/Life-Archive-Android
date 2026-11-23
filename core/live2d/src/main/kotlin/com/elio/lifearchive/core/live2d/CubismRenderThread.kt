@@ -27,6 +27,7 @@ internal class CubismRenderThread {
         var egl = EGL14.EGL_NO_SURFACE
         var model: NativeCubismModel? = null
         var mood = "CALM"
+        var compactFraming = false
         val cues = CueTracker()
         lateinit var session: RenderSession
     }
@@ -54,6 +55,12 @@ internal class CubismRenderThread {
     }
     fun touch(id: Any, x: Float, y: Float, tapped: Boolean) = handler.post {
         windows[id]?.let { window -> guarded(window) { window.model?.touch(x, y, tapped) } }
+    }
+    fun react(id: Any, kind: String) = handler.post {
+        windows[id]?.let { window -> guarded(window) { window.model?.react(kind) } }
+    }
+    fun framing(id: Any, enabled: Boolean) = handler.post {
+        windows[id]?.let { window -> window.compactFraming = enabled; window.model?.compactFraming(enabled) }
     }
     // SurfaceTexture 归引擎接管，销毁 EGLSurface 后才 release，避免 UI 线程与 swapBuffers 竞争。
     fun detach(id: Any, texture: SurfaceTexture) = handler.post {
@@ -88,7 +95,7 @@ internal class CubismRenderThread {
             window.egl = EGL14.eglCreateWindowSurface(display, config, window.surface, intArrayOf(EGL14.EGL_NONE), 0)
             check(window.egl != EGL14.EGL_NO_SURFACE)
             current(window)
-            window.model = NativeCubismModel.create(window.assets, window.width, window.height).also { it.cue(window.mood) }
+            window.model = NativeCubismModel.create(window.assets, window.width, window.height).also { it.cue(window.mood); it.compactFraming(window.compactFraming) }
             window.ready()
         } catch (error: Exception) { release(window); throw error }
         catch (error: LinkageError) { release(window); throw error }

@@ -73,6 +73,10 @@ class CompanionViewModel(private val repository: CompanionRepository) : ViewMode
     fun cancel() = action { repository.cancel() }
     fun profile(name: String, personality: String) = action { repository.updateProfile(name, personality) }
     fun visible(visible: Boolean) = action { repository.setInAppVisible(visible) }
+    fun overlaySettings(value: OverlaySettings) = action {
+        repository.updateOverlay { it.copy(heightFraction = value.heightFraction, greetingMode = value.greetingMode,
+            quietStartHour = value.quietStartHour, quietEndHour = value.quietEndHour) }
+    }
     fun memory(text: String, source: String? = null) = action { repository.remember(text, source) }
     fun edit(memory: CompanionMemory, text: String) = action {
         if (!repository.editMemory(memory.id, memory.revision, text)) mutableError.value = "记忆已变化，请重新打开后编辑。"

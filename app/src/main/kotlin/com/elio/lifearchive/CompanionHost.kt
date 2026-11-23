@@ -18,6 +18,7 @@ internal fun CompanionHost(
     provider: Provider<CompanionRepository>, onBar: (Int) -> Unit, onVisible: (Boolean) -> Unit,
     onOverlay: () -> Unit, onStopOverlay: () -> Unit, onLife: () -> Unit,
     openChatRequest: Long = 0,
+    openSettingsRequest: Long = 0,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
     var retry by remember { mutableIntStateOf(0) }
@@ -30,7 +31,7 @@ internal fun CompanionHost(
         catch (error: Exception) { Result.failure(error) }
     }
     val ready = result?.getOrNull()
-    if (ready != null) CompanionRoute(ready.first, ready.second, onBar, onOverlay, onStopOverlay, onVisible, openChatRequest)
+    if (ready != null) CompanionRoute(ready.first, ready.second, onBar, onOverlay, onStopOverlay, onVisible, openChatRequest, openSettingsRequest)
     else Surface(Modifier.fillMaxSize()) {
         Column(Modifier.safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
             Text(if (result == null) "正在打开伙伴…" else "伙伴暂时无法打开，请重试。")

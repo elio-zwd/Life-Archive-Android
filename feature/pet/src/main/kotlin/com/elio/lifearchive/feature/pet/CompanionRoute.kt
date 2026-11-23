@@ -28,6 +28,7 @@ fun CompanionRoute(
     onStopOverlay: () -> Unit,
     onInAppVisibility: (Boolean) -> Unit = {},
     openChatRequest: Long = 0,
+    openSettingsRequest: Long = 0,
 ) {
     val model = companionViewModel(repository)
     val state by model.state.collectAsStateWithLifecycle()
@@ -36,6 +37,11 @@ fun CompanionRoute(
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var handledChatRequest by rememberSaveable { mutableLongStateOf(0) }
+    var handledSettingsRequest by rememberSaveable { mutableLongStateOf(0) }
+    var desktopSettings by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(openSettingsRequest) {
+        if (openSettingsRequest > handledSettingsRequest) { tab = 2; handledSettingsRequest = openSettingsRequest }
+    }
     LaunchedEffect(openChatRequest) {
         if (openChatRequest > handledChatRequest) { tab = 0; handledChatRequest = openChatRequest }
     }
@@ -93,7 +99,7 @@ fun CompanionRoute(
                 }
                 else -> {
                     CompanionSettings(state, { focus.clearFocus(); model.dismissError(); editProfile = true }, { model.visible(it) }, onOverlay, onStopOverlay,
-                        { showAi = true }, avatar = { CompanionAvatar(state, it, allowParentScroll = true) })
+                        { showAi = true }, avatar = { CompanionAvatar(state, it, allowParentScroll = true) }, onDesktopSettings = { desktopSettings = true })
                 }
             }
         }
@@ -108,6 +114,7 @@ fun CompanionRoute(
         dismissButton = { TextButton(onClick = { deleteMemory = null }) { Text("取消") } }) }
     if (editProfile) ProfileEditorSheet(state.profile, onDismiss = { editProfile = false }, errorMessage = error, onSave = model::saveProfile)
     if (showAi) SharedAiDialog(ai, model) { showAi = false }
+    if (desktopSettings) DesktopCompanionSettings(state.overlay, { desktopSettings = false }, model::overlaySettings)
 }
 
 @Composable
@@ -120,6 +127,7 @@ internal fun companionViewModel(repository: CompanionRepository): CompanionViewM
 @Composable private fun SharedAiDialog(ai: AiServices, viewModel: CompanionViewModel, dismiss: () -> Unit) {
     val config by ai.configuration.configuration.collectAsStateWithLifecycle()
     var provider by rememberSaveable { mutableStateOf(AiProvider.GEMINI) }
+    var useCase by rememberSaveable { mutableStateOf(AiUseCase.PET_REPLY) }
     var rawKeys by remember { mutableStateOf("") }
     var selectionError by remember { mutableStateOf<String?>(null) }
     val importResult by viewModel.aiImportResult.collectAsStateWithLifecycle()
@@ -128,9 +136,12 @@ internal fun companionViewModel(repository: CompanionRepository): CompanionViewM
     AlertDialog(onDismissRequest = dismiss, title = { Text("公共 AI 设置") }, text = {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { Text("与见域共用同一份 Key，伙伴对话可独立选择模型。") }
-            items(AiModel.entries.filter { it.provider in AiUseCase.PET_REPLY.supportedProviders }) { model ->
-                FilterChip(selected = config.modelFor(AiUseCase.PET_REPLY) == model, onClick = {
-                    runCatching { ai.configuration.selectModel(AiUseCase.PET_REPLY, model) }
+            item { Row { listOf(AiUseCase.PET_REPLY, AiUseCase.PET_GREETING).forEach { purpose ->
+                FilterChip(selected = useCase == purpose, onClick = { useCase = purpose }, label = { Text(purpose.displayName) })
+            } } }
+            items(AiModel.entries.filter { it.provider in useCase.supportedProviders }) { model ->
+                FilterChip(selected = config.modelFor(useCase) == model, onClick = {
+                    runCatching { ai.configuration.selectModel(useCase, model) }
                         .onSuccess { selectionError = null }
                         .onFailure { selectionError = "模型选择未保存，请重试。" }
                 }, label = { Text(model.displayName) })

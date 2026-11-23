@@ -18,6 +18,7 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
     private var token = "initial"
     private var downX = 0f
     private var downY = 0f
+    private var compactFraming = false
     init {
         isOpaque = false
         surfaceTextureListener = this
@@ -25,6 +26,10 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
         contentDescription = "伙伴形象，轻触互动"
     }
     fun setActive(value: Boolean) { active = value; updateVisibility() }
+    fun setCompactFraming(enabled: Boolean) { compactFraming = enabled; lease?.let { renderThread?.framing(it, enabled) } }
+    /** 系统角色窗口自行识别手势；不改变页面原有的触摸路径。 */
+    fun followTouch(x: Float, y: Float) { lease?.let { renderThread?.touch(it, x.coerceIn(-1f, 1f), y.coerceIn(-1f, 1f), false) } }
+    fun react(kind: String) { if (kind in setOf("HEAD", "BODY", "STROKE")) lease?.let { renderThread?.react(it, kind) } }
     fun setCue(token: String, mood: String) {
         this.token = token
         this.mood = mood.takeIf { it in setOf("CALM", "HAPPY", "THINKING", "CARING") } ?: "CALM"
@@ -38,6 +43,7 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
                 error = { post { if (lease === id) onStatus("形象暂时无法显示，可切换页面重试；对话和记忆仍可使用。") } },
                 ready = { post { if (lease === id) onStatus(null) } })
             engine.cue(id, token, mood)
+            engine.framing(id, compactFraming)
         }
         updateVisibility()
     }

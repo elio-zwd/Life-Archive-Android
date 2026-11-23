@@ -37,6 +37,8 @@ class NativeRenderDeviceTest {
                 val model = NativeCubismModel.create(assets, 128, 256)
                 try {
                     model.cue("HAPPY"); model.touch(0.2f, 0.1f, true)
+                    model.react(if (it == 0) "HEAD" else "STROKE")
+                    model.compactFraming(it == 1)
                     GLES20.glViewport(0, 0, 128, 256)
                     GLES20.glClearColor(0f, 0f, 0f, 0f); GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
                     val manager = CubismOffscreenManagerAndroid.getInstance()
@@ -48,6 +50,11 @@ class NativeRenderDeviceTest {
                     val alpha = (3 until pixels.capacity() step 4).map { pixels.get(it).toInt() and 255 }
                     assertTrue("应存在模型像素", alpha.any { it > 0 })
                     assertTrue("模型周围应透明", alpha.any { it == 0 })
+                    if (it == 1) {
+                        val rows = (0 until 256).filter { y -> (0 until 128).any { x -> (pixels.get((y * 128 + x) * 4 + 3).toInt() and 255) > 128 } }
+                        assertTrue("桌面取景应让人物充分利用窗口高度", rows.last() - rows.first() > 200)
+                        assertTrue("取景放大必须保留纵横比，头脚不能被窗口裁切", rows.first() > 0 && rows.last() < 255)
+                    }
                     val coloredPixels = (0 until pixels.capacity() step 4).count { offset ->
                         val red = pixels.get(offset).toInt() and 255
                         val green = pixels.get(offset + 1).toInt() and 255

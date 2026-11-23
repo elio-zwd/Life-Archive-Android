@@ -18,16 +18,20 @@ class AndroidCompanionRepository internal constructor(
     private val database: () -> CompanionDatabase,
     private val ai: AiGateway,
     private val scope: CoroutineScope,
+    private val loadLines: () -> List<CompanionLine> = { CompanionTrigger.entries.map { CompanionLine(it.name, "嗯，我在。", it, CompanionEmotion.HAPPY) } },
 ) : CompanionRepository {
     constructor(context: Context, ai: AiGateway) : this(
-        { Room.databaseBuilder(context.applicationContext, CompanionDatabase::class.java, "companion.db").build() },
+        { Room.databaseBuilder(context.applicationContext, CompanionDatabase::class.java, "companion.db").addMigrations(CompanionDatabase.MIGRATION_1_2).build() },
         ai, CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        { context.applicationContext.assets.open("companion-lines.json").bufferedReader().use { parseCompanionLines(it.readText()) } },
     )
     private val mutable = MutableStateFlow(CompanionState())
     override val state = mutable.asStateFlow()
     private val gate = Mutex()
     private var db: CompanionDatabase? = null
     private var active: Job? = null
+    private var lines: List<CompanionLine> = emptyList()
+    private val recentLines = ArrayDeque<String>()
     private val dao get() = requireNotNull(db).companion()
 
     override suspend fun initialize() = withContext(Dispatchers.IO) {
@@ -40,6 +44,7 @@ class AndroidCompanionRepository internal constructor(
                     opened.companion().initialize(ProfileRow(name = default.name, personality = default.personality))
                     opened.companion().interrupt()
                 }
+                lines = loadLines()
                 db = opened
                 publish()
             } catch (error: Exception) { opened.close(); throw error }
@@ -51,7 +56,7 @@ class AndroidCompanionRepository internal constructor(
         mutable.value = CompanionState(true, CompanionProfile(profile.name, profile.personality, profile.draft, profile.showInApp),
             dao.messages().map { CompanionMessage(it.id, it.operationId, MessageRole.valueOf(it.role), it.text,
                 ReplyStatus.valueOf(it.status), it.createdAt, CompanionEmotion.valueOf(it.emotion), it.sourceMessageId, it.error) },
-            dao.memories().map { CompanionMemory(it.id, it.text, it.sourceMessageId, it.revision) })
+            dao.memories().map { CompanionMemory(it.id, it.text, it.sourceMessageId, it.revision) }, decodeOverlay(dao.overlay()))
     }
     private suspend fun <T> change(profileOnly: Boolean = false, block: () -> T): T = withContext(Dispatchers.IO) {
         initialize()
@@ -71,6 +76,44 @@ class AndroidCompanionRepository internal constructor(
     }
     override suspend fun saveDraft(text: String) { require(text.length <= 16_000); change(profileOnly = true) { dao.draft(text) } }
     override suspend fun setInAppVisible(visible: Boolean) { change(profileOnly = true) { dao.visible(visible) } }
+
+    override suspend fun updateOverlay(transform: (OverlaySettings) -> OverlaySettings) {
+        change { dao.overlay(OverlayRow(settings = encodeOverlay(transform(decodeOverlay(dao.overlay())).normalized()))) }
+    }
+
+    @Synchronized override fun localReaction(trigger: CompanionTrigger): CompanionGreeting {
+        val candidates = lines.filter { it.trigger == trigger }
+        val line = candidates.filter { it.id !in recentLines }.ifEmpty { candidates }.randomOrNull()
+            ?: return CompanionGreeting("嗯，我在。")
+        recentLines.addLast(line.id)
+        while (recentLines.size > 12) recentLines.removeFirst()
+        return CompanionGreeting(line.text, line.emotion)
+    }
+
+    override suspend fun greeting(trigger: CompanionTrigger, now: Long, hour: Int, day: String): CompanionGreeting? {
+        val snapshot = change {
+            val settings = decodeOverlay(dao.overlay())
+            if (!settings.canGreet(trigger, now, hour, day) || dao.messages().any { it.status == "GENERATING" }) return@change null
+            // 先预留额度，进程退出或并发解锁不能重复发起问候。
+            dao.overlay(OverlayRow(settings = encodeOverlay(settings.copy(lastGreetingAt = now, greetingDay = day,
+                greetingsToday = if (settings.greetingDay == day) settings.greetingsToday + 1 else 1))))
+            state.value
+        } ?: return null
+        val fallback = localReaction(trigger)
+        if (snapshot.overlay.greetingMode != GreetingMode.LOCAL_AI) return fallback
+        return try {
+            withTimeoutOrNull(8_000) {
+                val response = ai.generate(AiRequest(AiRequestId("pet", "desktop-greeting", UUID.randomUUID().toString()),
+                    AiUseCase.PET_GREETING,
+                    "你是${snapshot.profile.name}。${snapshot.profile.personality}\n只写一句不超过24字的自然问候，不提问、不催促、不虚构经历，不输出JSON或引号。" +
+                        "\n已确认的伙伴记忆：" + snapshot.memories.takeLast(10).joinToString("；") { it.text.take(120) },
+                    listOf(AiMessage(AiRole.USER, if (trigger == CompanionTrigger.START) "用户刚开启桌面陪伴。" else "用户久别后解锁了设备。"))))
+                    .filterIsInstance<AiEvent.Complete>().first().text.trim()
+                if (response.length in 1..24 && '\n' !in response && !response.startsWith("{")) CompanionGreeting(response) else fallback
+            } ?: fallback
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { fallback }
+    }
 
     override suspend fun send(text: String, operationId: String): Boolean {
         require(text.trim().length in 1..16_000 && operationId.length in 1..100)

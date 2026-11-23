@@ -95,6 +95,7 @@ enum class AiUseCase(
     ROUNDTABLE_ANSWER("对话角色回答", "Skill 角色的最终文本回答", setOf(AiProvider.GEMINI, AiProvider.DEEPSEEK)),
     ISSUE_EXECUTION("成果生成", "生成并整理可保存的成果内容", setOf(AiProvider.GEMINI, AiProvider.DEEPSEEK)),
     PET_REPLY("伙伴对话", "宠物日常交流与触摸回应", setOf(AiProvider.GEMINI, AiProvider.DEEPSEEK)),
+    PET_GREETING("伙伴主动短句", "桌面陪伴的低频问候", setOf(AiProvider.GEMINI, AiProvider.DEEPSEEK)),
 }
 
 /** 只持久化用户明确选择的提供商与模型，不保存任何密钥。 */

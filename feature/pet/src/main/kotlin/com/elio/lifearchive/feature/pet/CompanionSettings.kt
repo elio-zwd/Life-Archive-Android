@@ -25,6 +25,7 @@ internal fun CompanionSettings(
     onStopOverlay: () -> Unit,
     onAi: () -> Unit,
     avatar: @Composable (Modifier) -> Unit,
+    onDesktopSettings: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -58,6 +59,7 @@ internal fun CompanionSettings(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = onOverlay) { Text("开启桌面陪伴") }
                     OutlinedButton(onClick = onStopOverlay) { Text("关闭") }
+                    TextButton(onClick = onDesktopSettings, modifier = Modifier.testTag("pet-desktop-settings")) { Text("外观与互动") }
                 }
             }
         }

@@ -1,12 +1,10 @@
 package com.elio.lifearchive
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.Gravity
 import android.view.View
 import android.widget.*
 import androidx.compose.ui.graphics.toArgb
@@ -15,109 +13,71 @@ import com.elio.lifearchive.core.designsystem.colors
 import com.elio.lifearchive.core.live2d.Live2DView
 import com.elio.lifearchive.domain.pet.*
 
-/** 系统窗口的两种呈现；业务动作由服务传入，不持有另一套会话或凭据。 */
-internal class CompanionOverlayPanel(context: Context) : LinearLayout(context) {
-    val handle = Button(context).apply { contentDescription = "拖动或展开伙伴" }
+/** 常驻窗口只承载角色；文字与操作使用独立、短暂的系统窗口。 */
+internal class CompanionOverlayPanel(context: Context) : FrameLayout(context) {
     val model = Live2DView(context)
+    init { model.setCompactFraming(true); addView(model, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
+    fun release() { model.setActive(false); model.onStatus = {}; model.onTap = {}; model.setOnTouchListener(null) }
+}
+
+internal class CompanionOverlayChat(context: Context) : LinearLayout(context) {
     val input = EditText(context).apply {
-        hint = "和伙伴说说话"; minLines = 1; maxLines = 3
+        hint = "和伙伴说说话"; minLines = 1; maxLines = 3; textSize = 15f
         filters = arrayOf(android.text.InputFilter.LengthFilter(16_000))
+        contentDescription = "桌面聊天输入"
     }
     val send = Button(context).apply { text = "发送" }
-    val open = Button(context).apply { text = "打开" }
-    val close = Button(context).apply { text = "关闭" }
-    val idleChat = Button(context).apply { text = "对话" }
-    val idleHide = Button(context).apply { text = "收起" }
-    private val bubble = TextView(context).apply { text = "慢慢来，我在这里。"; setPadding(dp(10), dp(8), dp(10), dp(8)) }
-    private val modelStatus = TextView(context).apply { visibility = View.GONE; maxLines = 2 }
-    private val stage = LinearLayout(context).apply { gravity = Gravity.BOTTOM }
-    private val replyScroll = ScrollView(context).apply { addView(bubble) }
-    private val editor = LinearLayout(context).apply { orientation = VERTICAL }
-    private val editorScroll = ScrollView(context).apply { isFillViewport = false; addView(editor) }
-    private val idleControls = LinearLayout(context)
+    val open = Button(context).apply { text = "完整聊天" }
+    val collapse = Button(context).apply { text = "收起" }
+    val reply = TextView(context).apply { textSize = 15f; setPadding(dp(4), dp(4), dp(4), dp(8)) }
+    private val scroll = ScrollView(context).apply { addView(reply) }
     var onDraft: (String) -> Unit = {}
     private var updating = false
-    private val visibleFrame = Rect()
-    var expanded = false
-        private set
-
     init {
-        orientation = VERTICAL; setPadding(dp(8), dp(6), dp(8), dp(6))
-        addView(handle, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-        stage.addView(replyScroll, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
-        stage.addView(model, LayoutParams(dp(80), dp(176)))
-        addView(stage, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-        addView(modelStatus, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-        editor.addView(input, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        orientation = VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(8))
+        addView(TextView(context).apply { text = "和伙伴聊聊"; textSize = 13f }, LayoutParams(-1, dp(28)))
+        addView(scroll, LayoutParams(-1, dp(112)))
+        addView(input, LayoutParams(-1, -2))
         val controls = LinearLayout(context)
-        listOf(send, open, close).forEach { controls.addView(it, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)) }
-        editor.addView(controls)
-        addView(editorScroll, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-        idleControls.addView(idleChat, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
-        idleControls.addView(idleHide, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
-        addView(idleControls)
-        idleChat.setOnClickListener { handle.performClick() }
-        idleHide.setOnClickListener { close.performClick() }
+        listOf(open, collapse, send).forEach { controls.addView(it, LayoutParams(0, -2, 1f)) }
+        addView(controls)
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { if (!updating) onDraft(s.toString()) }
             override fun afterTextChanged(s: Editable?) {}
         })
-        model.onTap = { bubble.text = "嗯，我在。点击上方可以继续聊。" }
-        model.onStatus = { modelStatus.text = it; modelStatus.visibility = if (it == null) View.GONE else View.VISIBLE }
-        setExpanded(false)
         palette(DocumentPalette.BLUE)
     }
-
-    fun setExpanded(value: Boolean) {
-        expanded = value
-        handle.text = if (value) "贴边对话 · 收起" else "拖动伙伴"
-        editorScroll.visibility = if (value) View.VISIBLE else View.GONE
-        idleControls.visibility = if (value) View.GONE else View.VISIBLE
-        model.layoutParams.width = dp(if (value) 112 else 80)
-        bubble.maxLines = if (value) Int.MAX_VALUE else 3
-        bubble.ellipsize = if (value) null else android.text.TextUtils.TruncateAt.END
-        if (!value) input.clearFocus()
-        requestLayout()
-    }
-
     fun render(state: CompanionState, updateDraft: Boolean = true, updateBubble: Boolean = true) {
         val last = state.messages.lastOrNull { it.role == MessageRole.COMPANION }
-        if (updateBubble) bubble.text = if (state.generating) "正在想怎么回应你…" else last?.error ?: last?.text ?: "慢慢来，我在这里。"
-        val draft = state.profile.draft
-        if (updateDraft && input.text.toString() != draft) {
-            updating = true
-            input.setText(draft); input.setSelection(draft.length)
-            updating = false
+        if (updateBubble) reply.text = if (state.generating) last?.text?.ifBlank { "正在想怎么回应你…" } else last?.error ?: last?.text ?: "想说什么都可以。"
+        if (updateDraft && input.text.toString() != state.profile.draft) {
+            updating = true; input.setText(state.profile.draft); input.setSelection(input.length()); updating = false
         }
         send.text = if (state.generating) "停止" else "发送"
-        model.setCue("${last?.id}:${last?.status}:${last?.emotion}", if (state.generating) "THINKING" else last?.emotion?.name ?: "CALM")
     }
-
-    fun failure(message: String) { bubble.text = message }
-
+    fun failure(message: String) { reply.text = message }
     fun palette(palette: DocumentPalette) {
         val colors = palette.colors
-        val ink = colors.ink.toArgb(); val accent = colors.accent.toArgb()
-        bubble.setTextColor(ink); input.setTextColor(ink); input.setHintTextColor(colors.muted.toArgb())
-        modelStatus.setTextColor(colors.muted.toArgb())
-        bubble.background = GradientDrawable().apply { setColor(colors.background.toArgb()); cornerRadius = dp(18).toFloat(); setStroke(dp(1), colors.line.toArgb()) }
-        editor.background = GradientDrawable().apply { setColor(colors.background.toArgb()); cornerRadius = dp(20).toFloat(); setStroke(dp(1), colors.line.toArgb()) }
-        editor.setPadding(dp(8), dp(8), dp(8), dp(4))
-        listOf(handle, send, open, close, idleChat, idleHide).forEach { it.setTextColor(accent); it.backgroundTintList = ColorStateList.valueOf(colors.soft.toArgb()) }
+        background = GradientDrawable().apply { setColor(colors.background.toArgb()); cornerRadius = dp(20).toFloat(); setStroke(dp(1), colors.line.toArgb()) }
+        reply.setTextColor(colors.ink.toArgb()); input.setTextColor(colors.ink.toArgb()); input.setHintTextColor(colors.muted.toArgb())
+        (getChildAt(0) as TextView).setTextColor(colors.muted.toArgb())
+        listOf(send, open, collapse).forEach { it.setTextColor(colors.accent.toArgb()); it.backgroundTintList = android.content.res.ColorStateList.valueOf(colors.soft.toArgb()) }
     }
-
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        // 键盘与分屏会缩小可见区域；优先保留可滚动的输入和动作，不把底部控件推到屏外。
-        getWindowVisibleDisplayFrame(visibleFrame)
-        val height = minOf(resources.displayMetrics.heightPixels, visibleFrame.height().takeIf { it > 0 } ?: resources.displayMetrics.heightPixels,
-            View.MeasureSpec.getSize(heightMeasureSpec).takeIf { it > 0 } ?: Int.MAX_VALUE)
-        model.layoutParams.height = minOf(dp(if (expanded) 168 else 176), (height * if (expanded) 0.35f else 0.5f).toInt())
-        replyScroll.layoutParams.height = model.layoutParams.height
-        super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
+        val limit = View.MeasureSpec.getSize(heightMeasureSpec).takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+        val childWidth = View.MeasureSpec.makeMeasureSpec((View.MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight).coerceAtLeast(1), View.MeasureSpec.EXACTLY)
+        val unrestricted = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        val controls = getChildAt(3)
+        controls.measure(childWidth, unrestricted)
+        // 不能用窗口自身高度的比例反算回复区；否则每次系统重测都会继续缩短并移动窗口。
+        input.maxHeight = (limit - paddingTop - paddingBottom - dp(28) - controls.measuredHeight).coerceAtLeast(dp(32))
+        input.measure(childWidth, unrestricted)
+        val fixed = paddingTop + paddingBottom + dp(28) + input.measuredHeight + controls.measuredHeight
+        scroll.layoutParams.height = minOf(dp(112), (limit - fixed).coerceAtLeast(0))
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
-
-    fun release() { model.setActive(false); model.onStatus = {}; model.onTap = {}; onDraft = {} }
+    fun release() { onDraft = {} }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
 

@@ -2,6 +2,11 @@ package com.elio.lifearchive.data.pet
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
+@Entity(tableName = "overlay")
+internal data class OverlayRow(@PrimaryKey val id: Int = 1, val settings: String = "{}")
 
 @Entity(tableName = "profile")
 internal data class ProfileRow(
@@ -21,6 +26,8 @@ internal data class MemoryRow(
 
 @Dao
 internal interface CompanionDao {
+    @Query("SELECT settings FROM overlay WHERE id = 1") fun overlay(): String?
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun overlay(row: OverlayRow)
     @Query("SELECT * FROM profile WHERE id = 1") fun profile(): ProfileRow?
     @Insert(onConflict = OnConflictStrategy.IGNORE) fun initialize(row: ProfileRow)
     @Query("UPDATE profile SET name = :name, personality = :personality WHERE id = 1") fun profile(name: String, personality: String)
@@ -39,5 +46,14 @@ internal interface CompanionDao {
     @Query("SELECT COUNT(*) FROM messages") fun changes(): Flow<Int>
 }
 
-@Database(entities = [ProfileRow::class, MessageRow::class, MemoryRow::class], version = 1, exportSchema = true)
-internal abstract class CompanionDatabase : RoomDatabase() { abstract fun companion(): CompanionDao }
+@Database(entities = [ProfileRow::class, MessageRow::class, MemoryRow::class, OverlayRow::class], version = 2, exportSchema = true)
+internal abstract class CompanionDatabase : RoomDatabase() {
+    abstract fun companion(): CompanionDao
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `overlay` (`id` INTEGER NOT NULL, `settings` TEXT NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
+    }
+}

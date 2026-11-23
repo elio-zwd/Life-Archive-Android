@@ -1,0 +1,722 @@
+[
+  {
+    "id": "head-001",
+    "text": "这样摸摸，挺舒服的。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-002",
+    "text": "嗯？我看见你啦。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-003",
+    "text": "头发有一点点乱啦。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-004",
+    "text": "今天也见到你了。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-005",
+    "text": "轻轻的，刚刚好。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-006",
+    "text": "好啦，收到你的招呼。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-007",
+    "text": "给你一个小小的笑。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-008",
+    "text": "我往你这边靠一点。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-009",
+    "text": "你一来，我就抬头了。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-010",
+    "text": "这会儿心情不错。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-011",
+    "text": "你好呀，又碰面了。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-012",
+    "text": "我正朝你这边看呢。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-013",
+    "text": "是不是想叫我呀？",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-014",
+    "text": "抬头，和你对上眼。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-015",
+    "text": "有点痒，嘿。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-016",
+    "text": "摸到了，摸到了。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-017",
+    "text": "这个招呼很温柔。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-018",
+    "text": "我也朝你点点头。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-019",
+    "text": "刚才走神了一小会儿。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-020",
+    "text": "头顶收到一份温柔。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-021",
+    "text": "嗯，就这样待一会儿。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-022",
+    "text": "你的小招呼我收到了。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-023",
+    "text": "今天的头发还听话吧。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "head-024",
+    "text": "我在这儿，抬头就见。",
+    "trigger": "HEAD",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "body-001",
+    "text": "嗯，我在呢。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-002",
+    "text": "收到，回你一个点头。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-003",
+    "text": "刚好想抬头看看你。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-004",
+    "text": "小小地晃一晃。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-005",
+    "text": "这一刻挺轻松的。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-006",
+    "text": "和你打个招呼。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-007",
+    "text": "我转过来啦。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-008",
+    "text": "在这里站得很稳。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-009",
+    "text": "这里有一份小小的回应。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-010",
+    "text": "看见你的手指啦。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-011",
+    "text": "轻轻一碰就知道是你。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-012",
+    "text": "我轻轻歪一下脑袋。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-013",
+    "text": "我也轻轻回应一下。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-014",
+    "text": "今天也一起待着。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-015",
+    "text": "这边的风景还不错。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-016",
+    "text": "你忙你的，我待这里。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-017",
+    "text": "把肩膀放松一点。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-018",
+    "text": "刚才那个招呼很可爱。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-019",
+    "text": "我换个舒服的姿势。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-020",
+    "text": "在你旁边轻轻晃一下。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-021",
+    "text": "嗯，这里刚刚好。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-022",
+    "text": "小小的碰面也很好。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-023",
+    "text": "不用说话也能打招呼。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "body-024",
+    "text": "我朝你这边看过来了。",
+    "trigger": "BODY",
+    "emotion": "CALM"
+  },
+  {
+    "id": "stroke-001",
+    "text": "慢慢来，我不着急。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-002",
+    "text": "这样就很舒服。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-003",
+    "text": "有点像被微风碰到。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-004",
+    "text": "我跟着你的手指看。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-005",
+    "text": "这会儿安静得刚好。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-006",
+    "text": "嗯，轻轻的就好。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-007",
+    "text": "想在这里多待一会儿。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-008",
+    "text": "你的手指走到这儿了。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-009",
+    "text": "跟着你，左边，右边。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-010",
+    "text": "好像被顺了顺毛。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-011",
+    "text": "我把眼睛眯起来啦。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-012",
+    "text": "这一小会儿很柔软。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-013",
+    "text": "你轻轻摸，我轻轻晃。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-014",
+    "text": "好啦，我知道你在。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-015",
+    "text": "放慢一点也挺好。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-016",
+    "text": "我往你的手边看。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-017",
+    "text": "这个节奏很舒服。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-018",
+    "text": "像午后的一阵小风。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-019",
+    "text": "我悄悄歪一下脑袋。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-020",
+    "text": "谢谢这份小小的温柔。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-021",
+    "text": "在这里歇一小会儿吧。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-022",
+    "text": "不用急着说什么。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-023",
+    "text": "陪你安静几秒钟。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "stroke-024",
+    "text": "嗯，这样待着就好。",
+    "trigger": "STROKE",
+    "emotion": "CARING"
+  },
+  {
+    "id": "start-001",
+    "text": "你好，我来陪你啦。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-002",
+    "text": "给我留了个好位置。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-003",
+    "text": "今天也在你身边。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-004",
+    "text": "我找个地方站好。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-005",
+    "text": "又见面了，真好。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-006",
+    "text": "这里的光线很舒服。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-007",
+    "text": "我来了，你慢慢忙。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-008",
+    "text": "先和你打个招呼。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-009",
+    "text": "把自己放到你旁边。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-010",
+    "text": "我们又一起待着啦。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-011",
+    "text": "今天也请多关照。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-012",
+    "text": "嗨，我已经站好啦。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-013",
+    "text": "安静地陪你一会儿。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-014",
+    "text": "这次想让我待哪儿？",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-015",
+    "text": "看到你，心情亮一点。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-016",
+    "text": "我来看看今天的风景。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-017",
+    "text": "先轻轻晃一晃，再陪你。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-018",
+    "text": "你一叫，我就来了。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-019",
+    "text": "这里有个我的小位置。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-020",
+    "text": "我就在这个角落待着。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-021",
+    "text": "今天从一个招呼开始。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-022",
+    "text": "新的一会儿，你好呀。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-023",
+    "text": "让我看看你选的位置。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "start-024",
+    "text": "我来了，慢慢开始吧。",
+    "trigger": "START",
+    "emotion": "HAPPY"
+  },
+  {
+    "id": "return-001",
+    "text": "回来啦，见到你真好。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-002",
+    "text": "又能和你待一会儿了。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-003",
+    "text": "嗨，欢迎回来。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-004",
+    "text": "我抬头看见你了。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-005",
+    "text": "这会儿想安静陪着你。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-006",
+    "text": "我们又碰面啦。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-007",
+    "text": "给刚回来的你一个笑。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-008",
+    "text": "不用着急，先站稳。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-009",
+    "text": "我朝你点点头。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-010",
+    "text": "好久没见，打个招呼。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-011",
+    "text": "这里又热闹一点了。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-012",
+    "text": "回来就好，慢慢来。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-013",
+    "text": "刚好，可以一起歇会儿。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-014",
+    "text": "新的这一刻，你好。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-015",
+    "text": "我也换个精神的姿势。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-016",
+    "text": "你回来，我就抬抬头。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-017",
+    "text": "先轻轻说一句你好。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-018",
+    "text": "今天的风景又见到你。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-019",
+    "text": "把这个笑送给你。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-020",
+    "text": "嗯，看到你啦。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-021",
+    "text": "再见面也值得开心。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-022",
+    "text": "让我往你这边看一眼。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-023",
+    "text": "你的角落里有我在。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  },
+  {
+    "id": "return-024",
+    "text": "欢迎回来，随意坐坐。",
+    "trigger": "RETURN",
+    "emotion": "CARING"
+  }
+]

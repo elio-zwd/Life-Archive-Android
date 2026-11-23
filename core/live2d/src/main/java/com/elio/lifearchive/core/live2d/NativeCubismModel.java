@@ -29,6 +29,10 @@ final class NativeCubismModel extends CubismUserModel {
     private int nextIdle;
     private int width;
     private int height;
+    private String reaction = "";
+    private float reactionUntil;
+    private float lastBodyTap = -10f;
+    private boolean compactFraming;
 
     static NativeCubismModel create(AssetManager assets, int width, int height) throws IOException {
         NativeCubismModel result = new NativeCubismModel();
@@ -104,6 +108,16 @@ final class NativeCubismModel extends CubismUserModel {
         if (tapped && tap != null) motionManager.startMotionPriority(tap, 3);
     }
 
+    void react(String kind) {
+        reaction = kind;
+        reactionUntil = elapsed + 1.6f;
+        if (kind.equals("BODY") && elapsed - lastBodyTap > 2f && tap != null) {
+            lastBodyTap = elapsed;
+            motionManager.startMotionPriority(tap, 3);
+        }
+    }
+    void compactFraming(boolean enabled) { compactFraming = enabled; }
+
     void draw(float delta) {
         elapsed += delta;
         model.loadParameters();
@@ -122,6 +136,16 @@ final class NativeCubismModel extends CubismUserModel {
         if (mood.equals("HAPPY")) { set("ParamMouthForm", 0.8f); set("ParamEyeLSmile", 0.7f); set("ParamEyeRSmile", 0.7f); }
         else if (mood.equals("THINKING")) add("ParamAngleZ", 8f);
         else if (mood.equals("CARING")) { set("ParamMouthForm", 0.4f); add("ParamAngleZ", -5f); }
+        // 临时反应属于这个模型实例，结束后自然回到原情绪，不写回业务状态。
+        if (elapsed < reactionUntil) {
+            float strength = Math.min(1f, (reactionUntil - elapsed) / 0.4f);
+            if (reaction.equals("HEAD") || reaction.equals("STROKE")) {
+                add("ParamMouthForm", 0.65f * strength);
+                add("ParamEyeLSmile", 0.75f * strength);
+                add("ParamEyeRSmile", 0.75f * strength);
+                add("ParamAngleZ", (reaction.equals("HEAD") ? 7f : -4f) * strength);
+            }
+        }
         if (physics != null) physics.evaluate(model, delta);
         if (pose != null) pose.updateParameters(model, delta);
         model.update();
@@ -130,6 +154,11 @@ final class NativeCubismModel extends CubismUserModel {
         if (model.getCanvasHeight() / model.getCanvasWidth() < 1f / aspect) {
             modelMatrix.setWidth(2f); projection.scale(1f, aspect);
         } else { modelMatrix.setHeight(2f); projection.scale(1f / aspect, 1f); }
+        // Hiyori 的原始画布留有较大空白；仅桌面窗口使用校准取景，页面维持原比例。
+        if (compactFraming) {
+            float zoom = 0.74f / aspect;
+            projection.scaleRelative(zoom, zoom);
+        }
         projection.multiplyByMatrix(modelMatrix);
         CubismRendererAndroid renderer = getRenderer();
         renderer.setMvpMatrix(projection);

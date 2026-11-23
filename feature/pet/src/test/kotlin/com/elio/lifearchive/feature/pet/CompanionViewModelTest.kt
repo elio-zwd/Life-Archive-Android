@@ -20,6 +20,9 @@ class CompanionViewModelTest {
         var rememberError: Exception? = null
         val drafts = mutableListOf<String>()
         override suspend fun initialize() {}
+        override suspend fun updateOverlay(transform: (OverlaySettings) -> OverlaySettings) { state.value = state.value.copy(overlay = transform(state.value.overlay)) }
+        override fun localReaction(trigger: CompanionTrigger) = CompanionGreeting("嗯，我在。")
+        override suspend fun greeting(trigger: CompanionTrigger, now: Long, hour: Int, day: String): CompanionGreeting? = null
         override suspend fun updateProfile(name: String, personality: String) {}
         override suspend fun saveDraft(text: String) {
             draftGate?.await(); drafts += text

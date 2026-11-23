@@ -59,6 +59,10 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getBooleanExtra("open-companion-settings", false)) {
+            ViewModelProvider(this)[BusinessHostViewModel::class.java].openCompanionSettings()
+            intent.removeExtra("open-companion-settings")
+        }
         if (intent.getBooleanExtra("open-companion", false)) {
             ViewModelProvider(this)[BusinessHostViewModel::class.java].openCompanionChat()
             intent.removeExtra("open-companion")
@@ -70,6 +74,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val model = ViewModelProvider(this)[AppViewModel::class.java]
         val businessHost = ViewModelProvider(this)[BusinessHostViewModel::class.java]
+        if (intent?.getBooleanExtra("open-companion-settings", false) == true) {
+            businessHost.openCompanionSettings()
+            intent.removeExtra("open-companion-settings")
+        }
         if (intent?.getBooleanExtra("open-companion", false) == true) {
             businessHost.openCompanionChat()
             intent.removeExtra("open-companion")
@@ -78,6 +86,7 @@ class MainActivity : ComponentActivity() {
             val state by model.state.collectAsStateWithLifecycle()
             val lifeNote by businessHost.lifeNote.collectAsStateWithLifecycle()
             val companionChatRequest by businessHost.companionChatRequest.collectAsStateWithLifecycle()
+            val companionSettingsRequest by businessHost.companionSettingsRequest.collectAsStateWithLifecycle()
             val knowledge = remember { LifeKnowledgeAdapter(library, businessHost::openLifeNote) }
             val dark = when (state.preferences.theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -109,7 +118,7 @@ class MainActivity : ComponentActivity() {
                                 stopService(android.content.Intent(this, CompanionOverlayService::class.java))
                             }
                         },
-                        onLife = { businessHost.select(Business.LIFE) }, openChatRequest = companionChatRequest)
+                        onLife = { businessHost.select(Business.LIFE) }, openChatRequest = companionChatRequest, openSettingsRequest = companionSettingsRequest)
                 }, inAppCompanion = { visible -> InAppCompanion(companionProvider, visible, businessHost::openCompanionChat) }) { onSwitcher, onBottomBar ->
                 when {
                     state.error != null -> Scaffold { Text("初始化失败：${state.error}", modifier = androidx.compose.ui.Modifier.padding(it)) }
