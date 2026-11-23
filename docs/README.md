@@ -38,7 +38,7 @@
 ## 工程与资料
 
 - [宠物核心与公共 AI 接入交接](engineering/android-companion-core-handoff-20261123.md)：统一配置／凭据接管、会话与记忆、三域宿主及首批结果；后续[原生接入交接](engineering/android-companion-native-handoff-20261123.md)记录 SDK、窗口生命周期及新增测试。[独立设备清单](testing/android-companion-manual-acceptance.md)不将电脑结果当作真机通过。
-- [伙伴界面候选方案](design/companion-candidates-20261123/README.md)：六组 A／B／C 设计比较板与实际提示词，供用户按页面选型，尚未移植正式布局。
+- [伙伴界面候选方案](design/companion-candidates-20261123/README.md)：六组 A／B／C 设计比较板与实际提示词；共同记忆已选择 B「手记卡片」，[实现交接](engineering/android-companion-memory-cards-20261123.md)记录电脑验证，其余页面仍待选型。
 
 - [二期整合基线](engineering/phase-2-integration-baseline.md)：Life 与见域源码版本、入口、模块及依赖差异、渲染与迁移缺口，以及实际基线检查。
 - [二期共用 Markdown 宿主阶段记录](engineering/phase-2-shared-markdown-handoff.md)：共享资源与 WebView 的独立边界、Life 适配及验证；不代表见域流式样板或整合完成。
