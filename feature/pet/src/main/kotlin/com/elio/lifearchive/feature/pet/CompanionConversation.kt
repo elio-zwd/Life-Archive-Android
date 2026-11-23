@@ -38,6 +38,7 @@ internal fun CompanionConversation(
     }
     val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val colors = MaterialTheme.colorScheme
+    syncLive2DCatalog(state.importedModels)
     val currentModel = Live2DModelCatalog.resolve(state.profile.modelId)
     BoxWithConstraints(Modifier.fillMaxSize().testTag("pet-conversation")) {
         val stageFits = !keyboardOpen && maxHeight >= 280.dp

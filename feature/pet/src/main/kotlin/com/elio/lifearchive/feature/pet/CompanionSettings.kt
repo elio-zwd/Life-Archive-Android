@@ -29,7 +29,11 @@ internal fun CompanionSettings(
     avatar: @Composable (Modifier) -> Unit,
     onDesktopSettings: () -> Unit = {},
     onSelectModel: (String) -> Unit = {},
-    models: List<Live2DModelSpec> = Live2DModelCatalog.all(),
+    onImportModel: () -> Unit = {},
+    onDeleteModel: (Live2DModelSpec) -> Unit = {},
+    importingModel: Boolean = false,
+    modelNotice: String? = null,
+    models: List<Live2DModelSpec> = syncLive2DCatalog(state.importedModels),
 ) {
     val colors = MaterialTheme.colorScheme
     val currentModel = models.firstOrNull { it.id == state.profile.modelId } ?: Live2DModelCatalog.resolve(state.profile.modelId)
@@ -66,6 +70,42 @@ internal fun CompanionSettings(
                             label = { Text(spec.displayName) },
                         )
                     }
+                }
+                FlowRow(
+                    modifier = Modifier.padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    FilledTonalButton(
+                        onClick = onImportModel,
+                        enabled = !importingModel,
+                        modifier = Modifier.testTag("pet-model-import"),
+                    ) {
+                        Text(if (importingModel) "导入中…" else "导入本地模型")
+                    }
+                    if (!currentModel.isBuiltIn) {
+                        OutlinedButton(
+                            onClick = { onDeleteModel(currentModel) },
+                            enabled = !importingModel,
+                            modifier = Modifier.testTag("pet-model-delete"),
+                        ) {
+                            Text("移除当前导入")
+                        }
+                    }
+                }
+                Text(
+                    "选择手机本地包含 .model3.json、.moc3 与纹理的文件夹，将自动复制到应用私有目录。",
+                    Modifier.padding(top = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+                modelNotice?.let { notice ->
+                    Text(
+                        notice,
+                        Modifier.padding(top = 6.dp).testTag("pet-model-notice"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.primary,
+                    )
                 }
             }
         }

@@ -1,5 +1,7 @@
 package com.elio.lifearchive.feature.pet
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +18,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.elio.jianyu.network.*
+import com.elio.lifearchive.core.live2d.Live2DModelSpec
 import com.elio.lifearchive.domain.pet.*
 
 
@@ -34,11 +37,17 @@ fun CompanionRoute(
     val state by model.state.collectAsStateWithLifecycle()
     val draft by model.draft.collectAsStateWithLifecycle()
     val error by model.error.collectAsStateWithLifecycle()
+    val importingModel by model.importingModel.collectAsStateWithLifecycle()
+    val modelNotice by model.modelNotice.collectAsStateWithLifecycle()
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var handledChatRequest by rememberSaveable { mutableLongStateOf(0) }
     var handledSettingsRequest by rememberSaveable { mutableLongStateOf(0) }
     var desktopSettings by rememberSaveable { mutableStateOf(false) }
+    var deleteModelTarget by remember { mutableStateOf<Live2DModelSpec?>(null) }
+    val modelTreePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) model.importModelFromTree(uri.toString())
+    }
     LaunchedEffect(openSettingsRequest) {
         if (openSettingsRequest > handledSettingsRequest) { tab = 2; handledSettingsRequest = openSettingsRequest }
     }
@@ -98,9 +107,21 @@ fun CompanionRoute(
                     )
                 }
                 else -> {
-                    CompanionSettings(state, { focus.clearFocus(); model.dismissError(); editProfile = true }, { model.visible(it) }, onOverlay, onStopOverlay,
-                        { showAi = true }, avatar = { CompanionAvatar(state, it, allowParentScroll = true) },
-                        onDesktopSettings = { desktopSettings = true }, onSelectModel = model::selectModel)
+                    CompanionSettings(
+                        state = state,
+                        onEdit = { focus.clearFocus(); model.dismissError(); editProfile = true },
+                        onVisible = { model.visible(it) },
+                        onOverlay = onOverlay,
+                        onStopOverlay = onStopOverlay,
+                        onAi = { showAi = true },
+                        avatar = { CompanionAvatar(state, it, allowParentScroll = true) },
+                        onDesktopSettings = { desktopSettings = true },
+                        onSelectModel = model::selectModel,
+                        onImportModel = { model.clearModelNotice(); modelTreePicker.launch(null) },
+                        onDeleteModel = { deleteModelTarget = it },
+                        importingModel = importingModel,
+                        modelNotice = modelNotice,
+                    )
                 }
             }
         }
@@ -113,6 +134,10 @@ fun CompanionRoute(
         text = { Text("删除后，后续交流不再使用这条记忆；原对话仍保留。") },
         confirmButton = { TextButton(onClick = { model.delete(memory); deleteMemory = null }) { Text("删除") } },
         dismissButton = { TextButton(onClick = { deleteMemory = null }) { Text("取消") } }) }
+    deleteModelTarget?.let { target -> AlertDialog(onDismissRequest = { deleteModelTarget = null }, title = { Text("移除「${target.displayName}」？") },
+        text = { Text("将删除应用私有目录中复制的该模型文件，并自动切回默认形象；手机原始文件夹不受影响。") },
+        confirmButton = { TextButton(onClick = { model.deleteImportedModel(target.id); deleteModelTarget = null }) { Text("移除") } },
+        dismissButton = { TextButton(onClick = { deleteModelTarget = null }) { Text("取消") } }) }
     if (editProfile) ProfileEditorSheet(state.profile, onDismiss = { editProfile = false }, errorMessage = error, onSave = model::saveProfile)
     if (showAi) SharedAiDialog(ai, model) { showAi = false }
     if (desktopSettings) DesktopCompanionSettings(state.overlay, { desktopSettings = false }, model::overlaySettings)

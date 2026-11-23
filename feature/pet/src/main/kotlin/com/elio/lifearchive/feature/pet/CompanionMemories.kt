@@ -41,6 +41,7 @@ internal fun CompanionMemories(
 ) {
     val colors = MaterialTheme.colorScheme
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+    syncLive2DCatalog(state.importedModels)
     val currentModel = Live2DModelCatalog.resolve(state.profile.modelId)
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Adaptive(150.dp * fontScale),

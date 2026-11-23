@@ -13,6 +13,9 @@ import android.widget.*
 import androidx.compose.ui.graphics.toArgb
 import com.elio.lifearchive.core.designsystem.DocumentPalette
 import com.elio.lifearchive.core.designsystem.colors
+import com.elio.lifearchive.core.live2d.Live2DModelCatalog
+import com.elio.lifearchive.core.live2d.Live2DModelSource
+import com.elio.lifearchive.core.live2d.Live2DModelSpec
 import com.elio.lifearchive.core.preferences.*
 import com.elio.lifearchive.domain.pet.*
 import dagger.hilt.android.AndroidEntryPoint
@@ -135,6 +138,9 @@ class CompanionOverlayService : Service() {
                 repository = repo
                 repo.state.collect { state ->
                     val first = !initialized
+                    Live2DModelCatalog.syncExternal(state.importedModels.map {
+                        Live2DModelSpec(it.id, it.displayName, "本地导入模型", Live2DModelSource.Directory(it.directoryPath, it.modelJson))
+                    })
                     view.model.setModel(state.profile.modelId)
                     if (!dragging && state.overlay != lastSettings) placeRole(state.overlay)
                     lastSettings = state.overlay

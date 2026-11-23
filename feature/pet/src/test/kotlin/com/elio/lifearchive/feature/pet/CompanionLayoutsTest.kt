@@ -150,4 +150,33 @@ class CompanionLayoutsTest {
         assertEquals("Mao", selected)
         compose.onNodeWithTag("pet-current-model").assertTextContains("Mao", substring = true)
     }
+    @Test fun settingsShowsImportButtonAndShowsDeleteOnlyForImportedModel() {
+        var imports = 0
+        var deletedId = ""
+        val imported = ImportedLive2DModel("local-tororo", "Tororo", "/tmp/tororo", "Tororo.model3.json", 1L)
+        var currentId by mutableStateOf("Hiyori")
+        compose.setContent {
+            MaterialTheme {
+                CompanionSettings(
+                    CompanionState(
+                        profile = CompanionProfile(modelId = currentId),
+                        importedModels = listOf(imported),
+                    ),
+                    {}, {}, {}, {}, {},
+                    avatar = { Box(it) },
+                    onSelectModel = { currentId = it },
+                    onImportModel = { imports++ },
+                    onDeleteModel = { deletedId = it.id },
+                    modelNotice = "已导入「Tororo」并切换。",
+                )
+            }
+        }
+        compose.onNodeWithTag("pet-model-import").performScrollTo().performClick()
+        assertEquals(1, imports)
+        compose.onNodeWithTag("pet-model-delete").assertDoesNotExist()
+        compose.onNodeWithTag("pet-model-local-tororo").performScrollTo().performClick()
+        compose.onNodeWithTag("pet-model-delete").performScrollTo().performClick()
+        assertEquals("local-tororo", deletedId)
+        compose.onNodeWithTag("pet-model-notice").assertTextEquals("已导入「Tororo」并切换。")
+    }
 }

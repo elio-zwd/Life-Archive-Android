@@ -30,6 +30,7 @@ fun CompanionAvatar(state: CompanionState, modifier: Modifier = Modifier, onTap:
     }
     Box(modifier) {
         AndroidView(factory = { view }, modifier = Modifier.fillMaxSize(), update = {
+            syncLive2DCatalog(state.importedModels)
             it.allowParentScroll = allowParentScroll
             it.onStatus = { error -> status = error }
             it.onTap = { currentTap() }

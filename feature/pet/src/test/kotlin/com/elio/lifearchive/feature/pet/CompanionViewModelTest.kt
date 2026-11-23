@@ -30,6 +30,26 @@ class CompanionViewModelTest {
         }
         override suspend fun setInAppVisible(visible: Boolean) {}
         override suspend fun selectModel(modelId: String) { state.value = state.value.copy(profile = state.value.profile.copy(modelId = modelId)) }
+        override suspend fun importModelFromTree(treeUri: String): ImportedLive2DModel {
+            if (treeUri == "bad") throw IllegalArgumentException("未找到 .model3.json")
+            val imported = ImportedLive2DModel("local-1", "Tororo", "/tmp/local-1", "Tororo.model3.json", 1L)
+            state.value = state.value.copy(
+                profile = state.value.profile.copy(modelId = imported.id),
+                importedModels = state.value.importedModels + imported,
+            )
+            return imported
+        }
+        override suspend fun deleteImportedModel(modelId: String): Boolean {
+            val remaining = state.value.importedModels.filterNot { it.id == modelId }
+            val removed = remaining.size != state.value.importedModels.size
+            if (removed) {
+                state.value = state.value.copy(
+                    profile = state.value.profile.copy(modelId = DEFAULT_COMPANION_MODEL_ID),
+                    importedModels = remaining,
+                )
+            }
+            return removed
+        }
         override suspend fun send(text: String, operationId: String): Boolean { sends++; sendGate.await(); return true }
         override suspend fun retry(messageId: String) = false
         override suspend fun cancel() {}
@@ -119,6 +139,21 @@ class CompanionViewModelTest {
             runCurrent()
             model.selectModel("Ren"); runCurrent()
             assertEquals("Ren", model.state.value.profile.modelId)
+        } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
+    }
+    @Test fun importingAndDeletingLocalModelUpdatesStateAndNotice() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val repo = Repository(); val model = CompanionViewModel(repo)
+        try {
+            runCurrent()
+            model.importModelFromTree("bad"); runCurrent()
+            assertEquals("未找到 .model3.json", model.modelNotice.value)
+            model.importModelFromTree("content://tree/tororo"); runCurrent()
+            assertEquals("local-1", model.state.value.profile.modelId)
+            assertEquals("已导入「Tororo」并切换。", model.modelNotice.value)
+            model.deleteImportedModel("local-1"); runCurrent()
+            assertEquals(DEFAULT_COMPANION_MODEL_ID, model.state.value.profile.modelId)
+            assertEquals("已移除本地导入模型。", model.modelNotice.value)
         } finally { model.viewModelScope.cancel(); Dispatchers.resetMain() }
     }
 }

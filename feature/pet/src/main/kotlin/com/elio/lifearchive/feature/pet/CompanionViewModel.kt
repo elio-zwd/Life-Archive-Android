@@ -24,6 +24,10 @@ class CompanionViewModel(private val repository: CompanionRepository) : ViewMode
     val draft = mutableDraft.asStateFlow()
     private val mutableError = MutableStateFlow<String?>(null)
     val error = mutableError.asStateFlow()
+    private val mutableImportingModel = MutableStateFlow(false)
+    val importingModel = mutableImportingModel.asStateFlow()
+    private val mutableModelNotice = MutableStateFlow<String?>(null)
+    val modelNotice = mutableModelNotice.asStateFlow()
     private var draftWrite: Job? = null
     private var sending = false
     private var operation = UUID.randomUUID().toString()
@@ -73,7 +77,34 @@ class CompanionViewModel(private val repository: CompanionRepository) : ViewMode
     fun cancel() = action { repository.cancel() }
     fun profile(name: String, personality: String) = action { repository.updateProfile(name, personality) }
     fun visible(visible: Boolean) = action { repository.setInAppVisible(visible) }
-    fun selectModel(modelId: String) = action { repository.selectModel(modelId) }
+    fun selectModel(modelId: String) = action {
+        mutableModelNotice.value = null
+        repository.selectModel(modelId)
+    }
+    fun importModelFromTree(treeUri: String) {
+        if (mutableImportingModel.value) return
+        mutableImportingModel.value = true
+        mutableModelNotice.value = null
+        viewModelScope.launch {
+            try {
+                val imported = repository.importModelFromTree(treeUri)
+                mutableModelNotice.value = "已导入「${imported.displayName}」并切换。"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: IllegalArgumentException) {
+                mutableModelNotice.value = error.message?.takeIf { it.isNotBlank() } ?: "模型文件夹格式不符合要求。"
+            } catch (error: Exception) {
+                mutableModelNotice.value = error.message?.takeIf { it.isNotBlank() } ?: "导入失败，请确认所选目录包含 .model3.json 与 .moc3 文件。"
+            } finally {
+                mutableImportingModel.value = false
+            }
+        }
+    }
+    fun deleteImportedModel(modelId: String) = action {
+        val removed = repository.deleteImportedModel(modelId)
+        mutableModelNotice.value = if (removed) "已移除本地导入模型。" else "未找到可移除的本地模型。"
+    }
+    fun clearModelNotice() { mutableModelNotice.value = null }
     fun overlaySettings(value: OverlaySettings) = action {
         repository.updateOverlay { it.copy(heightFraction = value.heightFraction, greetingMode = value.greetingMode,
             quietStartHour = value.quietStartHour, quietEndHour = value.quietEndHour) }
