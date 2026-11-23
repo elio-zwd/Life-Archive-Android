@@ -38,6 +38,7 @@ fun CompanionRoute(
     val state by model.state.collectAsStateWithLifecycle()
     val draft by model.draft.collectAsStateWithLifecycle()
     val error by model.error.collectAsStateWithLifecycle()
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var editMemory by remember { mutableStateOf<CompanionMemory?>(null) }
     var addMemory by rememberSaveable { mutableStateOf(false) }
@@ -58,17 +59,19 @@ fun CompanionRoute(
     Scaffold(Modifier.fillMaxSize().testTag("pet-root"), bottomBar = {
         NavigationBar(Modifier.onSizeChanged { onBottomBarMeasured(it.height) }) {
             listOf("陪伴", "记忆", "设置").forEachIndexed { index, label ->
-                NavigationBarItem(selected = tab == index, onClick = { tab = index }, modifier = Modifier.testTag("pet-tab-$index"),
+                NavigationBarItem(selected = tab == index, onClick = { focus.clearFocus(); tab = index }, modifier = Modifier.testTag("pet-tab-$index"),
                     icon = { Text(listOf("◉", "♡", "☷")[index]) }, label = { Text(label) })
             }
         }
     }) { padding ->
-        Column(Modifier.padding(padding).statusBarsPadding().fillMaxSize().padding(horizontal = 18.dp)) {
+        Column(Modifier.padding(padding).statusBarsPadding().fillMaxSize().padding(horizontal = if (tab == 1) 0.dp else 18.dp)) {
+          if (tab != 1) {
             Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Text(state.profile.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Text("日常里的陪伴", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 TextButton(onClick = { showAi = true }) { Text("公共 AI") }
             }
+          }
             if (error != null) {
                 Card(Modifier.fillMaxWidth()) { Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(error.orEmpty(), Modifier.weight(1f)); TextButton(onClick = { model.dismissError(); if (!state.ready) model.initialize() }) { Text("重试") }
@@ -126,21 +129,13 @@ fun CompanionRoute(
                     }
                 }
                 1 -> {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("共同记忆 · ${state.memories.size}", style = MaterialTheme.typography.titleMedium)
-                        TextButton(onClick = { memoryText = ""; memorySource = null; addMemory = true }) { Text("添加记忆") }
-                    }
-                    if (state.memories.isEmpty()) Text("还没有记忆。添加你希望伙伴在以后交流中记住的事。", Modifier.padding(vertical = 24.dp))
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(state.memories, key = { it.id }) { memory ->
-                            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)) {
-                                Text(memory.text)
-                                Text(if (memory.sourceMessageId == null) "手动添加" else "来自共同对话", style = MaterialTheme.typography.labelSmall)
-                                Row { TextButton(onClick = { editMemory = memory; memoryText = memory.text }) { Text("更正") }
-                                    TextButton(onClick = { deleteMemory = memory }) { Text("删除") } }
-                            } }
-                        }
-                    }
+                    CompanionMemories(
+                        state = state,
+                        onAdd = { focus.clearFocus(); memoryText = ""; memorySource = null; addMemory = true },
+                        onEdit = { focus.clearFocus(); editMemory = it; memoryText = it.text },
+                        onDelete = { deleteMemory = it },
+                        avatar = { CompanionAvatar(state, Modifier.fillMaxSize()) },
+                    )
                 }
                 else -> {
                   Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -162,7 +157,9 @@ fun CompanionRoute(
     }
     if (addMemory || editMemory != null) AlertDialog(onDismissRequest = { addMemory = false; editMemory = null },
         title = { Text(if (editMemory == null) "添加共同记忆" else "更正记忆") },
-        text = { OutlinedTextField(memoryText, { if (it.length <= 2000) memoryText = it }, label = { Text("希望伙伴记住的事") }) },
+        text = { OutlinedTextField(memoryText, { if (it.length <= 2000) memoryText = it },
+            modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp), minLines = 3, maxLines = 8,
+            label = { Text("希望伙伴记住的事") }) },
         confirmButton = { TextButton(enabled = memoryText.isNotBlank(), onClick = {
             editMemory?.let { model.edit(it, memoryText) } ?: model.memory(memoryText, memorySource)
             addMemory = false; editMemory = null

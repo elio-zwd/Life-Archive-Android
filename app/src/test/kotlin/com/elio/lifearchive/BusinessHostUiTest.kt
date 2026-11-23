@@ -2,6 +2,7 @@ package com.elio.lifearchive
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import com.elio.lifearchive.core.designsystem.colors
 import com.elio.lifearchive.core.document.RawDocument
 import com.elio.lifearchive.domain.notes.NoteResult
 import kotlinx.coroutines.runBlocking
@@ -99,7 +100,7 @@ class BusinessHostUiTest {
         compose.onNodeWithTag("pet-send").assertIsDisplayed()
         captureCompanion("conversation")
         compose.onNodeWithText("记忆", useUnmergedTree = true).performClick()
-        compose.onNodeWithText("添加记忆").performClick()
+        compose.onNodeWithTag("pet-memory-add").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText("希望伙伴记住的事").performTextInput("合成资料：周末喜欢散步")
         compose.onNodeWithText("保存").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("合成资料：周末喜欢散步").fetchSemanticsNodes().isNotEmpty() }
@@ -113,7 +114,48 @@ class BusinessHostUiTest {
         compose.onNodeWithTag("pet-input").assertTextContains("给伙伴的未发送输入")
         compose.onNodeWithText("记忆", useUnmergedTree = true).performClick()
         compose.onNodeWithText("合成资料：周末喜欢散步").assertIsDisplayed()
+        val repository = compose.activity.companionProvider.get()
+        val memoryId = repository.state.value.memories.single().id
         captureCompanion("memories")
+        compose.onNodeWithTag("pet-memory-edit-$memoryId").performScrollTo().performClick()
+        compose.onNodeWithText("希望伙伴记住的事").performTextClearance()
+        compose.onNodeWithText("希望伙伴记住的事").performTextInput("更正后：周末喜欢在公园散步")
+        compose.onNodeWithText("保存").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("更正后：周末喜欢在公园散步").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("pet-memory-delete-$memoryId").performScrollTo().performClick()
+        compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithText("更正后：周末喜欢在公园散步").assertIsDisplayed()
+        compose.onNodeWithTag("pet-memory-delete-$memoryId").performClick()
+        compose.onNode(hasText("删除") and hasAnyAncestor(isDialog())).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("更正后：周末喜欢在公园散步").fetchSemanticsNodes().isEmpty() }
+        assertTrue(repository.state.value.memories.none { it.id == memoryId })
+    }
+
+    @Test
+    @Config(sdk = [34], application = LifeArchiveApplication::class, qualifiers = "w432dp-h960dp-mdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun memoryNotebookUsesTheSharedThemes() {
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("new-note").fetchSemanticsNodes().isNotEmpty() }
+        focusWindow(); switchTo("PET")
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("pet-input").fetchSemanticsNodes().isNotEmpty() }
+        val repository = compose.activity.companionProvider.get()
+        runBlocking {
+            repository.remember("周末喜欢散步")
+            repository.remember("喜欢安静的交流方式")
+            repository.remember("忙的时候，希望先听我说完。")
+        }
+        compose.onNodeWithTag("pet-tab-1").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("忙的时候，希望先听我说完。").fetchSemanticsNodes().isNotEmpty() }
+        for (theme in com.elio.lifearchive.core.preferences.DocumentTheme.entries) {
+            compose.runOnIdle { runBlocking { compose.activity.preferences.setDocumentTheme(theme) } }
+            compose.waitForIdle()
+            compose.onNodeWithText("共同记忆").assertIsDisplayed()
+            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            compose.onNodeWithText("共同记忆").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(results) }
+            org.junit.Assert.assertEquals(com.elio.lifearchive.core.designsystem.DocumentPalette.valueOf(theme.name).colors.ink,
+                results.single().layoutInput.style.color)
+            captureCompanion("memories-${theme.name.lowercase()}")
+        }
     }
 
     private fun captureCompanion(name: String) {
