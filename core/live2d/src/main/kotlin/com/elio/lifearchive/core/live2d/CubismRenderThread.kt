@@ -21,13 +21,23 @@ internal class CubismRenderThread {
     private var parking = EGL14.EGL_NO_SURFACE
     private var scheduled = false
     private var previous = 0L
-    private class Window(val texture: SurfaceTexture, val assets: AssetManager, var width: Int, var height: Int,
-                         var modelSpec: Live2DModelSpec, val error: () -> Unit, val ready: () -> Unit) {
+    private class Window(
+        val texture: SurfaceTexture,
+        val assets: AssetManager,
+        var width: Int,
+        var height: Int,
+        var modelSpec: Live2DModelSpec,
+        val error: () -> Unit,
+        val ready: (Live2DModelMetrics) -> Unit,
+    ) {
         var surface: Surface? = null
         var egl = EGL14.EGL_NO_SURFACE
         var model: NativeCubismModel? = null
         var mood = "CALM"
         var compactFraming = false
+        var fullWidthStage = false
+        var stageX = 0.85f
+        var autoWalk = false
         val cues = CueTracker()
         lateinit var session: RenderSession
     }
@@ -40,7 +50,7 @@ internal class CubismRenderThread {
         height: Int,
         modelSpec: Live2DModelSpec,
         error: () -> Unit,
-        ready: () -> Unit,
+        ready: (Live2DModelMetrics) -> Unit,
     ) = handler.post {
         val window = Window(texture, assets, width.coerceAtLeast(1), height.coerceAtLeast(1), modelSpec, error, ready)
         window.session = RenderSession({ open(window) }, { release(window) })
@@ -55,13 +65,29 @@ internal class CubismRenderThread {
                     current(window)
                     window.model?.close()
                     window.model = null
-                    window.model = NativeCubismModel.create(window.modelSpec, window.assets, window.width, window.height).also {
+                    val created = NativeCubismModel.create(window.modelSpec, window.assets, window.width, window.height).also {
                         it.cue(window.mood)
                         it.compactFraming(window.compactFraming)
+                        it.stage(window.fullWidthStage, window.stageX)
+                        it.autoWalk(window.autoWalk)
                     }
-                    window.ready()
+                    window.model = created
+                    window.ready(created.metrics())
                 }
             }
+        }
+    }
+    fun stage(id: Any, fullWidth: Boolean, xFraction: Float) = handler.post {
+        windows[id]?.let { window ->
+            window.fullWidthStage = fullWidth
+            window.stageX = xFraction
+            window.model?.stage(fullWidth, xFraction)
+        }
+    }
+    fun autoWalk(id: Any, enabled: Boolean) = handler.post {
+        windows[id]?.let { window ->
+            window.autoWalk = enabled
+            window.model?.autoWalk(enabled)
         }
     }
     fun visible(id: Any, active: Boolean) = handler.post {
@@ -122,9 +148,14 @@ internal class CubismRenderThread {
             window.egl = EGL14.eglCreateWindowSurface(display, config, window.surface, intArrayOf(EGL14.EGL_NONE), 0)
             check(window.egl != EGL14.EGL_NO_SURFACE)
             current(window)
-            window.model = NativeCubismModel.create(window.modelSpec, window.assets, window.width, window.height)
-                .also { it.cue(window.mood); it.compactFraming(window.compactFraming) }
-            window.ready()
+            val created = NativeCubismModel.create(window.modelSpec, window.assets, window.width, window.height).also {
+                it.cue(window.mood)
+                it.compactFraming(window.compactFraming)
+                it.stage(window.fullWidthStage, window.stageX)
+                it.autoWalk(window.autoWalk)
+            }
+            window.model = created
+            window.ready(created.metrics())
         } catch (error: Exception) { release(window); throw error }
         catch (error: LinkageError) { release(window); throw error }
     }

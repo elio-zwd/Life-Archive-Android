@@ -10,6 +10,7 @@ import kotlin.math.abs
 class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
     var onStatus: (String?) -> Unit = {}
     var onTap: () -> Unit = {}
+    var onModelLoaded: (Live2DModelMetrics) -> Unit = {}
     var allowParentScroll: Boolean = false
     private var renderThread: CubismRenderThread? = null
     private var lease: Any? = null
@@ -20,6 +21,9 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
     private var downX = 0f
     private var downY = 0f
     private var compactFraming = false
+    private var fullWidthStage = false
+    private var stageX = 0.85f
+    private var autoWalk = false
     init {
         isOpaque = false
         surfaceTextureListener = this
@@ -35,6 +39,15 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
     }
     fun setActive(value: Boolean) { active = value; updateVisibility() }
     fun setCompactFraming(enabled: Boolean) { compactFraming = enabled; lease?.let { renderThread?.framing(it, enabled) } }
+    fun setStage(fullWidth: Boolean, xFraction: Float) {
+        fullWidthStage = fullWidth
+        stageX = xFraction.coerceIn(0f, 1f)
+        lease?.let { renderThread?.stage(it, fullWidthStage, stageX) }
+    }
+    fun setAutoWalk(enabled: Boolean) {
+        autoWalk = enabled
+        lease?.let { renderThread?.autoWalk(it, enabled) }
+    }
     /** 系统角色窗口自行识别手势；不改变页面原有的触摸路径。 */
     fun followTouch(x: Float, y: Float) { lease?.let { renderThread?.touch(it, x.coerceIn(-1f, 1f), y.coerceIn(-1f, 1f), false) } }
     fun react(kind: String) { if (kind in setOf("HEAD", "BODY", "STROKE")) lease?.let { renderThread?.react(it, kind) } }
@@ -49,9 +62,11 @@ class Live2DView(context: Context) : TextureView(context), TextureView.SurfaceTe
         renderThread = Pool.acquire().also { engine ->
             engine.attach(id, surface, context.applicationContext.assets, width, height, modelSpec,
                 error = { post { if (lease === id) onStatus("形象暂时无法显示，可切换页面重试；对话和记忆仍可使用。") } },
-                ready = { post { if (lease === id) onStatus(null) } })
+                ready = { metrics -> post { if (lease === id) { onStatus(null); onModelLoaded(metrics) } } })
             engine.cue(id, token, mood)
             engine.framing(id, compactFraming)
+            engine.stage(id, fullWidthStage, stageX)
+            engine.autoWalk(id, autoWalk)
         }
         updateVisibility()
     }

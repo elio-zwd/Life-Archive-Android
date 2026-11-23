@@ -31,6 +31,12 @@ data class Live2DModelSpec(
     }
 }
 
+/** 模型载入后上报的真实画布比例与运动能力，供宿主动态调整悬浮窗口与走动行为。 */
+data class Live2DModelMetrics(
+    val canvasAspect: Float = 0.75f,
+    val hasLocomotion: Boolean = false,
+)
+
 /**
  * 通用 Live2D 模型容器注册表。
  * 默认预置 Cubism SDK 5 R5 自带的 8 个官方示例模型，同时允许运行时注册或移除外部目录模型。

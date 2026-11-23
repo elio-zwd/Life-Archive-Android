@@ -19,9 +19,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /** 仅在共享 EGL 线程调用。模型实例与纹理归各窗口，不保留 Activity。 */
 final class NativeCubismModel extends CubismUserModel {
+    private static final float WALK_SPEED = 0.085f;
+    private static final float WALK_MIN_X = 0.08f;
+    private static final float WALK_MAX_X = 0.92f;
+
     private interface ModelReader {
         byte[] read(String relativePath) throws IOException;
         Bitmap decodeBitmap(String relativePath) throws IOException;
@@ -29,18 +34,25 @@ final class NativeCubismModel extends CubismUserModel {
 
     private final List<CubismMotion> idle = new ArrayList<>();
     private final List<CubismMotion> tapMotions = new ArrayList<>();
+    private final List<CubismMotion> locomotionMotions = new ArrayList<>();
     private final List<Integer> textures = new ArrayList<>();
     private float compactScale = 0.74f;
+    private float canvasAspect = 0.75f;
     private float elapsed;
     private String mood = "CALM";
     private int nextIdle;
     private int nextTap;
+    private int nextLocomotion;
     private int width;
     private int height;
     private String reaction = "";
     private float reactionUntil;
     private float lastBodyTap = -10f;
     private boolean compactFraming;
+    private boolean fullWidthStage;
+    private float stageX = 0.85f;
+    private boolean facingRight = true;
+    private boolean autoWalkEnabled;
 
     static NativeCubismModel create(AssetManager assets, int width, int height) throws IOException {
         return create(Live2DModelCatalog.INSTANCE.resolve(null), assets, width, height);
@@ -55,6 +67,13 @@ final class NativeCubismModel extends CubismUserModel {
             result.close();
             throw error;
         }
+    }
+
+    static boolean isLocomotionName(String group, String fileName) {
+        String combined = ((group == null ? "" : group) + " " + (fileName == null ? "" : fileName)).toLowerCase(Locale.ROOT);
+        return combined.contains("walk") || combined.contains("run") || combined.contains("move")
+            || combined.contains("stroll") || combined.contains("jog")
+            || combined.contains("走") || combined.contains("跑");
     }
 
     private static byte[] readStream(InputStream input) throws IOException {
@@ -108,16 +127,22 @@ final class NativeCubismModel extends CubismUserModel {
         CubismModelSettingJson setting = new CubismModelSettingJson(reader.read(spec.getSource().getModelJson()));
         loadModel(reader.read(setting.getModelFileName()), true);
         if (model == null) throw new IOException("模型一致性检查未通过：" + spec.getId());
+        if (model.getCanvasHeight() > 0f && model.getCanvasWidth() > 0f) {
+            float rawAspect = model.getCanvasWidth() / model.getCanvasHeight();
+            this.canvasAspect = Math.max(0.55f, Math.min(1.80f, rawAspect));
+        }
         if (!setting.getPhysicsFileName().isEmpty()) loadPhysics(reader.read(setting.getPhysicsFileName()));
         if (!setting.getPoseFileName().isEmpty()) loadPose(reader.read(setting.getPoseFileName()));
         eyeBlink = CubismEyeBlink.create(setting);
         for (int groupIndex = 0; groupIndex < setting.getMotionGroupCount(); groupIndex++) {
             String group = setting.getMotionGroupName(groupIndex);
             for (int i = 0; i < setting.getMotionCount(group); i++) {
-                CubismMotion motion = loadMotion(reader.read(setting.getMotionFileName(group, i)));
+                String motionFile = setting.getMotionFileName(group, i);
+                CubismMotion motion = loadMotion(reader.read(motionFile));
                 if (motion == null) throw new IOException("动作载入失败：" + spec.getId());
                 motion.setFadeInTime(0.5f);
                 motion.setFadeOutTime(0.5f);
+                if (isLocomotionName(group, motionFile)) locomotionMotions.add(motion);
                 if (group.equalsIgnoreCase("Idle")) idle.add(motion);
                 else tapMotions.add(motion);
             }
@@ -146,6 +171,10 @@ final class NativeCubismModel extends CubismUserModel {
             }
         }
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+    }
+
+    Live2DModelMetrics metrics() {
+        return new Live2DModelMetrics(canvasAspect, !locomotionMotions.isEmpty());
     }
 
     private void triggerTapMotion() {
@@ -178,11 +207,30 @@ final class NativeCubismModel extends CubismUserModel {
 
     void compactFraming(boolean enabled) { compactFraming = enabled; }
 
+    void stage(boolean fullWidth, float xFraction) {
+        boolean enteringFullWidth = fullWidth && !this.fullWidthStage;
+        this.fullWidthStage = fullWidth;
+        if (enteringFullWidth || !fullWidth) {
+            this.stageX = Math.max(0f, Math.min(1f, xFraction));
+            if (this.stageX >= 0.5f) this.facingRight = false;
+            else this.facingRight = true;
+        }
+    }
+
+    void autoWalk(boolean enabled) {
+        this.autoWalkEnabled = enabled;
+    }
+
     void draw(float delta) {
         elapsed += delta;
+        boolean walkingNow = autoWalkEnabled && !locomotionMotions.isEmpty();
         model.loadParameters();
-        if (motionManager.isFinished() && !idle.isEmpty()) {
-            motionManager.startMotionPriority(idle.get(nextIdle++ % idle.size()), 1);
+        if (motionManager.isFinished()) {
+            if (walkingNow) {
+                motionManager.startMotionPriority(locomotionMotions.get(nextLocomotion++ % locomotionMotions.size()), 1);
+            } else if (!idle.isEmpty()) {
+                motionManager.startMotionPriority(idle.get(nextIdle++ % idle.size()), 1);
+            }
         }
         boolean motionUpdated = motionManager.updateMotion(model, delta);
         model.saveParameters();
@@ -216,19 +264,41 @@ final class NativeCubismModel extends CubismUserModel {
         if (physics != null) physics.evaluate(model, delta);
         if (pose != null) pose.updateParameters(model, delta);
         model.update();
-        CubismMatrix44 projection = CubismMatrix44.create();
-        float aspect = (float) width / height;
-        if (model.getCanvasHeight() / model.getCanvasWidth() < 1f / aspect) {
-            modelMatrix.setWidth(2f);
-            projection.scale(1f, aspect);
-        } else {
-            modelMatrix.setHeight(2f);
-            projection.scale(1f / aspect, 1f);
+
+        if (fullWidthStage && walkingNow) {
+            if (facingRight) {
+                stageX += delta * WALK_SPEED;
+                if (stageX >= WALK_MAX_X) { stageX = WALK_MAX_X; facingRight = false; }
+            } else {
+                stageX -= delta * WALK_SPEED;
+                if (stageX <= WALK_MIN_X) { stageX = WALK_MIN_X; facingRight = true; }
+            }
         }
-        // 桌面窗口使用按模型配置的校准取景，页面维持原比例。
-        if (compactFraming) {
-            float zoom = compactScale / aspect;
-            projection.scaleRelative(zoom, zoom);
+
+        CubismMatrix44 projection = CubismMatrix44.create();
+        float viewAspect = (float) width / Math.max(1, height);
+        float modelAspect = model.getCanvasHeight() > 0f ? model.getCanvasWidth() / model.getCanvasHeight() : 1f;
+        if (fullWidthStage) {
+            // 穿透全宽舞台：按窗口高度完整显示模型，并沿全宽视口定位与翻转，横向特效不被窄窗裁切。
+            modelMatrix.setHeight(2f);
+            float halfModelNdc = Math.min(0.45f, modelAspect / Math.max(viewAspect, 0.01f));
+            float ndcX = (-1f + halfModelNdc) + stageX * Math.max(0f, 2f - 2f * halfModelNdc);
+            float dir = (walkingNow && !facingRight) ? -1f : 1f;
+            projection.scale(dir / viewAspect, 1f);
+            projection.translate(ndcX, 0f);
+        } else {
+            if (model.getCanvasHeight() / model.getCanvasWidth() < 1f / viewAspect) {
+                modelMatrix.setWidth(2f);
+                projection.scale(1f, viewAspect);
+                // 仅当调用方仍传入窄画布时（如 128x256 冒烟缓冲）按比例微调；动态适配窗口时 viewAspect≈modelAspect 不会过放大裁切。
+                if (compactFraming && viewAspect < modelAspect * 0.85f) {
+                    float zoom = Math.min(compactScale / viewAspect, modelAspect / viewAspect);
+                    projection.scaleRelative(zoom, zoom);
+                }
+            } else {
+                modelMatrix.setHeight(2f);
+                projection.scale(1f / viewAspect, 1f);
+            }
         }
         projection.multiplyByMatrix(modelMatrix);
         CubismRendererAndroid renderer = getRenderer();
@@ -256,5 +326,6 @@ final class NativeCubismModel extends CubismUserModel {
         textures.clear();
         idle.clear();
         tapMotions.clear();
+        locomotionMotions.clear();
     }
 }

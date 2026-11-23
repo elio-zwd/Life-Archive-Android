@@ -55,4 +55,15 @@ class Live2DViewTest {
             dir.deleteRecursively()
         }
     }
+
+    @Test fun locomotionMatcherRecognizesWalkRunAndIgnoresIdle() {
+        assertTrue(NativeCubismModel.isLocomotionName("Walk", "motions/m01.motion3.json"))
+        assertTrue(NativeCubismModel.isLocomotionName("TapBody", "motions/run_fast.motion3.json"))
+        assertTrue(NativeCubismModel.isLocomotionName("Idle", "motions/跑步.motion3.json"))
+        assertFalse(NativeCubismModel.isLocomotionName("Idle", "motions/Hiyori_m01.motion3.json"))
+        assertFalse(NativeCubismModel.isLocomotionName("TapBody", "motions/touch_02.motion3.json"))
+        val view = Live2DView(ApplicationProvider.getApplicationContext())
+        view.setStage(fullWidth = true, xFraction = 0.4f)
+        view.setAutoWalk(true)
+    }
 }
