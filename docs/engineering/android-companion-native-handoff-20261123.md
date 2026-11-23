@@ -67,6 +67,18 @@ Core Lint 为 0 错误、1 条上游 Framework 注释警告；app／见域还有
 
 本轮没有安装应用、执行 ADB 或读取真实远端 Key。设备、真实远端服务、帧时间／内存／功耗均未验证，状态为 `NOT_VERIFIED`；原生包为 `PACKAGED_NOT_DEVICE_VERIFIED`，JNI／EGL 冒烟为 `COMPILED_NOT_RUN`。详见[设备清单](../testing/android-companion-manual-acceptance.md)。新增备份继续后置。
 
+## 2026-11-23 黑色剪影修复与模拟器验证
+
+用户反馈伙伴页、设置页及悬浮窗口均只显示黑色剪影。原因是 SDK 的 `CubismShaderAndroid.setUpTexture` 会将缩小过滤设为 `GL_LINEAR_MIPMAP_LINEAR`，宿主上传纹理后却未生成 mipmap，导致纹理不完整。现已在上传后生成完整 mipmap，不修改 SDK 或模型素材。
+
+原生像素测试增加彩色像素数量断言，保留透明背景及释放重建检查。在用户授权的雷电模拟器（x86_64、Android 9 / API 28）上，修改前彩色像素为 0，测试失败；修复后 1 项原生 JNI／EGL 测试通过，两次资源创建均通过。9 项本地生命周期／视图测试、架构检查、core:live2d 与 app Debug Lint、Debug APK 和原生测试 APK 构建通过。
+
+已保留数据覆盖更新模拟器应用，实际截图核对伙伴页、设置缩略角色、Life 页 App 内小窗、系统桌面悬浮角色均恢复彩色显示；往返切换及后台返回后仍可显示。本次没有连接真实手机，也未执行清库或卸载；桌面悬浮测试后已关闭，原有 App 内小窗设置保留。模拟器显示结果不替代小米手机实测或性能验收。
+
+证据在仓库外 `D:/Temp/life-archive-role-render-20261123/`：`render-before.log`、`render-after.log`、`build-after.log` 以及 `before.png`、`conversation-settled.png`、`settings-settled.png`、`in-app-settled.png`、`desktop-after/observation.png`。
+
+最新 APK 仍为 `0.5.0-dev.2` / versionCode 12，包含此前切换菜单焦点修复，输出为 `app/build/outputs/apk/debug/app-debug.apk`；交付副本 `D:/Temp/life-archive-role-render-20261123/LifeArchive-0.5.0-dev.2-role-color-fix.apk`。SHA-256：`434CEBC6BDF234CEB847A3CDCA0B48FBF50C2CBADBE312A57FF9B054F978EB7A`。上节哈希及未运行结论为修复前历史记录。
+
 ## 后续
 
 1. 用户在小米 14 Ultra 使用隔离资料验证 JNI／EGL 冒烟、三类窗口、透明合成、触摸与动作、权限与通知、资源和性能；需记录实际结果。

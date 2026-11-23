@@ -86,6 +86,8 @@ final class NativeCubismModel extends CubismUserModel {
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
                 GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
                 GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0);
+                // SDK 绘制时会改用 mipmap 过滤；缺少完整层级会采样成黑色剪影。
+                GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D);
                 renderer.bindTexture(i, texture[0]);
             } finally { bitmap.recycle(); }
         }

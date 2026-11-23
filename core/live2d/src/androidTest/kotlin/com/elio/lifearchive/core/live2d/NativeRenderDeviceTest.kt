@@ -48,6 +48,14 @@ class NativeRenderDeviceTest {
                     val alpha = (3 until pixels.capacity() step 4).map { pixels.get(it).toInt() and 255 }
                     assertTrue("应存在模型像素", alpha.any { it > 0 })
                     assertTrue("模型周围应透明", alpha.any { it == 0 })
+                    val coloredPixels = (0 until pixels.capacity() step 4).count { offset ->
+                        val red = pixels.get(offset).toInt() and 255
+                        val green = pixels.get(offset + 1).toInt() and 255
+                        val blue = pixels.get(offset + 2).toInt() and 255
+                        val opacity = pixels.get(offset + 3).toInt() and 255
+                        opacity > 128 && maxOf(red, green, blue) - minOf(red, green, blue) > 20
+                    }
+                    assertTrue("Hiyori 应包含彩色纹理，不能只有黑色剪影：$coloredPixels", coloredPixels > 100)
                 } finally { model.close() }
             }
         } finally {
