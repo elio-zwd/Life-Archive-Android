@@ -6,6 +6,8 @@ Windows 10 x64、PowerShell 7、已有 JDK 17 下运行 `pwsh.exe -NoProfile -Fi
 
 运行前按 [Live2D 配置说明](../../core/live2d/README.md)设置本机官方 SDK 5 R5 路径。脚本自身的合成检查：`pwsh.exe -NoProfile -File .\tools\tests\Run-CompanionVerificationTests.ps1`，验证帮助／预演、失败门禁、有效 XML、原生资源打包、产物哈希及明确的未验证状态。实现和结果见[原生交接](../engineering/android-companion-native-handoff-20261123.md)。脚本还编译 JNI／EGL 设备冒烟测试 APK，但不运行；真机及远端服务另按[设备清单](android-companion-manual-acceptance.md)验收。
 
+选定布局接入后的页面、底部编辑弹层、共享草稿及系统窗口视图测试也纳入上述脚本（`CompanionLayoutsTest`、`BusinessHostUiTest`、`CompanionOverlayPanelTest` 等）；实际结果和桌面预览位置见[选定布局交接](../engineering/android-companion-selected-layouts-20261123.md)。窗口 View 测试不代表系统权限、键盘、触摸或真实悬浮服务已经设备验收。
+
 ## 二期完整迁移与独立恢复（无设备）
 
 支持范围、互通夹具来源与失败保护见[完整迁移交接](../engineering/phase-2-complete-backup-handoff.md)。完整见域测试与真实装配入口：
