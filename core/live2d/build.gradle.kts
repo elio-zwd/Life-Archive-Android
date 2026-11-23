@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 val sdk = rootProject.extra["cubismSdkDirectory"] as File
+@Suppress("UNCHECKED_CAST")
+val sampleModels = rootProject.extra["cubismSampleModels"] as List<String>
 android {
     namespace = "com.elio.lifearchive.core.live2d"
     compileSdk = 36
@@ -28,7 +30,9 @@ dependencies {
 }
 val prepareCubismAssets by tasks.registering(Sync::class) {
     dependsOn(rootProject.tasks.named("verifyCubismSdk"))
-    from(File(sdk, "Sample/src/main/assets/Hiyori")) { into("live2d/Hiyori") }
+    sampleModels.forEach { model ->
+        from(File(sdk, "Sample/src/main/assets/$model")) { into("live2d/$model") }
+    }
     from(File(sdk, "LICENSE.md")) { into("live2d/licenses"); rename { "SDK-LICENSE.md" } }
     from(File(sdk, "Core/LICENSE.md")) { into("live2d/licenses"); rename { "Core-LICENSE.md" } }
     from(File(sdk, "Framework/LICENSE.md")) { into("live2d/licenses"); rename { "Framework-LICENSE.md" } }

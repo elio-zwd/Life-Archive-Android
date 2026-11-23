@@ -1,6 +1,6 @@
 # 原生 Live2D 承载
 
-当前固定 **Cubism SDK for Java 5 R5（2026-05-29）**，版本记录在 `gradle/libs.versions.toml`，164 个实际编译／资源输入的 SHA-256 在 `gradle/cubism-sdk.sha256`。Core AAR 包含 arm64-v8a、x86、x86_64；没有 armeabi-v7a。应用标识仍为 `com.elio.lifearchive`。
+当前固定 **Cubism SDK for Java 5 R5（2026-05-29）**，版本记录在 `gradle/libs.versions.toml`，309 个实际编译／资源输入（含 Core、Framework、着色器及 8 个官方示例模型）的 SHA-256 在 `gradle/cubism-sdk.sha256`。Core AAR 包含 arm64-v8a、x86、x86_64；没有 armeabi-v7a。应用标识仍为 `com.elio.lifearchive`。
 
 ## 本机配置
 
@@ -14,7 +14,7 @@ Properties 中的盘符冒号需写作 `\:`；环境变量使用普通路径，�
 
 也可使用环境变量 `CUBISM_SDK_DIR`（优先）。目录需包含 `cubism-info.yml`、`Core/android/Live2DCubismCore.aar`、`Framework/framework/src/main`、`Sample/src/main/assets/Hiyori`。无需运行 SDK 自己的 Gradle 或安装其他 JDK。
 
-`verifyCubismSdk` 拒绝版本／文件不符或额外未锁定的 Framework／Hiyori 输入。Framework 从本机源码编译，Core 由 app 打包，SDK 二进制及绝对路径不提交 Git。只将 Hiyori 和 Framework 着色器打包，不打包其他模型、样例应用、签名材料。SDK／Core／Framework 许可说明随 APK 的 `assets/live2d/licenses` 分发；Hiyori 仍只作技术样板，正式形象与发布素材另选。
+`verifyCubismSdk` 拒绝版本／文件不符或额外未锁定的 Framework／Hiyori 输入。Framework 从本机源码编译，Core 由 app 打包，SDK 二进制及绝对路径不提交 Git。将 8 个内置示例模型（Hiyori／Haru／Mao／Mark／Natori／Ren／Rice／Wanko）与 Framework 着色器打包，不打包样例应用或签名材料。`Live2DModelCatalog` 作为通用模型容器，支持内置 `Asset` 与外部 `Directory` 来源动态注册并在 `Live2DView.setModel` 实时切换。SDK／Core／Framework 许可说明随 APK 的 `assets/live2d/licenses` 分发。
 
 ## 生命周期与接口
 

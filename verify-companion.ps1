@@ -75,6 +75,13 @@ try {
         'assets/live2d/Hiyori/Hiyori.model3.json', 'assets/live2d/Hiyori/Hiyori.moc3',
         'assets/live2d/Hiyori/Hiyori.2048/texture_00.png', 'assets/live2d/Hiyori/Hiyori.2048/texture_01.png',
         'assets/live2d/Hiyori/motions/Hiyori_m04.motion3.json',
+        'assets/live2d/Haru/Haru.model3.json', 'assets/live2d/Haru/Haru.moc3',
+        'assets/live2d/Mao/Mao.model3.json', 'assets/live2d/Mao/Mao.moc3',
+        'assets/live2d/Mark/Mark.model3.json', 'assets/live2d/Mark/Mark.moc3',
+        'assets/live2d/Natori/Natori.model3.json', 'assets/live2d/Natori/Natori.moc3',
+        'assets/live2d/Ren/Ren.model3.json', 'assets/live2d/Ren/Ren.moc3',
+        'assets/live2d/Rice/Rice.model3.json', 'assets/live2d/Rice/Rice.moc3',
+        'assets/live2d/Wanko/Wanko.model3.json', 'assets/live2d/Wanko/Wanko.moc3',
         'assets/com/live2d/sdk/cubism/framework/shaders/standardES/VertShaderSrc.vert',
         'assets/live2d/licenses/SDK-LICENSE.md', 'assets/live2d/licenses/Core-LICENSE.md', 'assets/live2d/licenses/Framework-LICENSE.md'
     )
