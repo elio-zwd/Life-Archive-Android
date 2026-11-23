@@ -81,9 +81,9 @@ internal class CompanionOverlayPanel(context: Context) : LinearLayout(context) {
         requestLayout()
     }
 
-    fun render(state: CompanionState, updateDraft: Boolean = true) {
+    fun render(state: CompanionState, updateDraft: Boolean = true, updateBubble: Boolean = true) {
         val last = state.messages.lastOrNull { it.role == MessageRole.COMPANION }
-        bubble.text = if (state.generating) "正在想怎么回应你…" else last?.error ?: last?.text ?: "慢慢来，我在这里。"
+        if (updateBubble) bubble.text = if (state.generating) "正在想怎么回应你…" else last?.error ?: last?.text ?: "慢慢来，我在这里。"
         val draft = state.profile.draft
         if (updateDraft && input.text.toString() != draft) {
             updating = true

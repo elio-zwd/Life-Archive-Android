@@ -101,7 +101,14 @@ class MainActivity : ComponentActivity() {
                                     android.net.Uri.parse("package:$packageName")))
                             }
                         },
-                        onStopOverlay = { stopService(android.content.Intent(this, CompanionOverlayService::class.java)) },
+                        onStopOverlay = {
+                            if (CompanionOverlayService.running) {
+                                runCatching { startService(CompanionOverlayService.stopIntent(this)) }
+                                    .onFailure { stopService(android.content.Intent(this, CompanionOverlayService::class.java)) }
+                            } else {
+                                stopService(android.content.Intent(this, CompanionOverlayService::class.java))
+                            }
+                        },
                         onLife = { businessHost.select(Business.LIFE) }, openChatRequest = companionChatRequest)
                 }, inAppCompanion = { visible -> InAppCompanion(companionProvider, visible, businessHost::openCompanionChat) }) { onSwitcher, onBottomBar ->
                 when {

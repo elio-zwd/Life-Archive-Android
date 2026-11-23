@@ -71,6 +71,7 @@ class CompanionOverlayService : Service() {
                 .setContentTitle("伙伴正在桌面陪伴").setContentText("点击回到伙伴，或停止桌面陪伴。")
                 .setContentIntent(open).setOngoing(true).addAction(Notification.Action.Builder(null, "停止", stop).build()).build())
         } catch (_: RuntimeException) { stopSelf(); return START_NOT_STICKY }
+        running = true
         if (panel == null) attach()
         return START_NOT_STICKY
     }
@@ -88,7 +89,7 @@ class CompanionOverlayService : Service() {
             draftWrite = scope.launch {
                 try {
                     previous?.join(); repository?.saveDraft(text)
-                    if (draftVersion == version && !sending) repository?.state?.value?.let { view.render(it) }
+                    if (draftVersion == version && !sending) repository?.state?.value?.let { view.render(it, updateDraft = true, updateBubble = false) }
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { view.failure("草稿未保存，请重试。") }
             }
@@ -136,7 +137,7 @@ class CompanionOverlayService : Service() {
         panel = view
         params.width = minOf(dp(212), safeBounds().width())
         view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            val point = placement()
+            val point = placement(dock = view.expanded)
             if (point.x != params.x || point.y != params.y) { params.x = point.x; params.y = point.y; updateWindow() }
         }
         try { wm.addView(view, params) }
@@ -193,9 +194,16 @@ class CompanionOverlayService : Service() {
     private fun openIntent() = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("open-companion", true)
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     override fun onDestroy() {
+        running = false
         scope.cancel(); panel?.release(); unregisterReceiver(screenReceiver)
         panel?.let { runCatching { window?.removeViewImmediate(it) } }; panel = null
         stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy()
     }
-    companion object { private const val CHANNEL = "companion-overlay"; private const val STOP = "companion.stop" }
+    companion object {
+        private const val CHANNEL = "companion-overlay"
+        private const val STOP = "companion.stop"
+        @Volatile internal var running = false
+        internal fun stopIntent(context: android.content.Context): Intent =
+            Intent(context, CompanionOverlayService::class.java).setAction(STOP)
+    }
 }

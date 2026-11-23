@@ -37,6 +37,9 @@ class CompanionOverlayPanelTest {
         panel.close.setOnClickListener { hides++ }
         panel.idleHide.performClick()
         assertEquals(1, hides)
+        panel.failure("草稿未保存，请重试。")
+        panel.render(CompanionState(profile = CompanionProfile(draft = "继续写")), updateDraft = true, updateBubble = false)
+        assertEquals("继续写", panel.input.text.toString())
         panel.release()
     }
 
